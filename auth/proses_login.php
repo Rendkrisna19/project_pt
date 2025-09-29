@@ -11,15 +11,15 @@ $identity = trim($_POST['identity'] ?? '');
 $password = (string)($_POST['password'] ?? '');
 
 if ($identity === '' || $password === '') {
-  $_SESSION['login_error'] = 'Email/Username dan password wajib diisi.';
+  $_SESSION['login_error'] = 'NIK/Username dan password wajib diisi.';
   header('Location: login.php'); exit;
 }
 
 try {
   $db = new Database(); $pdo = $db->getConnection();
-  $sql = "SELECT id, username, nama_lengkap, email, password, role
+  $sql = "SELECT id, username, nik, nama_lengkap, password, role
           FROM users
-          WHERE email = :ident OR username = :ident
+          WHERE nik = :ident OR username = :ident
           LIMIT 1";
   $st = $pdo->prepare($sql);
   $st->execute([':ident'=>$identity]);
@@ -29,8 +29,8 @@ try {
     session_regenerate_id(true);
     $_SESSION['user_id']       = (int)$user['id'];
     $_SESSION['user_username'] = $user['username'];
+    $_SESSION['user_nik']      = $user['nik'];
     $_SESSION['user_nama']     = $user['nama_lengkap'];
-    $_SESSION['user_email']    = $user['email'];
     $_SESSION['user_role']     = $user['role'];
     $_SESSION['loggedin']      = true;
     header('Location: ../admin/index.php'); exit;

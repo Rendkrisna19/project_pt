@@ -13,6 +13,7 @@ $db = new Database();
 $conn = $db->getConnection();
 
 $units = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$kebun = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 $currentPage = 'permintaan';
 include_once '../layouts/header.php';
@@ -56,6 +57,7 @@ include_once '../layouts/header.php';
       <thead class="bg-gray-50">
         <tr class="text-gray-600">
           <th class="py-3 px-4 text-left">No. Dokumen</th>
+          <th class="py-3 px-4 text-left">Kebun</th>
           <th class="py-3 px-4 text-left">Unit/Devisi</th>
           <th class="py-3 px-4 text-left">Tanggal</th>
           <th class="py-3 px-4 text-left">Blok</th>
@@ -67,7 +69,7 @@ include_once '../layouts/header.php';
         </tr>
       </thead>
       <tbody id="tbody-data" class="text-gray-800">
-        <tr><td colspan="9" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
+        <tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
       </tbody>
     </table>
   </div>
@@ -90,15 +92,27 @@ include_once '../layouts/header.php';
           <label class="block text-sm mb-1">No. Dokumen</label>
           <input type="text" id="no_dokumen" name="no_dokumen" class="w-full border rounded px-3 py-2" required>
         </div>
+
+        <div>
+          <label class="block text-sm mb-1">Kebun</label>
+          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2" required>
+            <option value="">-- Pilih Kebun --</option>
+            <?php foreach ($kebun as $k): ?>
+              <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
         <div>
           <label class="block text-sm mb-1">Unit/Devisi</label>
           <select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2" required>
             <option value="">-- Pilih Unit --</option>
             <?php foreach ($units as $u): ?>
-              <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
+              <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
+
         <div>
           <label class="block text-sm mb-1">Tanggal</label>
           <input type="date" id="tanggal" name="tanggal" class="w-full border rounded px-3 py-2" required>
@@ -159,11 +173,12 @@ document.addEventListener('DOMContentLoaded', () => {
     fd.append('action','list');
     fetch('permintaan_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{
-        if(!j.success){ tbody.innerHTML=`<tr><td colspan="9" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return;}
-        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="9" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return;}
+        if(!j.success){ tbody.innerHTML=`<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return;}
+        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return;}
         tbody.innerHTML = j.data.map(row=>`
           <tr class="border-b hover:bg-gray-50">
             <td class="py-2 px-3">${row.no_dokumen}</td>
+            <td class="py-2 px-3">${row.nama_kebun || '-'}</td>
             <td class="py-2 px-3">${row.nama_unit}</td>
             <td class="py-2 px-3">${row.tanggal}</td>
             <td class="py-2 px-3">${row.blok||'-'}</td>
@@ -173,26 +188,20 @@ document.addEventListener('DOMContentLoaded', () => {
             <td class="py-2 px-3">${row.keterangan||'-'}</td>
             <td class="py-2 px-3">
               <div class="flex items-center gap-2">
-                <!-- Edit -->
                 <button
-                  class="btn-edit p-2 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300"
-                  title="Edit"
-                  aria-label="Edit"
+                  class="btn-edit p-2 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-blue-600"
+                  title="Edit" aria-label="Edit"
                   data-json='${JSON.stringify(row)}'>
-                  <!-- pencil icon -->
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M16.862 3.487a2.1 2.1 0 0 1 2.97 2.97l-9.9 9.9-4.2 1.23 1.23-4.2 9.9-9.9z" />
                   </svg>
                 </button>
 
-                <!-- Delete -->
                 <button
-                  class="btn-delete p-2 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-300 text-red-600 focus:outline-none focus:ring-2 focus:ring-red-300"
-                  title="Hapus"
-                  aria-label="Hapus"
+                  class="btn-delete p-2 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-300 text-red-600"
+                  title="Hapus" aria-label="Hapus"
                   data-id="${row.id}">
-                  <!-- trash icon -->
                   <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                       d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3m-9 0h12" />
@@ -215,7 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const row = JSON.parse(btn.dataset.json);
       formAction.value='update'; formId.value=row.id;
       title.textContent='Edit Pengajuan';
-      ['no_dokumen','unit_id','tanggal','blok','pokok','dosis_norma','jumlah_diminta','keterangan'].forEach(k=>{
+      ['no_dokumen','kebun_id','unit_id','tanggal','blok','pokok','dosis_norma','jumlah_diminta','keterangan'].forEach(k=>{
         if(document.getElementById(k)) document.getElementById(k).value=row[k]??'';
       });
       open();
@@ -247,7 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   });
 });
-// === Export Excel & PDF (pakai CSRF aktif, tanpa filter tambahan) ===
+// === Export Excel & PDF (pakai CSRF aktif) ===
 document.getElementById('btn-export-excel').addEventListener('click', () => {
   const qs = new URLSearchParams({ csrf_token: '<?= htmlspecialchars($CSRF) ?>' }).toString();
   window.open('cetak/permintaan_export_excel.php?' + qs, '_blank');
@@ -257,5 +266,4 @@ document.getElementById('btn-export-pdf').addEventListener('click', () => {
   const qs = new URLSearchParams({ csrf_token: '<?= htmlspecialchars($CSRF) ?>' }).toString();
   window.open('cetak/permintaan_export_pdf.php?' + qs, '_blank');
 });
-
 </script>

@@ -19,37 +19,45 @@ include_once '../layouts/header.php';
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-2xl font-bold">Manajemen Master Data</h1>
-      <p class="text-gray-500">CRUD semua master (Jenis Pekerjaan, Unit, Blok, Satuan, dst.)</p>
+      <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-gray-900">Manajemen Master Data</h1>
+      <p class="text-gray-500 mt-1">CRUD semua master (Nama Kebun, Bahan Kimia, Jenis Pekerjaan, Unit, Blok, Satuan, dst.)</p>
     </div>
-    <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Tambah</button>
+    <button id="btn-add" class="inline-flex items-center gap-2 rounded-lg px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-emerald-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M11 11V5a1 1 0 1 1 2 0v6h6a1 1 0 1 1 0 2h-6v6a1 1 0 1 1-2 0v-6H5a1 1 0 1 1 0-2h6z"/></svg>
+      <span class="hidden sm:inline">Tambah</span>
+    </button>
   </div>
 
-  <div class="bg-white p-3 rounded-xl shadow-sm overflow-x-auto">
-    <div id="tabs" class="flex gap-3 whitespace-nowrap">
-      <button data-entity="jenis_pekerjaan" class="tab active">Jenis Pekerjaan</button>
-      <button data-entity="unit">Unit/Devisi</button>
-      <button data-entity="tahun_tanam">Tahun Tanam</button>
-      <button data-entity="blok">Blok</button>
-      <button data-entity="fisik">Fisik</button>
-      <button data-entity="satuan">Satuan</button>
-      <button data-entity="tenaga">Tenaga</button>
-      <button data-entity="mobil">Mobil</button>
-      <button data-entity="alat_panen">Jenis Alat Panen</button>
-      <button data-entity="sap">No SAP</button>
-      <button data-entity="jabatan">Jabatan</button>
-      <button data-entity="pupuk">Pupuk</button>
-      <button data-entity="kode_aktivitas">Kode Aktivitas</button>
-      <button data-entity="anggaran">Anggaran</button>
+  <!-- Tabs -->
+  <div class="bg-white p-2 md:p-3 rounded-xl shadow-sm overflow-x-auto">
+    <div id="tabs" class="flex gap-2 md:gap-3 whitespace-nowrap">
+      <!-- NEW: dua tab baru -->
+      <button data-entity="kebun" class="tab active">Nama Kebun</button>
+      <button data-entity="bahan_kimia" class="tab">Bahan Kimia</button>
+
+      <button data-entity="jenis_pekerjaan" class="tab">Jenis Pekerjaan</button>
+      <button data-entity="unit" class="tab">Unit/Devisi</button>
+      <button data-entity="tahun_tanam" class="tab">Tahun Tanam</button>
+      <button data-entity="blok" class="tab">Blok</button>
+      <button data-entity="fisik" class="tab">Fisik</button>
+      <button data-entity="satuan" class="tab">Satuan</button>
+      <button data-entity="tenaga" class="tab">Tenaga</button>
+      <button data-entity="mobil" class="tab">Mobil</button>
+      <button data-entity="alat_panen" class="tab">Jenis Alat Panen</button>
+      <button data-entity="sap" class="tab">No SAP</button>
+      <button data-entity="jabatan" class="tab">Jabatan</button>
+      <button data-entity="pupuk" class="tab">Pupuk</button>
+      <button data-entity="kode_aktivitas" class="tab">Kode Aktivitas</button>
+      <button data-entity="anggaran" class="tab">Anggaran</button>
     </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+  <div class="bg-white rounded-xl shadow-sm overflow-auto">
     <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
+      <thead class="bg-gray-50 sticky top-0 z-10">
         <tr id="thead-row" class="text-gray-600"></tr>
       </thead>
-      <tbody id="tbody-data">
+      <tbody id="tbody-data" class="[&>tr:nth-child(even)]:bg-gray-50/40">
         <tr><td class="py-10 text-center text-gray-500">Memuat…</td></tr>
       </tbody>
     </table>
@@ -57,11 +65,11 @@ include_once '../layouts/header.php';
 </div>
 
 <!-- MODAL CRUD -->
-<div id="crud-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
+<div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
   <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-4xl">
     <div class="flex justify-between items-center mb-4">
-      <h3 id="modal-title" class="text-xl font-bold">Tambah Data</h3>
-      <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800">&times;</button>
+      <h3 id="modal-title" class="text-xl md:text-2xl font-bold">Tambah Data</h3>
+      <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800 focus:outline-none" aria-label="Tutup">&times;</button>
     </div>
     <form id="crud-form" novalidate>
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
@@ -70,8 +78,8 @@ include_once '../layouts/header.php';
       <input type="hidden" name="id" id="form-id">
       <div id="form-fields" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
       <div class="flex justify-end gap-3 mt-6">
-        <button type="button" id="btn-cancel" class="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200">Batal</button>
-        <button type="submit" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
+        <button type="button" id="btn-cancel" class="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300">Batal</button>
+        <button type="submit" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">Simpan</button>
       </div>
     </form>
   </div>
@@ -83,7 +91,9 @@ include_once '../layouts/header.php';
 document.addEventListener('DOMContentLoaded', ()=>{
   const $=s=>document.querySelector(s);
   const tbody=$('#tbody-data'), thead=$('#thead-row');
-  let currentEntity='jenis_pekerjaan';
+
+  // default buka "Nama Kebun"
+  let currentEntity='kebun';
 
   const OPTIONS_UNITS = [<?php foreach($units as $u){echo "{value:{$u['id']},label:'".htmlspecialchars($u['nama_unit'],ENT_QUOTES)."'},";}?>];
   const OPTIONS_SATUAN= [<?php foreach($satuan as $s){echo "{value:{$s['id']},label:'".htmlspecialchars($s['nama'],ENT_QUOTES)."'},";}?>];
@@ -94,7 +104,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const yearNow = (new Date()).getFullYear();
   const OPTIONS_TAHUN = Array.from({length:6},(_,i)=> yearNow-1+i).map(y=>({value:y,label:y}));
 
+  // ================== ENTITIES ==================
   const ENTITIES = {
+    // NEW: Nama Kebun
+    kebun:{ title:'Nama Kebun', table:['Kode','Nama Kebun','Keterangan','Aksi'],
+      fields:[
+        {name:'kode',label:'Kode Kebun',type:'text',required:true},
+        {name:'nama_kebun',label:'Nama Kebun',type:'text',required:true},
+        {name:'keterangan',label:'Keterangan',type:'text'}
+      ]},
+
+    // NEW: Bahan Kimia
+    bahan_kimia:{ title:'Bahan Kimia', table:['Kode','Nama Bahan','Satuan','Keterangan','Aksi'],
+      fields:[
+        {name:'kode',label:'Kode Bahan',type:'text',required:true},
+        {name:'nama_bahan',label:'Nama Bahan',type:'text',required:true},
+        {name:'satuan_id',label:'Satuan',type:'select',options:OPTIONS_SATUAN},
+        {name:'keterangan',label:'Keterangan',type:'text'}
+      ]},
+
     jenis_pekerjaan:{ title:'Jenis Pekerjaan', table:['Nama','Keterangan','Aksi'],
       fields:[{name:'nama',label:'Nama',type:'text',required:true},{name:'keterangan',label:'Keterangan',type:'text'}] },
     unit:{ title:'Unit/Devisi', table:['Nama Unit','Keterangan','Aksi'],
@@ -138,46 +166,47 @@ document.addEventListener('DOMContentLoaded', ()=>{
       ]}
   };
 
-  const modal=$('#crud-modal'); 
-  const open = ()=>{modal.classList.remove('hidden');modal.classList.add('flex')}; 
+  const modal=$('#crud-modal');
+  const open = ()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
   const close= ()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
 
   function renderHead(entity){
     thead.innerHTML='';
-    ENTITIES[entity].table.forEach(h=>{
-      const th=document.createElement('th'); 
-      th.className='py-3 px-4 text-left'; 
-      th.textContent=h; 
+    ENTITIES[entity].table.forEach((h,i)=>{
+      const th=document.createElement('th');
+      th.className='py-3 px-4 text-left font-semibold text-gray-700';
+      th.textContent=h;
+      if (i===ENTITIES[entity].table.length-1) th.className+=' w-32';
       thead.appendChild(th);
     });
   }
 
   function inputEl(f){
     const wrap=document.createElement('div');
-    const label=`<label class="block text-sm mb-1">${f.label}${f.required?'<span class="text-red-500">*</span>':''}</label>`;
+    const label=`<label class="block text-sm font-medium text-gray-700 mb-1">${f.label}${f.required?'<span class="text-red-500">*</span>':''}</label>`;
     let control='';
     if(f.type==='select'){
       const opts=(f.options||[]).map(o=>`<option value="${o.value}">${o.label}</option>`).join('');
-      control=`<select id="${f.name}" name="${f.name}" class="w-full border rounded px-3 py-2" ${f.required?'required':''}>${opts}</select>`;
+      control=`<select id="${f.name}" name="${f.name}" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-300" ${f.required?'required':''}>${opts}</select>`;
     }else{
-      control=`<input type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} id="${f.name}" name="${f.name}" class="w-full border rounded px-3 py-2" ${f.required?'required':''}>`;
+      control=`<input type="${f.type||'text'}" ${f.step?`step="${f.step}"`:''} id="${f.name}" name="${f.name}" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-300" ${f.required?'required':''}>`;
     }
-    wrap.innerHTML=label+control; 
+    wrap.innerHTML=label+control;
     return wrap;
   }
 
   function renderForm(entity, data={}){
     $('#modal-title').textContent=(data.id?'Edit ':'Tambah ')+ENTITIES[entity].title;
-    $('#form-entity').value=entity; 
-    $('#form-action').value=data.id?'update':'store'; 
+    $('#form-entity').value=entity;
+    $('#form-action').value=data.id?'update':'store';
     $('#form-id').value=data.id||'';
-    const holder=$('#form-fields'); 
+    const holder=$('#form-fields');
     holder.innerHTML='';
     ENTITIES[entity].fields.forEach(f=>{
-      const el=inputEl(f); 
+      const el=inputEl(f);
       holder.appendChild(el);
-      if(data && data[f.name]!=null){ 
-        holder.querySelector('#'+f.name).value = data[f.name]; 
+      if(data && data[f.name]!=null){
+        holder.querySelector('#'+f.name).value = data[f.name];
       }
     });
     open();
@@ -185,48 +214,66 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function cell(v){ return (v==null||v==='')?'-':v; }
 
+  function actionButtons(entity, rowJson, id){
+    const payload = encodeURIComponent(JSON.stringify(rowJson));
+    return `
+      <div class="flex items-center gap-2">
+        <button class="btn-edit icon-btn text-blue-600 hover:bg-blue-50" title="Edit" aria-label="Edit" data-entity="${entity}" data-json="${payload}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M21.7 7.04a1 1 0 0 0 0-1.41l-3.33-3.33a1 1 0 0 0-1.41 0L4 14.26V18a1 1 0 0 0 1 1h3.74L21.7 7.04zM7.41 17H6v-1.41L15.06 6.5l1.41 1.41L7.41 17z"/></svg>
+        </button>
+        <button class="btn-del icon-btn text-rose-600 hover:bg-rose-50" title="Hapus" aria-label="Hapus" data-entity="${entity}" data-id="${id}">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M9 3a1 1 0 0 0-1 1v1H5a1 1 0 1 0 0 2h.59l.86 12.04A2 2 0 0 0 8.45 22h7.1a2 2 0 0 0 2-1.96L18.41 7H19a1 1 0 1 0 0-2h-3V4a1 1 0 0 0-1-1H9zm2 2h2v1h-2V5zm-1.58 3h7.16l-.82 11.5a.5.5 0 0 1-.5.47h-4.99a.5.5 0 0 1-.5-.47L9.42 8z"/></svg>
+        </button>
+      </div>`;
+  }
+
   function renderRows(entity, rows){
-    if(!rows.length){ 
-      tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Belum ada data.</td></tr>`; 
-      return; 
+    if(!rows.length){
+      tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Belum ada data.</td></tr>`;
+      return;
     }
     tbody.innerHTML = rows.map(r=>{
       let cols='';
       switch(entity){
-        case 'jenis_pekerjaan': cols=`<td class="py-2 px-3">${cell(r.nama)}</td><td class="py-2 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'unit':           cols=`<td class="py-2 px-3">${cell(r.nama_unit)}</td><td class="py-2 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'tahun_tanam':    cols=`<td class="py-2 px-3">${cell(r.tahun)}</td><td class="py-2 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'blok':           cols=`<td class="py-2 px-3">${cell(r.nama_unit)}</td><td class="py-2 px-3">${cell(r.kode)}</td><td class="py-2 px-3">${cell(r.tahun_tanam)}</td><td class="py-2 px-3">${cell(r.luas_ha)}</td>`; break;
-        case 'fisik':          cols=`<td class="py-2 px-3">${cell(r.nama)}</td>`; break;
-        case 'satuan':         cols=`<td class="py-2 px-3">${cell(r.nama)}</td>`; break;
-        case 'tenaga':         cols=`<td class="py-2 px-3">${cell(r.kode)}</td><td class="py-2 px-3">${cell(r.nama)}</td>`; break;
-        case 'mobil':          cols=`<td class="py-2 px-3">${cell(r.kode)}</td><td class="py-2 px-3">${cell(r.nama)}</td>`; break;
-        case 'alat_panen':     cols=`<td class="py-2 px-3">${cell(r.nama)}</td><td class="py-2 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'sap':            cols=`<td class="py-2 px-3">${cell(r.no_sap)}</td><td class="py-2 px-3">${cell(r.deskripsi)}</td>`; break;
-        case 'jabatan':        cols=`<td class="py-2 px-3">${cell(r.nama)}</td>`; break;
-        case 'pupuk':          cols=`<td class="py-2 px-3">${cell(r.nama)}</td><td class="py-2 px-3">${cell(r.nama_satuan||'')}</td>`; break;
-        case 'kode_aktivitas': cols=`<td class="py-2 px-3">${cell(r.kode)}</td><td class="py-2 px-3">${cell(r.nama)}</td><td class="py-2 px-3">${cell(r.no_sap||'')}</td>`; break;
-        case 'anggaran':       cols=`<td class="py-2 px-3">${cell(r.bulan)} ${cell(r.tahun)}</td><td class="py-2 px-3">${cell(r.nama_unit)}</td><td class="py-2 px-3">${cell(r.kode_aktivitas)}</td><td class="py-2 px-3">${cell(r.nama_pupuk||'')}</td><td class="py-2 px-3">${(+r.anggaran_bulan_ini).toLocaleString()}</td><td class="py-2 px-3">${(+r.anggaran_tahun).toLocaleString()}</td>`; break;
+        case 'kebun':
+          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_kebun)}</td>
+                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+          break;
+        case 'bahan_kimia':
+          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_bahan)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>
+                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+          break;
+        case 'jenis_pekerjaan': cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
+        case 'unit':           cols=`<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
+        case 'tahun_tanam':    cols=`<td class="py-2.5 px-3">${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
+        case 'blok':           cols=`<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.tahun_tanam)}</td><td class="py-2.5 px-3">${cell(r.luas_ha)}</td>`; break;
+        case 'fisik':          cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
+        case 'satuan':         cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
+        case 'tenaga':         cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
+        case 'mobil':          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
+        case 'alat_panen':     cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
+        case 'sap':            cols=`<td class="py-2.5 px-3">${cell(r.no_sap)}</td><td class="py-2.5 px-3">${cell(r.deskripsi)}</td>`; break;
+        case 'jabatan':        cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
+        case 'pupuk':          cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>`; break;
+        case 'kode_aktivitas': cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.no_sap||'')}</td>`; break;
+        case 'anggaran':       cols=`<td class="py-2.5 px-3">${cell(r.bulan)} ${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode_aktivitas)}</td><td class="py-2.5 px-3">${cell(r.nama_pupuk||'')}</td><td class="py-2.5 px-3">${(+r.anggaran_bulan_ini).toLocaleString()}</td><td class="py-2.5 px-3">${(+r.anggaran_tahun).toLocaleString()}</td>`; break;
       }
-      // === FIX: encode JSON payload agar aman di atribut HTML ===
-      const payload = encodeURIComponent(JSON.stringify(r));
-      return `<tr class="border-b hover:bg-gray-50">
+      return `<tr class="border-b last:border-0 hover:bg-emerald-50/40 transition-colors">
         ${cols}
-        <td class="py-2 px-3">
-          <button class="text-blue-600 underline btn-edit" data-entity="${entity}" data-json="${payload}">Edit</button>
-          <button class="text-red-600 underline btn-del" data-entity="${entity}" data-id="${r.id}">Hapus</button>
-        </td>
+        <td class="py-2.5 px-3">${actionButtons(entity, r, r.id)}</td>
       </tr>`;
     }).join('');
   }
 
-  function refresh(entity){
-    currentEntity=entity; 
+  function renderHeadAndLoad(entity){
     renderHead(entity);
     tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Memuat…</td></tr>`;
-    const fd=new FormData(); 
-    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>'); 
-    fd.append('action','list'); 
+    const fd=new FormData();
+    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+    fd.append('action','list');
     fd.append('entity',entity);
     fetch('master_data_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{
@@ -239,9 +286,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // Tabs
   document.querySelectorAll('#tabs button').forEach(btn=>{
     btn.addEventListener('click',()=>{
-      document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active','border-b-2','border-emerald-600','text-emerald-700'));
-      btn.classList.add('active','border-b-2','border-emerald-600','text-emerald-700');
-      refresh(btn.dataset.entity);
+      document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active','border-emerald-600','text-emerald-700'));
+      btn.classList.add('active','border-emerald-600','text-emerald-700');
+      currentEntity = btn.dataset.entity;
+      renderHeadAndLoad(currentEntity);
     });
   });
 
@@ -250,25 +298,27 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Edit/Delete
   document.body.addEventListener('click', e=>{
-    if(e.target.classList.contains('btn-edit')){
-      const entity=e.target.dataset.entity; 
-      const data=JSON.parse(decodeURIComponent(e.target.dataset.json)); // FIX decode
+    if(e.target.closest('.btn-edit')){
+      const t=e.target.closest('.btn-edit');
+      const entity=t.dataset.entity;
+      const data=JSON.parse(decodeURIComponent(t.dataset.json));
       renderForm(entity,data);
     }
-    if(e.target.classList.contains('btn-del')){
-      const entity=e.target.dataset.entity; 
-      const id=e.target.dataset.id;
+    if(e.target.closest('.btn-del')){
+      const t=e.target.closest('.btn-del');
+      const entity=t.dataset.entity;
+      const id=t.dataset.id;
       Swal.fire({title:'Hapus data?',icon:'warning',showCancelButton:true,confirmButtonText:'Ya, hapus'}).then(res=>{
         if(res.isConfirmed){
-          const fd=new FormData(); 
-          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>'); 
-          fd.append('action','delete'); 
-          fd.append('entity',entity); 
+          const fd=new FormData();
+          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+          fd.append('action','delete');
+          fd.append('entity',entity);
           fd.append('id',id);
           fetch('master_data_crud.php',{method:'POST',body:fd})
             .then(r=>r.json())
             .then(j=>{
-              if(j.success){ Swal.fire('Terhapus','', 'success'); refresh(entity); }
+              if(j.success){ Swal.fire('Terhapus','', 'success'); renderHeadAndLoad(entity); }
               else Swal.fire('Gagal', j.message||'Error','error');
             })
             .catch(()=> Swal.fire('Gagal','Jaringan bermasalah','error'));
@@ -287,28 +337,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
     e.preventDefault();
     const fd=new FormData(e.target);
     const entity=fd.get('entity');
-    // cek required
     const def=ENTITIES[entity];
     let ok=true;
-    def.fields.forEach(f=>{ 
-      if(f.required && !(fd.get(f.name)||'').toString().trim()) ok=false; 
-    });
+    def.fields.forEach(f=>{ if(f.required && !(fd.get(f.name)||'').toString().trim()) ok=false; });
     if(!ok){ Swal.fire('Oops','Lengkapi field wajib (*)','warning'); return; }
 
     fetch('master_data_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json())  
+      .then(r=>r.json())
       .then(j=>{
-        if(j.success){ Swal.fire('Berhasil',j.message,'success'); modalEl.classList.add('hidden'); modalEl.classList.remove('flex'); refresh(entity); }
+        if(j.success){ Swal.fire('Berhasil',j.message,'success'); modalEl.classList.add('hidden'); modalEl.classList.remove('flex'); renderHeadAndLoad(entity); }
         else Swal.fire('Gagal', j.message||'Error', 'error');
       })
       .catch(()=> Swal.fire('Gagal','Jaringan bermasalah','error'));
   });
 
   // Load awal
-  refresh(currentEntity);
+  renderHeadAndLoad(currentEntity);
 });
 </script>
+
 <style>
-#tabs button { padding:.5rem .75rem; border-radius:.5rem; }
-#tabs button.active { background:#ecfeff; }
+#tabs .tab{ padding:.5rem .75rem; border-radius:.5rem; border:1px solid transparent; color:#334155; background:#fff; }
+#tabs .tab:hover{ background:#f8fafc; }
+#tabs .tab.active{ background:#ecfeff; border-color:#34d399; color:#065f46; }
+.icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:2.25rem; height:2.25rem; border-radius:.5rem; transition:background-color .15s ease, transform .05s ease; }
+.icon-btn:active{ transform:scale(.98); }
+table thead th{ position:sticky; top:0; background:#f9fafb; }
 </style>

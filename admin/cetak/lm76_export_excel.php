@@ -1,138 +1,167 @@
 <?php
-// cetak/lm76_export_excel.php
+// admin/cetak/lm76_export_excel.php
+// Excel export LM-76 — tema hijau, ikut filter ?unit_id=&bulan=&tahun=
+
 session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Forbidden'); }
-if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
-  http_response_code(400); exit('CSRF invalid');
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
 require_once '../../config/database.php';
 require_once '../../vendor/autoload.php';
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
-// filters
-$unit_id = trim($_GET['unit_id'] ?? '');
-$bulan   = trim($_GET['bulan'] ?? '');
-$tahun   = trim($_GET['tahun'] ?? '');
+/* helper cek kolom ada */
+function col_exists(PDO $pdo, $table, $col){
+  $st = $pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
+  $st->execute([':t'=>$table, ':c'=>$col]);
+  return (bool)$st->fetchColumn();
+}
 
-$db = new Database();
-$conn = $db->getConnection();
+try {
+  $db  = new Database();
+  $pdo = $db->getConnection();
 
-$w = []; $p = [];
-if ($unit_id !== '') { $w[] = 'l.unit_id = :u'; $p[':u'] = $unit_id; }
-if ($bulan   !== '') { $w[] = 'l.bulan   = :b'; $p[':b'] = $bulan; }
-if ($tahun   !== '') { $w[] = 'l.tahun   = :t'; $p[':t'] = (int)$tahun; }
+  $hasKebun = col_exists($pdo, 'lm76', 'kebun_id');
 
-$sql = "SELECT l.*, u.nama_unit
-        FROM lm76 l
-        JOIN units u ON u.id = l.unit_id
-        ".(count($w) ? ' WHERE '.implode(' AND ',$w) : '')."
-        ORDER BY l.tahun DESC,
-                 FIELD(l.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
-                 u.nama_unit ASC, l.blok ASC";
-$st = $conn->prepare($sql); $st->execute($p);
-$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+  // Filters
+  $unit_id = (isset($_GET['unit_id']) && $_GET['unit_id']!=='') ? (int)$_GET['unit_id'] : null;
+  $bulan   = (isset($_GET['bulan'])   && $_GET['bulan']  !=='') ? trim($_GET['bulan'])   : null;
+  $tahun   = (isset($_GET['tahun'])   && $_GET['tahun']  !=='') ? (int)$_GET['tahun']   : null;
 
-// info
-$username = $_SESSION['username'] ?? 'Unknown User';
-$now = date('d/m/Y H:i');
-$company = 'PTPN 4 REGIONAL 2';
-$title   = 'LM-76 — Statistik Panen Kelapa Sawit';
+  // Query
+  $selectK = $hasKebun ? ", k.nama_kebun" : "";
+  $joinK   = $hasKebun ? " LEFT JOIN md_kebun k ON k.id = l.kebun_id " : "";
 
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
+  $sql = "SELECT l.*, u.nama_unit $selectK
+          FROM lm76 l
+          LEFT JOIN units u ON u.id = l.unit_id
+          $joinK
+          WHERE 1=1";
+  $bind = [];
+  if ($unit_id !== null) { $sql .= " AND l.unit_id = :uid"; $bind[':uid'] = $unit_id; }
+  if ($bulan   !== null) { $sql .= " AND l.bulan   = :bln"; $bind[':bln'] = $bulan; }
+  if ($tahun   !== null) { $sql .= " AND l.tahun   = :thn"; $bind[':thn'] = $tahun; }
 
-// Head
-$sheet->mergeCells('A1:T1');
-$sheet->setCellValue('A1', $company);
-$sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setARGB('FFFFFFFF');
-$sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF2E7D32');
+  $sql .= " ORDER BY l.tahun DESC,
+            FIELD(l.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
+            u.nama_unit ASC, l.blok ASC";
 
-$sheet->mergeCells('A2:T2');
-$sheet->setCellValue('A2', $title);
-$sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12)->getColor()->setARGB('FFFFFFFF');
-$sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle('A2')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF388E3C');
+  $st = $pdo->prepare($sql); $st->execute($bind);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-$sheet->mergeCells('A3:T3');
-$sheet->setCellValue('A3', "Diekspor oleh: $username pada $now");
-$sheet->getStyle('A3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-$sheet->getStyle('A3')->getFont()->setItalic(true)->setSize(10);
+} catch (Throwable $e) {
+  http_response_code(500);
+  exit('DB Error: '.$e->getMessage());
+}
+
+// ==== Spreadsheet ====
+$ss = new Spreadsheet();
+$sheet = $ss->getActiveSheet();
+$addr = fn(int $c, int $r) => Coordinate::stringFromColumnIndex($c) . $r;
+
+// Header list (dinamis: kebun opsional)
+$headers = [];
+if ($hasKebun) $headers[] = 'Kebun';
+$headers = array_merge($headers, [
+  'Unit','Periode','Blok','Luas (Ha)','Jml Pohon',
+  'Prod BI (Real/Angg)','Prod SD (Real/Angg)',
+  'Jml Tandan (BI)','PSTB (BI/TL)','Panen HK',
+  'Panen Ha (BI/SD)','Freq (BI/SD)'
+]);
+
+$lastColIdx = count($headers);
+$lastCol    = Coordinate::stringFromColumnIndex($lastColIdx);
+
+// Judul hijau
+$sheet->setCellValue($addr(1,1), 'PTPN 4 REGIONAL 3');
+$sheet->mergeCells($addr(1,1).':'.$lastCol.'1');
+$sheet->getStyle($addr(1,1))->getFont()->setBold(true)->setSize(16)->getColor()->setARGB('FFFFFFFF');
+$sheet->getStyle($addr(1,1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+$sheet->getRowDimension(1)->setRowHeight(28);
+$sheet->getStyle($addr(1,1))->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF22C55E');
+
+// Subjudul
+$sheet->setCellValue($addr(1,2), 'LM-76 — Statistik Panen Kelapa Sawit');
+$sheet->mergeCells($addr(1,2).':'.$lastCol.'2');
+$sheet->getStyle($addr(1,2))->getFont()->setBold(true)->setSize(12)->getColor()->setARGB('FF065F46');
+$sheet->getStyle($addr(1,2))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
 // Header
-$headers = [
-  'No','Unit','Bulan','Tahun','T.T','Blok','Luas (Ha)','Jml Pohon','Varietas',
-  'Prod BI (Real)','Prod BI (Angg)','Prod SD (Real)','Prod SD (Angg)',
-  'Jml Tandan (BI)','PSTB (BI)','PSTB (TL)',
-  'Panen HK (Real)','Panen Ha (BI)','Panen Ha (SD)',
-  'Freq (BI)','Freq (SD)'
-];
-$cols = range('A','U'); // 21 kolom (A..U)
-$hr = 5;
-foreach ($headers as $i=>$h) {
-  $cell = $cols[$i].$hr;
-  $sheet->setCellValue($cell, $h);
-  $sheet->getStyle($cell)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-  $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-  $sheet->getStyle($cell)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF2E7D32');
-  $sheet->getStyle($cell)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$rowStart = 4;
+for ($i=0; $i<$lastColIdx; $i++){
+  $sheet->setCellValue($addr($i+1, $rowStart), $headers[$i]);
 }
+$rangeHeader = $addr(1,$rowStart).':'.$lastCol.$rowStart;
+$sheet->getStyle($rangeHeader)->getFont()->setBold(true)->getColor()->setARGB('FF065F46');
+$sheet->getStyle($rangeHeader)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFECFDF5');
+$sheet->getStyle($rangeHeader)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle($rangeHeader)->getBorders()->getAllBorders()->getColor()->setARGB('FFE5E7EB');
+
+$sheet->freezePane($addr(1, $rowStart+1));
 
 // Data
-$r0 = $hr + 1; $no = 0;
-foreach ($rows as $r) {
-  $no++; $rr = $r0 + $no - 1;
-  $data = [
-    $no,
-    $r['nama_unit'] ?? '',
-    $r['bulan'] ?? '',
-    $r['tahun'] ?? '',
-    $r['tt'] ?? '',
-    $r['blok'] ?? '',
-    (float)($r['luas_ha'] ?? 0),
-    (int)($r['jumlah_pohon'] ?? 0),
-    $r['varietas'] ?? '',
-    (float)($r['prod_bi_realisasi'] ?? 0),
-    (float)($r['prod_bi_anggaran'] ?? 0),
-    (float)($r['prod_sd_realisasi'] ?? 0),
-    (float)($r['prod_sd_anggaran'] ?? 0),
-    (int)($r['jumlah_tandan_bi'] ?? 0),
-    (float)($r['pstb_ton_ha_bi'] ?? 0),
-    (float)($r['pstb_ton_ha_tl'] ?? 0),
-    (float)($r['panen_hk_realisasi'] ?? 0),
-    (float)($r['panen_ha_bi'] ?? 0),
-    (float)($r['panen_ha_sd'] ?? 0),
-    (int)($r['frek_panen_bi'] ?? 0),
-    (int)($r['frek_panen_sd'] ?? 0),
-  ];
-  foreach ($data as $i=>$val) {
-    $cell = $cols[$i].$rr;
-    $sheet->setCellValue($cell, $val);
-    $sheet->getStyle($cell)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    if (in_array($i,[0,2,3,19,20])) { // No, Bulan, Tahun, Freq
-      $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    }
-    if (in_array($i,[6,7,9,10,11,12,14,15,16,17,18])) { // angka
-      $sheet->getStyle($cell)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-    }
+$r = $rowStart + 1;
+if ($rows) {
+  foreach ($rows as $x) {
+    $c = 1;
+    if ($hasKebun) $sheet->setCellValue($addr($c++, $r), $x['nama_kebun'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), $x['nama_unit'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), trim(($x['bulan'] ?? '').' '.($x['tahun'] ?? '')));
+    $sheet->setCellValue($addr($c++, $r), $x['blok'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), is_null($x['luas_ha']) ? null : (float)$x['luas_ha']);
+    $sheet->setCellValue($addr($c++, $r), is_null($x['jumlah_pohon']) ? null : (float)$x['jumlah_pohon']);
+    $sheet->setCellValue($addr($c++, $r), number_format((float)($x['prod_bi_realisasi'] ?? 0),2).'/'.number_format((float)($x['prod_bi_anggaran'] ?? 0),2));
+    $sheet->setCellValue($addr($c++, $r), number_format((float)($x['prod_sd_realisasi'] ?? 0),2).'/'.number_format((float)($x['prod_sd_anggaran'] ?? 0),2));
+    $sheet->setCellValue($addr($c++, $r), is_null($x['jumlah_tandan_bi']) ? null : (float)$x['jumlah_tandan_bi']);
+    $sheet->setCellValue($addr($c++, $r), number_format((float)($x['pstb_ton_ha_bi'] ?? 0),2).'/'.number_format((float)($x['pstb_ton_ha_tl'] ?? 0),2));
+    $sheet->setCellValue($addr($c++, $r), is_null($x['panen_hk_realisasi']) ? null : (float)$x['panen_hk_realisasi']);
+    $sheet->setCellValue($addr($c++, $r), number_format((float)($x['panen_ha_bi'] ?? 0),2).'/'.number_format((float)($x['panen_ha_sd'] ?? 0),2));
+    $sheet->setCellValue($addr($c++, $r), number_format((float)($x['frek_panen_bi'] ?? 0),0).'/'.number_format((float)($x['frek_panen_sd'] ?? 0),0));
+    $r++;
   }
+} else {
+  $sheet->setCellValue($addr(1,$r), 'Belum ada data.');
+  $sheet->mergeCells($addr(1,$r).':'.$lastCol.$r);
 }
 
+// Format angka & border area data
+$endRow = max($r-1, $rowStart);
+if ($endRow >= $rowStart+1) {
+  // Luas (Ha)
+  $sheet->getStyle($addr($hasKebun?5:4,$rowStart+1).':'.$addr($hasKebun?5:4,$endRow))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+  $sheet->getStyle($addr($hasKebun?5:4,$rowStart+1).':'.$addr($hasKebun?5:4,$endRow))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  // Jml Pohon
+  $sheet->getStyle($addr($hasKebun?6:5,$rowStart+1).':'.$addr($hasKebun?6:5,$endRow))->getNumberFormat()->setFormatCode('0');
+  $sheet->getStyle($addr($hasKebun?6:5,$rowStart+1).':'.$addr($hasKebun?6:5,$endRow))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  // Jml Tandan BI
+  $colJmlTandan = $hasKebun ? 9 : 8;
+  $sheet->getStyle($addr($colJmlTandan,$rowStart+1).':'.$addr($colJmlTandan,$endRow))->getNumberFormat()->setFormatCode('0');
+  $sheet->getStyle($addr($colJmlTandan,$rowStart+1).':'.$addr($colJmlTandan,$endRow))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  // Panen HK
+  $colPanenHK = $hasKebun ? 11 : 10;
+  $sheet->getStyle($addr($colPanenHK,$rowStart+1).':'.$addr($colPanenHK,$endRow))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+  $sheet->getStyle($addr($colPanenHK,$rowStart+1).':'.$addr($colPanenHK,$endRow))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+}
+$rangeAll = $addr(1,$rowStart).':'.$lastCol.$endRow;
+$sheet->getStyle($rangeAll)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle($rangeAll)->getBorders()->getAllBorders()->getColor()->setARGB('FFE5E7EB');
+
 // Autosize
-foreach ($cols as $c) { $sheet->getColumnDimension($c)->setAutoSize(true); }
+for ($i=1; $i<=$lastColIdx; $i++){
+  $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
+}
 
 // Output
-$filename = 'LM76_'.date('Ymd_His').'.xlsx';
+$fname = 'lm76_'.date('Ymd_His').'.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-header('Content-Disposition: attachment; filename="'.$filename.'"');
+header('Content-Disposition: attachment; filename="'.$fname.'"');
 header('Cache-Control: max-age=0');
-
-$writer = new Xlsx($spreadsheet);
+$writer = new Xlsx($ss);
 $writer->save('php://output');
 exit;

@@ -11,7 +11,15 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="//unpkg.com/alpinejs" defer></script>
+  <link rel="icon" sizes="32x32" href="../assets/images/logo.png">
+<link rel="icon" sizes="16x16" href="../assets/images/logo.png">
+<link rel="apple-touch-icon" sizes="180x180" href="../assets/images/logo.png">
+
+  <script src="/unpkg.com/alpinejs" defer></script>
+<!-- Alpine.js (untuk dropdown) -->
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+<!-- Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest"></script>
 
 
 

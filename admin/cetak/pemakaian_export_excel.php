@@ -1,10 +1,11 @@
 <?php
-// pemakaian_export_excel.php (REVISI pakai units)
+// admin/cetak/pemakaian_export_excel.php
+// Excel export Pemakaian Bahan Kimia (mengikuti filter q, unit_id, bulan, tahun)
+// Header hijau "PTPN 4 REGIONAL 3", TANPA info pencetak & tanggal.
+// FIX: parsing tag [Kebun]/[Fisik], range border tanpa tanda kurung berlebih (PHP 8.3 friendly)
+
 session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Forbidden'); }
-if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
-  http_response_code(400); exit('CSRF invalid');
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
 require_once '../../config/database.php';
 require_once '../../vendor/autoload.php';
@@ -12,93 +13,169 @@ require_once '../../vendor/autoload.php';
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
-$q       = trim($_GET['q'] ?? '');
-$unit_id = (int)($_GET['unit_id'] ?? 0);
-$bulan   = trim($_GET['bulan'] ?? '');
-$tahun   = (int)($_GET['tahun'] ?? date('Y'));
+function likeParam($s){ return '%'.str_replace(['%','_'], ['\\%','\\_'], trim($s)).'%'; }
 
-$db = new Database();
-$conn = $db->getConnection();
-
-$sql = "SELECT p.no_dokumen, u.nama_unit, p.bulan, p.tahun, p.nama_bahan, p.jenis_pekerjaan,
-               p.jlh_diminta, p.jlh_fisik, p.dokumen_path, p.keterangan
-        FROM pemakaian_bahan_kimia p
-        LEFT JOIN units u ON u.id = p.unit_id
-        WHERE 1=1";
-$bind = [];
-if ($unit_id > 0) { $sql .= " AND p.unit_id = :uid"; $bind[':uid'] = $unit_id; }
-if ($bulan !== '') { $sql .= " AND p.bulan = :bln"; $bind[':bln'] = $bulan; }
-if ($tahun) { $sql .= " AND p.tahun = :thn"; $bind[':thn'] = $tahun; }
-if ($q !== '') {
-  $sql .= " AND (p.no_dokumen LIKE :q OR p.nama_bahan LIKE :q OR p.jenis_pekerjaan LIKE :q OR p.keterangan LIKE :q)";
-  $bind[':q'] = "%{$q}%";
+// ---- Tag helpers (selaras dengan pemakaian_crud.php) ----
+function extract_tag_anywhere($ket, $label){
+  if (!is_string($ket)) $ket = (string)$ket;
+  $pattern = '/\\[\\s*' . preg_quote($label,'/') . '\\s*:\\s*([^\\]]+)\\]\\s*/iu';
+  if (preg_match($pattern, $ket, $m)) {
+    $val = trim($m[1]);
+    $clean = preg_replace($pattern, '', $ket, 1);
+    return [$val !== '' ? $val : null, trim($clean)];
+  }
+  return [null, trim($ket)];
 }
-$sql .= " ORDER BY p.tahun DESC,
-                 FIELD(p.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
-                 u.nama_unit ASC, p.no_dokumen ASC";
-$stmt = $conn->prepare($sql);
-$stmt->execute($bind);
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+function parse_labels_and_clean($ketRaw){
+  list($kebun, $rest)  = extract_tag_anywhere($ketRaw, 'Kebun');
+  list($fisik, $clean) = extract_tag_anywhere($rest, 'Fisik');
+  if ($kebun === null && $fisik === null) {
+    list($fisik2, $rest2) = extract_tag_anywhere($ketRaw, 'Fisik');
+    list($kebun2, $clean2)= extract_tag_anywhere($rest2, 'Kebun');
+    $kebun=$kebun2; $fisik=$fisik2; $clean=$clean2;
+  }
+  return [$kebun, $fisik, trim($clean ?? (string)$ketRaw)];
+}
+// ---------------------------------------------------------
 
-// --- Spreadsheet
-$nowStr = date('d-m-Y');
-$judul  = "PTPN 4 REGIONAL 2 — Pemakaian Bahan Kimia (Tanggal: {$nowStr})";
+try {
+  $db  = new Database();
+  $pdo = $db->getConnection();
 
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
+  // Filters
+  $q       = isset($_GET['q']) ? trim($_GET['q']) : '';
+  $unit_id = ($_GET['unit_id'] ?? '') === '' ? null : (int)$_GET['unit_id'];
+  $bulan   = isset($_GET['bulan']) && $_GET['bulan']!=='' ? trim($_GET['bulan']) : null;
+  $tahun   = isset($_GET['tahun']) && $_GET['tahun']!=='' ? (int)$_GET['tahun'] : null;
 
-$sheet->mergeCells('A1:J1');
-$sheet->setCellValue('A1', $judul);
-$sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setARGB('FFFFFFFF');
-$sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF16A34A');
-$sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+  // Query
+  $sql = "SELECT p.*, u.nama_unit AS unit_nama
+          FROM pemakaian_bahan_kimia p
+          LEFT JOIN units u ON u.id = p.unit_id
+          WHERE 1=1";
+  $bind = [];
+  if ($q !== '') {
+    $sql .= " AND (p.no_dokumen LIKE :q OR p.nama_bahan LIKE :q OR p.jenis_pekerjaan LIKE :q OR IFNULL(p.keterangan,'') LIKE :q)";
+    $bind[':q'] = likeParam($q);
+  }
+  if ($unit_id !== null) { $sql .= " AND p.unit_id = :uid"; $bind[':uid'] = $unit_id; }
+  if ($bulan   !== null) { $sql .= " AND p.bulan   = :bulan"; $bind[':bulan'] = $bulan; }
+  if ($tahun   !== null) { $sql .= " AND p.tahun   = :tahun"; $bind[':tahun'] = $tahun; }
+
+  $sql .= " ORDER BY p.tahun DESC,
+            FIELD(p.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
+            p.created_at DESC";
+
+  $st = $pdo->prepare($sql);
+  $st->execute($bind);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+  foreach ($rows as &$r) {
+    list($r['kebun_label'], $r['fisik_label'], $r['keterangan_clean']) = parse_labels_and_clean($r['keterangan'] ?? '');
+  }
+  unset($r);
+
+} catch (Throwable $e) {
+  http_response_code(500);
+  exit('DB Error: '.$e->getMessage());
+}
+
+// ==== Spreadsheet ====
+$ss = new Spreadsheet();
+$sheet = $ss->getActiveSheet();
+$addr = fn(int $c, int $r) => Coordinate::stringFromColumnIndex($c) . $r;
+
+$headers = [
+  'No. Dokumen','Kebun','Unit','Periode',
+  'Nama Bahan','Jenis Pekerjaan',
+  'Jlh Diminta','Jlh Fisik','Dokumen','Keterangan'
+];
+$lastColIdx = count($headers);
+$lastCol    = Coordinate::stringFromColumnIndex($lastColIdx);
+
+// Judul hijau
+$sheet->setCellValue($addr(1,1), 'PTPN 4 REGIONAL 3');
+$sheet->mergeCells($addr(1,1).':'.$lastCol.'1');
+$sheet->getStyle($addr(1,1))->getFont()->setBold(true)->setSize(16)->getColor()->setARGB('FFFFFFFF');
+$sheet->getStyle($addr(1,1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
+$sheet->getRowDimension(1)->setRowHeight(28);
+$sheet->getStyle($addr(1,1))->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF22C55E');
+
+// Subjudul
+$sheet->setCellValue($addr(1,2), 'Permintaan / Pemakaian Bahan Kimia');
+$sheet->mergeCells($addr(1,2).':'.$lastCol.'2');
+$sheet->getStyle($addr(1,2))->getFont()->setBold(true)->setSize(12)->getColor()->setARGB('FF065F46');
+$sheet->getStyle($addr(1,2))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
 // Header
-$headers = ['No','No. Dokumen','Unit','Periode','Nama Bahan','Jenis Pekerjaan','Jlh Diminta','Jumlah Fisik','Dokumen','Keterangan'];
-$col = 'A'; $rowHeader = 3;
-foreach ($headers as $h) {
-  $sheet->setCellValue($col.$rowHeader, $h);
-  $sheet->getStyle($col.$rowHeader)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-  $sheet->getStyle($col.$rowHeader)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF16A34A');
-  $sheet->getStyle($col.$rowHeader)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-  $sheet->getStyle($col.$rowHeader)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-  $col++;
+$rowStart = 4;
+for ($i=0; $i<$lastColIdx; $i++){
+  $sheet->setCellValue($addr($i+1, $rowStart), $headers[$i]);
 }
+$rangeHeader = $addr(1,$rowStart).':'.$lastCol.$rowStart;
+$sheet->getStyle($rangeHeader)->getFont()->setBold(true)->getColor()->setARGB('FF065F46');
+$sheet->getStyle($rangeHeader)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFECFDF5');
+// ⬇️ border header (dipisah jadi dua baris agar tidak error tanda kurung)
+$sheet->getStyle($rangeHeader)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle($rangeHeader)->getBorders()->getAllBorders()->getColor()->setARGB('FFE5E7EB');
+
+$sheet->freezePane($addr(1, $rowStart+1));
 
 // Data
-$startRow = 4; $i = 0;
-foreach ($rows as $r) {
-  $i++; $rr = $startRow + $i - 1;
-  $periode = ($r['bulan'] ?? '').' '.($r['tahun'] ?? '');
-  $sheet->setCellValue("A{$rr}", $i);
-  $sheet->setCellValue("B{$rr}", $r['no_dokumen']);
-  $sheet->setCellValue("C{$rr}", $r['nama_unit']);
-  $sheet->setCellValue("D{$rr}", $periode);
-  $sheet->setCellValue("E{$rr}", $r['nama_bahan']);
-  $sheet->setCellValue("F{$rr}", $r['jenis_pekerjaan']);
-  $sheet->setCellValue("G{$rr}", (float)$r['jlh_diminta']);
-  $sheet->setCellValue("H{$rr}", (float)$r['jlh_fisik']);
-  $sheet->setCellValue("I{$rr}", basename((string)$r['dokumen_path']) ?: '-');
-  $sheet->setCellValue("J{$rr}", $r['keterangan']);
+$r = $rowStart + 1;
+if ($rows) {
+  foreach ($rows as $x) {
+    $c = 1;
+    $periode   = trim(($x['bulan'] ?? '').' '.($x['tahun'] ?? ''));
+    $fisikTxt  = number_format((float)($x['jlh_fisik'] ?? 0), 2) . (!empty($x['fisik_label']) ? ' ('.$x['fisik_label'].')' : '');
+    $dokumenShow = !empty($x['dokumen_path']) ? basename($x['dokumen_path']) : 'N/A';
 
-  foreach (range('A','J') as $cc) {
-    $sheet->getStyle($cc.$rr)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->setCellValue($addr($c++, $r), $x['no_dokumen'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), $x['kebun_label'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), $x['unit_nama']   ?? '-');
+    $sheet->setCellValue($addr($c++, $r), $periode !== '' ? $periode : '-');
+    $sheet->setCellValue($addr($c++, $r), $x['nama_bahan'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), $x['jenis_pekerjaan'] ?? '-');
+    $sheet->setCellValue($addr($c++, $r), (float)($x['jlh_diminta'] ?? 0));
+    $sheet->setCellValue($addr($c++, $r), $fisikTxt); // angka + label fisik
+    $sheet->setCellValue($addr($c++, $r), $dokumenShow);
+    $sheet->setCellValue($addr($c++, $r), $x['keterangan_clean'] ?? '-');
+    $r++;
   }
+} else {
+  $sheet->setCellValue($addr(1,$r), 'Belum ada data.');
+  $sheet->mergeCells($addr(1,$r).':'.$lastCol.$r);
 }
 
+// Styling angka & border area data
+$endRow = max($r-1, $rowStart);
+if ($endRow >= $rowStart+1) {
+  $rngDiminta = $addr(7,$rowStart+1).':'.$addr(7,$endRow);
+  $sheet->getStyle($rngDiminta)->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
+  $sheet->getStyle($rngDiminta)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+
+  $rngFisik = $addr(8,$rowStart+1).':'.$addr(8,$endRow);
+  $sheet->getStyle($rngFisik)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+}
+$rangeAll = $addr(1,$rowStart).':'.$lastCol.$endRow;
+$sheet->getStyle($rangeAll)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle($rangeAll)->getBorders()->getAllBorders()->getColor()->setARGB('FFE5E7EB');
+
 // Autosize
-foreach (range('A','J') as $cc) {
-  $sheet->getColumnDimension($cc)->setAutoSize(true);
+for ($i=1; $i<=$lastColIdx; $i++){
+  $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
 }
 
 // Output
-$filename = 'Pemakaian_'.date('Ymd_His').'.xlsx';
+$fname = 'pemakaian_'.date('Ymd_His').'.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-header('Content-Disposition: attachment; filename="'.$filename.'"');
+header('Content-Disposition: attachment; filename="'.$fname.'"');
 header('Cache-Control: max-age=0');
-$writer = new Xlsx($spreadsheet);
+$writer = new Xlsx($ss);
 $writer->save('php://output');
 exit;

@@ -1,10 +1,11 @@
 <?php
-// pemakaian_export_pdf.php (REVISI pakai units)
+// admin/cetak/pemakaian_export_pdf.php
+// PDF export Pemakaian Bahan Kimia (mengikuti filter q, unit_id, bulan, tahun)
+// Theme hijau + header "PTPN 4 REGIONAL 3", TANPA info pencetak & tanggal.
+// FIX: parse [Kebun: ..] & [Fisik: ..] -> kebun_label, fisik_label, keterangan_clean
+
 session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Forbidden'); }
-if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
-  http_response_code(400); exit('CSRF invalid');
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
 require_once '../../config/database.php';
 require_once '../../vendor/autoload.php';
@@ -12,96 +13,141 @@ require_once '../../vendor/autoload.php';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-$q       = trim($_GET['q'] ?? '');
-$unit_id = (int)($_GET['unit_id'] ?? 0);
-$bulan   = trim($_GET['bulan'] ?? '');
-$tahun   = (int)($_GET['tahun'] ?? date('Y'));
+function likeParam($s){ return '%'.str_replace(['%','_'], ['\\%','\\_'], trim($s)).'%'; }
 
-$db = new Database();
-$conn = $db->getConnection();
-
-$sql = "SELECT p.no_dokumen, u.nama_unit, p.bulan, p.tahun, p.nama_bahan, p.jenis_pekerjaan,
-               p.jlh_diminta, p.jlh_fisik, p.dokumen_path, p.keterangan
-        FROM pemakaian_bahan_kimia p
-        LEFT JOIN units u ON u.id = p.unit_id
-        WHERE 1=1";
-$bind = [];
-if ($unit_id > 0) { $sql .= " AND p.unit_id = :uid"; $bind[':uid'] = $unit_id; }
-if ($bulan !== '') { $sql .= " AND p.bulan = :bln"; $bind[':bln'] = $bulan; }
-if ($tahun) { $sql .= " AND p.tahun = :thn"; $bind[':thn'] = $tahun; }
-if ($q !== '') {
-  $sql .= " AND (p.no_dokumen LIKE :q OR p.nama_bahan LIKE :q OR p.jenis_pekerjaan LIKE :q OR p.keterangan LIKE :q)";
-  $bind[':q'] = "%{$q}%";
+// ----- Tag helpers (copy dari CRUD, disederhanakan) -----
+function extract_tag_anywhere($ket, $label){
+  if (!is_string($ket)) $ket = (string)$ket;
+  $pattern = '/\\[\\s*' . preg_quote($label,'/') . '\\s*:\\s*([^\\]]+)\\]\\s*/iu';
+  if (preg_match($pattern, $ket, $m)) {
+    $val = trim($m[1]);
+    $clean = preg_replace($pattern, '', $ket, 1);
+    return [$val !== '' ? $val : null, trim($clean)];
+  }
+  return [null, trim($ket)];
 }
-$sql .= " ORDER BY p.tahun DESC,
-                 FIELD(p.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
-                 u.nama_unit ASC, p.no_dokumen ASC";
-$stmt = $conn->prepare($sql);
-$stmt->execute($bind);
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+function parse_labels_and_clean($ketRaw){
+  // urutan tag bebas
+  list($kebun, $rest)  = extract_tag_anywhere($ketRaw, 'Kebun');
+  list($fisik, $clean) = extract_tag_anywhere($rest, 'Fisik');
+  if ($kebun === null && $fisik === null) {
+    list($fisik2, $rest2) = extract_tag_anywhere($ketRaw, 'Fisik');
+    list($kebun2, $clean2)= extract_tag_anywhere($rest2, 'Kebun');
+    $kebun=$kebun2; $fisik=$fisik2; $clean=$clean2;
+  }
+  return [$kebun, $fisik, trim($clean ?? (string)$ketRaw)];
+}
+// --------------------------------------------------------
 
-$nowStr = date('d-m-Y H:i');
-$judul  = "PTPN 4 REGIONAL 2 — Pemakaian Bahan Kimia (Dicetak {$nowStr})";
+try {
+  $db  = new Database();
+  $pdo = $db->getConnection();
 
+  // ==== Filters ====
+  $q       = isset($_GET['q']) ? trim($_GET['q']) : '';
+  $unit_id = ($_GET['unit_id'] ?? '') === '' ? null : (int)$_GET['unit_id'];
+  $bulan   = isset($_GET['bulan']) && $_GET['bulan']!=='' ? trim($_GET['bulan']) : null;
+  $tahun   = isset($_GET['tahun']) && $_GET['tahun']!=='' ? (int)$_GET['tahun'] : null;
+
+  // ==== Query ====
+  $sql = "SELECT p.*, u.nama_unit AS unit_nama
+          FROM pemakaian_bahan_kimia p
+          LEFT JOIN units u ON u.id = p.unit_id
+          WHERE 1=1";
+  $bind = [];
+  if ($q !== '') {
+    $sql .= " AND (p.no_dokumen LIKE :q OR p.nama_bahan LIKE :q OR p.jenis_pekerjaan LIKE :q OR IFNULL(p.keterangan,'') LIKE :q)";
+    $bind[':q'] = likeParam($q);
+  }
+  if ($unit_id !== null) { $sql .= " AND p.unit_id = :uid"; $bind[':uid'] = $unit_id; }
+  if ($bulan   !== null) { $sql .= " AND p.bulan   = :bulan"; $bind[':bulan'] = $bulan; }
+  if ($tahun   !== null) { $sql .= " AND p.tahun   = :tahun"; $bind[':tahun'] = $tahun; }
+  $sql .= " ORDER BY p.tahun DESC,
+            FIELD(p.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
+            p.created_at DESC";
+  $st = $pdo->prepare($sql); $st->execute($bind);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+  // post-process rows: parse tag -> kebun_label, fisik_label, keterangan_clean
+  foreach ($rows as &$r) {
+    list($r['kebun_label'], $r['fisik_label'], $r['keterangan_clean']) = parse_labels_and_clean($r['keterangan'] ?? '');
+  }
+  unset($r);
+
+} catch (Throwable $e) {
+  http_response_code(500);
+  exit('DB Error: '.$e->getMessage());
+}
+
+// ===== Build HTML =====
 ob_start();
 ?>
 <!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
-<title><?= htmlspecialchars($judul) ?></title>
 <style>
-  @page { margin: 15px; }
-  body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 11px; color:#111; }
-  .title {
-    text-align:center; font-weight:bold; font-size:14px; color:#fff;
-    padding:8px; background:#16a34a; border-radius:4px; margin-bottom:8px;
-  }
-  table { width:100%; border-collapse:collapse; table-layout:fixed; }
-  th, td { border:1px solid #555; padding:4px; word-wrap:break-word; }
-  th { background:#16a34a; color:#fff; text-align:center; }
-  .center{ text-align:center; } .right{ text-align:right; }
-  footer { position: fixed; bottom: -10px; left: 0; right: 0; text-align: right; font-size: 10px; color: #555; }
+  @page { margin: 18mm 12mm; }
+  body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color:#111; }
+  .brand { background:#22c55e; color:#fff; padding:12px 16px; border-radius:8px; text-align:center; margin-bottom:10px; }
+  .brand h1 { margin:0; font-size:18px; letter-spacing:.5px; }
+  .subtitle { text-align:center; margin: 4px 0 12px; font-weight:bold; font-size:13px; color:#065f46; }
+  table { width:100%; border-collapse:collapse; table-layout: fixed; } /* fixed biar stabil */
+  th, td { border:1px solid #e5e7eb; padding:6px 8px; vertical-align: top; }
+  thead th { background:#ecfdf5; color:#065f46; font-weight:700; }
+  tbody tr:nth-child(even) td { background:#f8fafc; }
+  .text-right { text-align:right; }
+  .wrap { word-wrap: break-word; overflow-wrap: anywhere; } /* pecah path panjang */
 </style>
 </head>
 <body>
-  <div class="title"><?= htmlspecialchars($judul) ?></div>
+  <div class="brand"><h1>PTPN 4 REGIONAL 3</h1></div>
+  <div class="subtitle">Permintaan / Pemakaian Bahan Kimia</div>
+
   <table>
+    <colgroup>
+      <col style="width:10%"><col style="width:10%"><col style="width:12%"><col style="width:10%">
+      <col style="width:12%"><col style="width:12%"><col style="width:8%"><col style="width:8%">
+      <col style="width:10%"><col style="width:18%">
+    </colgroup>
     <thead>
       <tr>
-        <th style="width:25px;">No</th>
-        <th style="width:90px;">No. Dokumen</th>
-        <th style="width:90px;">Unit</th>
-        <th style="width:70px;">Periode</th>
-        <th style="width:120px;">Nama Bahan</th>
-        <th style="width:110px;">Jenis Pekerjaan</th>
-        <th style="width:70px;">Jlh Diminta</th>
-        <th style="width:70px;">Jml Fisik</th>
-        <th style="width:100px;">Dokumen</th>
-        <th style="width:130px;">Keterangan</th>
+        <th>No. Dokumen</th>
+        <th>Kebun</th>
+        <th>Unit</th>
+        <th>Periode</th>
+        <th>Nama Bahan</th>
+        <th>Jenis Pekerjaan</th>
+        <th class="text-right">Jlh Diminta</th>
+        <th class="text-right">Jlh Fisik</th>
+        <th>Dokumen</th>
+        <th>Keterangan</th>
       </tr>
     </thead>
     <tbody>
       <?php if (!$rows): ?>
-        <tr><td class="center" colspan="10">Tidak ada data.</td></tr>
-      <?php else: $i=0; foreach ($rows as $r): $i++; ?>
+        <tr><td colspan="10">Belum ada data.</td></tr>
+      <?php else: foreach ($rows as $r):
+        $periode = trim(($r['bulan'] ?? '').' '.($r['tahun'] ?? ''));
+        $dokumen = $r['dokumen_path'] ?? '';
+        $dokumenShow = $dokumen ? basename($dokumen) : 'N/A'; // tampilkan basename agar tidak “gabung”
+        $fisikTxt = number_format((float)($r['jlh_fisik'] ?? 0), 2) . (!empty($r['fisik_label']) ? ' ('.$r['fisik_label'].')' : '');
+      ?>
         <tr>
-          <td class="center"><?= $i ?></td>
-          <td><?= htmlspecialchars($r['no_dokumen']) ?></td>
-          <td class="center"><?= htmlspecialchars($r['nama_unit'] ?? '-') ?></td>
-          <td class="center"><?= htmlspecialchars(($r['bulan']??'').' '.($r['tahun']??'')) ?></td>
-          <td><?= htmlspecialchars($r['nama_bahan']) ?></td>
-          <td><?= htmlspecialchars($r['jenis_pekerjaan']) ?></td>
-          <td class="right"><?= number_format((float)$r['jlh_diminta'],2) ?></td>
-          <td class="right"><?= number_format((float)$r['jlh_fisik'],2) ?></td>
-          <td><?= htmlspecialchars(basename((string)$r['dokumen_path']) ?: '-') ?></td>
-          <td><?= htmlspecialchars($r['keterangan']) ?></td>
+          <td><?= htmlspecialchars($r['no_dokumen'] ?? '-') ?></td>
+          <td><?= htmlspecialchars($r['kebun_label'] ?? '-') ?></td>
+          <td><?= htmlspecialchars($r['unit_nama']   ?? '-') ?></td>
+          <td><?= htmlspecialchars($periode !== '' ? $periode : '-') ?></td>
+          <td><?= htmlspecialchars($r['nama_bahan'] ?? '-') ?></td>
+          <td><?= htmlspecialchars($r['jenis_pekerjaan'] ?? '-') ?></td>
+          <td class="text-right"><?= number_format((float)($r['jlh_diminta'] ?? 0), 2) ?></td>
+          <td class="text-right"><?= htmlspecialchars($fisikTxt) ?></td>
+          <td class="wrap"><?= htmlspecialchars($dokumenShow) ?></td>
+          <td class="wrap"><?= htmlspecialchars($r['keterangan_clean'] ?? '-') ?></td>
         </tr>
       <?php endforeach; endif; ?>
     </tbody>
   </table>
-
-  <footer>Halaman {PAGE_NUM} / {PAGE_COUNT}</footer>
 </body>
 </html>
 <?php
@@ -109,11 +155,10 @@ $html = ob_get_clean();
 
 $options = new Options();
 $options->set('isRemoteEnabled', true);
-$options->set('isHtml5ParserEnabled', true);
-
 $dompdf = new Dompdf($options);
-$dompdf->loadHtml($html);
+$dompdf->loadHtml($html, 'UTF-8');
 $dompdf->setPaper('A4', 'landscape');
 $dompdf->render();
-$dompdf->stream('Pemakaian_'.date('Ymd_His').'.pdf', ['Attachment' => 0]);
+$fname = 'pemakaian_'.date('Ymd_His').'.pdf';
+$dompdf->stream($fname, ['Attachment'=>false]);
 exit;

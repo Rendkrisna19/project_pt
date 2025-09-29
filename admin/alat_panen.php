@@ -7,6 +7,7 @@ $CSRF = $_SESSION['csrf_token'];
 require_once '../config/database.php';
 $db = new Database(); $conn = $db->getConnection();
 $units = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+$kebun = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $tahunNow = (int)date('Y');
@@ -18,13 +19,20 @@ include_once '../layouts/header.php';
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold">Alat Panen</h1>
-      <p class="text-gray-500">Kelola stok alat panen per unit & periode</p>
+      <p class="text-gray-500">Kelola stok alat panen per kebun, unit & periode</p>
     </div>
     <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Input Alat Panen</button>
   </div>
 
  <!-- Filter -->
-<div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3 items-start">
+<div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+  <select id="f-kebun" class="border rounded px-3 py-2">
+    <option value="">Semua Kebun</option>
+    <?php foreach ($kebun as $k): ?>
+      <option value="<?= $k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+    <?php endforeach; ?>
+  </select>
+
   <select id="f-unit" class="border rounded px-3 py-2">
     <option value="">Semua Unit</option>
     <?php foreach ($units as $u): ?>
@@ -72,6 +80,7 @@ include_once '../layouts/header.php';
       <thead class="bg-gray-50">
         <tr class="text-gray-600">
           <th class="py-3 px-4 text-left">Periode</th>
+          <th class="py-3 px-4 text-left">Kebun</th>
           <th class="py-3 px-4 text-left">Unit/Devisi</th>
           <th class="py-3 px-4 text-left">Jenis Alat Panen</th>
           <th class="py-3 px-4 text-left">Stok Awal</th>
@@ -85,7 +94,7 @@ include_once '../layouts/header.php';
         </tr>
       </thead>
       <tbody id="tbody-data">
-        <tr><td colspan="11" class="text-center py-10 text-gray-500">Memuat…</td></tr>
+        <tr><td colspan="12" class="text-center py-10 text-gray-500">Memuat…</td></tr>
       </tbody>
     </table>
   </div>
@@ -119,6 +128,16 @@ include_once '../layouts/header.php';
             <?php endfor; ?>
           </select>
         </div>
+        <div>
+          <label class="block text-sm mb-1">Kebun</label>
+          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2" required>
+            <option value="">-- Pilih Kebun --</option>
+            <?php foreach ($kebun as $k): ?>
+              <option value="<?= $k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+
         <div>
           <label class="block text-sm mb-1">Unit/Devisi</label>
           <select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2" required>
@@ -202,23 +221,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#btn-refresh').addEventListener('click', refresh);
 
   // filter
-  ['f-unit','f-bulan','f-tahun'].forEach(id=>document.getElementById(id).addEventListener('change', refresh));
+  ['f-kebun','f-unit','f-bulan','f-tahun'].forEach(id=>document.getElementById(id).addEventListener('change', refresh));
 
   function refresh(){
     const fd=new FormData();
     fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
     fd.append('action','list');
+    fd.append('kebun_id',$('#f-kebun').value);
     fd.append('unit_id',$('#f-unit').value);
     fd.append('bulan',$('#f-bulan').value);
     fd.append('tahun',$('#f-tahun').value);
 
     fetch('alat_panen_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{
-        if(!j.success){ tbody.innerHTML=`<tr><td colspan="11" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return; }
-        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="11" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return; }
+        if(!j.success){ tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return; }
+        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return; }
         tbody.innerHTML = j.data.map(x=>`
           <tr class="border-b hover:bg-gray-50">
             <td class="py-2 px-3">${x.bulan} ${x.tahun}</td>
+            <td class="py-2 px-3">${x.nama_kebun || '-'}</td>
             <td class="py-2 px-3">${x.nama_unit}</td>
             <td class="py-2 px-3">${x.jenis_alat}</td>
             <td class="py-2 px-3">${(+x.stok_awal).toLocaleString()}</td>
@@ -234,7 +255,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             </td>
           </tr>`).join('');
       })
-      .catch(()=> tbody.innerHTML=`<tr><td colspan="11" class="text-center py-8 text-red-500">Gagal memuat data.</td></tr>`);
+      .catch(()=> tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-red-500">Gagal memuat data.</td></tr>`);
   }
   refresh();
 
@@ -243,7 +264,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const d=JSON.parse(e.target.dataset.json);
       const form=document.getElementById('crud-form'); form.reset();
       document.getElementById('form-action').value='update'; document.getElementById('form-id').value=d.id;
-      ['bulan','tahun','unit_id','jenis_alat','stok_awal','mutasi_masuk','mutasi_keluar','dipakai','stok_akhir','krani_afdeling','catatan'].forEach(k=>{
+      ['bulan','tahun','kebun_id','unit_id','jenis_alat','stok_awal','mutasi_masuk','mutasi_keluar','dipakai','stok_akhir','krani_afdeling','catatan'].forEach(k=>{
         if(document.getElementById(k)) document.getElementById(k).value = d[k] ?? '';
       });
       calc(); open();
@@ -269,11 +290,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // submit
   document.getElementById('crud-form').addEventListener('submit',e=>{
     e.preventDefault();
-    // validasi sederhana
-    if(!$('#unit_id').value || !$('#bulan').value || !$('#tahun').value || !$('#jenis_alat').value){
-      Swal.fire('Oops', 'Bulan/Tahun/Unit dan Jenis Alat wajib diisi.', 'warning'); return;
+    if(!$('#kebun_id').value || !$('#unit_id').value || !$('#bulan').value || !$('#tahun').value || !$('#jenis_alat').value){
+      Swal.fire('Oops', 'Bulan/Tahun/Kebun/Unit dan Jenis Alat wajib diisi.', 'warning'); return;
     }
-    // pastikan stok_akhir dihitung server juga, tapi kirim nilai terbaru
     calc();
     const fd=new FormData(e.target);
     fetch('alat_panen_crud.php',{method:'POST',body:fd})
@@ -285,10 +304,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 
-// === Export Excel & PDF (bawa filter aktif) ===
+// === Export Excel & PDF (bawa filter aktif, termasuk kebun) ===
 document.getElementById('btn-export-excel').addEventListener('click', () => {
   const qs = new URLSearchParams({
     csrf_token: '<?= htmlspecialchars($CSRF) ?>',
+    kebun_id: document.getElementById('f-kebun').value || '',
     unit_id: document.getElementById('f-unit').value || '',
     bulan: document.getElementById('f-bulan').value || '',
     tahun: document.getElementById('f-tahun').value || ''
@@ -299,12 +319,11 @@ document.getElementById('btn-export-excel').addEventListener('click', () => {
 document.getElementById('btn-export-pdf').addEventListener('click', () => {
   const qs = new URLSearchParams({
     csrf_token: '<?= htmlspecialchars($CSRF) ?>',
+    kebun_id: document.getElementById('f-kebun').value || '',
     unit_id: document.getElementById('f-unit').value || '',
     bulan: document.getElementById('f-bulan').value || '',
     tahun: document.getElementById('f-tahun').value || ''
   }).toString();
   window.open('cetak/alat_panen_export_pdf.php?' + qs, '_blank');
 });
-
 </script>
-`

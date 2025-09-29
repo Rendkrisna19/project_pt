@@ -1,128 +1,161 @@
 <?php
+// pages/cetak/stok_gudang_export_pdf.php
+// PDF rekap stok gudang (mengikuti filter GET: kebun_id, bahan_id, bulan, tahun) — header hijau PTPN IV REGIONAL 3
 session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Forbidden'); }
-if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_GET['csrf_token'] ?? '')) {
-  http_response_code(400); exit('CSRF invalid');
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
 require_once '../../config/database.php';
-require '../../vendor/autoload.php';
+require_once '../../vendor/autoload.php';
 
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-$jenis = trim($_GET['jenis'] ?? '');
-$bulan = trim($_GET['bulan'] ?? '');
-$tahun = (int)($_GET['tahun'] ?? date('Y'));
+function h($s){ return htmlspecialchars((string)$s, ENT_QUOTES, 'UTF-8'); }
 
-$db = new Database();
-$conn = $db->getConnection();
+$db  = new Database();
+$pdo = $db->getConnection();
 
-// Query data
-$sql = "SELECT nama_bahan, satuan, bulan, tahun, stok_awal, mutasi_masuk, mutasi_keluar, pasokan, dipakai
-        FROM stok_gudang WHERE 1=1";
-$bind = [];
-if ($jenis !== '') { $sql .= " AND nama_bahan = :nb"; $bind[':nb'] = $jenis; }
-if ($bulan !== '') { $sql .= " AND bulan = :bln";   $bind[':bln'] = $bulan; }
-if ($tahun)        { $sql .= " AND tahun = :thn";   $bind[':thn'] = $tahun; }
-$sql .= " ORDER BY nama_bahan ASC, FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), tahun DESC, id DESC";
-$stmt = $conn->prepare($sql);
-$stmt->execute($bind);
-$rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+/* ===== Params ===== */
+$kebun_id = ($_GET['kebun_id'] ?? '') === '' ? '' : (int)$_GET['kebun_id'];
+$bahan_id = ($_GET['bahan_id'] ?? '') === '' ? '' : (int)$_GET['bahan_id'];
+$bulan    = trim((string)($_GET['bulan'] ?? '')); // boleh kosong = semua
+$tahun    = (int)($_GET['tahun'] ?? date('Y'));
 
-$nowStr = date('d-m-Y H:i');
-$judul  = "PTPN REGIONAL 3 — Stok Gudang (Tanggal: ".date('d-m-Y').")";
+/* ===== Query =====
+   Asumsi tabel rekap bernama `stok_gudang` dengan kolom:
+   id, kebun_id, bahan_id, bulan, tahun, stok_awal, mutasi_masuk, mutasi_keluar, pasokan, dipakai
+*/
+$sql = "SELECT
+          sg.*,
+          k.kode AS kebun_kode, k.nama_kebun,
+          b.kode AS bahan_kode, b.nama_bahan,
+          s.nama AS satuan
+        FROM stok_gudang sg
+        JOIN md_kebun k ON k.id = sg.kebun_id
+        JOIN md_bahan_kimia b ON b.id = sg.bahan_id
+        JOIN md_satuan s ON s.id = b.satuan_id
+        WHERE sg.tahun = :thn";
+$P = [':thn'=>$tahun];
 
-// HTML
+if ($kebun_id !== '') { $sql .= " AND sg.kebun_id = :kid"; $P[':kid'] = (int)$kebun_id; }
+if ($bahan_id !== '') { $sql .= " AND sg.bahan_id = :bid"; $P[':bid'] = (int)$bahan_id; }
+if ($bulan !== '')    { $sql .= " AND sg.bulan = :bln";   $P[':bln'] = $bulan; }
+
+$sql .= " ORDER BY k.nama_kebun, b.nama_bahan, FIELD(sg.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), sg.id";
+
+$st = $pdo->prepare($sql);
+$st->execute($P);
+$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+/* ===== Nama filter ringkas ===== */
+$kebunNama = 'Semua Kebun';
+if ($kebun_id !== '') {
+  $t = $pdo->prepare("SELECT CONCAT(kode,' — ',nama_kebun) FROM md_kebun WHERE id=:id");
+  $t->execute([':id'=>(int)$kebun_id]);
+  $kebunNama = $t->fetchColumn() ?: ('#'.$kebun_id);
+}
+$bahanNama = 'Semua Bahan';
+if ($bahan_id !== '') {
+  $t = $pdo->prepare("SELECT CONCAT(kode,' — ',nama_bahan) FROM md_bahan_kimia WHERE id=:id");
+  $t->execute([':id'=>(int)$bahan_id]);
+  $bahanNama = $t->fetchColumn() ?: ('#'.$bahan_id);
+}
+
+/* ===== HTML ===== */
 ob_start();
 ?>
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="id">
 <head>
-<meta charset="utf-8">
-<title><?= htmlspecialchars($judul) ?></title>
+<meta charset="UTF-8">
+<title>Stok Gudang</title>
 <style>
-  @page { margin: 10px; }
-  body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 11px; color: #111; }
-  .title {
-    text-align: center; font-weight: bold; font-size: 14px; color: #fff;
-    padding: 8px; background: #16a34a; border-radius: 4px; margin-bottom: 8px;
-  }
-  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th, td { border: 1px solid #555; padding: 4px; word-wrap: break-word; }
-  th {
-    background: #16a34a; color: #fff; font-weight: bold; text-align: center;
-  }
-  .right { text-align: right; }
-  .center { text-align: center; }
-  footer { position: fixed; bottom: -10px; left: 0; right: 0; text-align: right; font-size: 10px; color: #555; }
+  @page { size: A4 landscape; margin: 16mm 14mm 14mm 14mm; }
+  body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 11px; color:#111; }
+  .brand { background:#0f7b4f; color:#fff; padding:12px 16px; border-radius:10px; text-align:center; margin-bottom:10px; }
+  .brand h1 { margin:0; font-size:18px; letter-spacing:.4px; }
+  .sub { text-align:center; color:#0f7b4f; font-weight:bold; margin:6px 0 12px 0; font-size:14px; }
+
+  table { width:100%; border-collapse:collapse; }
+  th, td { border:1px solid #e0e6e3; padding:6px 8px; }
+  thead th { background:#e8f4ef; color:#0f2e22; font-weight:700; text-transform:uppercase; font-size:10px; }
+  tbody tr:nth-child(even) { background:#fbfdfc; }
+  .right { text-align:right; }
+  .center{ text-align:center; }
+  .foot { margin-top:8px; font-size:10px; color:#666; }
 </style>
 </head>
 <body>
-  <div class="title"><?= htmlspecialchars($judul) ?></div>
+  <div class="brand"><h1>PTPN IV REGIONAL 3</h1></div>
+  <div class="sub">Rekap Stok Gudang Bahan Kimia</div>
+
   <table>
     <thead>
       <tr>
-        <th style="width:25px;">No</th>
-        <th style="width:120px;">Nama Bahan</th>
-        <th style="width:45px;">Satuan</th>
-        <th style="width:55px;">Bulan</th>
-        <th style="width:45px;">Tahun</th>
-        <th style="width:65px;">Stok Awal</th>
-        <th style="width:55px;">Masuk</th>
-        <th style="width:55px;">Keluar</th>
-        <th style="width:55px;">Pasokan</th>
-        <th style="width:55px;">Dipakai</th>
-        <th style="width:65px;">Sisa Stok</th>
+        <th>Kebun</th>
+        <th>Bahan (Satuan)</th>
+        <th>Periode</th>
+        <th class="right">Stok Awal</th>
+        <th class="right">Mutasi Masuk</th>
+        <th class="right">Mutasi Keluar</th>
+        <th class="right">Pasokan</th>
+        <th class="right">Dipakai</th>
+        <th class="right">Net Mutasi</th>
+        <th class="right">Sisa Stok</th>
       </tr>
     </thead>
     <tbody>
-    <?php if (!$rows): ?>
-      <tr><td colspan="11" class="center">Tidak ada data.</td></tr>
-    <?php else: $i=0;
-      foreach ($rows as $r): $i++;
-        $sa=(float)$r['stok_awal']; $mm=(float)$r['mutasi_masuk'];
-        $mk=(float)$r['mutasi_keluar']; $ps=(float)$r['pasokan']; $dp=(float)$r['dipakai'];
-        $sisa = $sa+$mm+$ps-$mk-$dp;
-    ?>
+      <?php if (empty($rows)): ?>
+        <tr><td class="center" colspan="10">Tidak ada data.</td></tr>
+      <?php else: foreach ($rows as $r):
+        $stok_awal = (float)($r['stok_awal'] ?? 0);
+        $masuk     = (float)($r['mutasi_masuk'] ?? 0);
+        $keluar    = (float)($r['mutasi_keluar'] ?? 0);
+        $pasokan   = (float)($r['pasokan'] ?? 0);
+        $dipakai   = (float)($r['dipakai'] ?? 0);
+        $net       = ($masuk - $keluar) + ($pasokan - $dipakai);
+        $sisa      = $stok_awal + $net;
+      ?>
       <tr>
-        <td class="center"><?= $i ?></td>
-        <td><?= htmlspecialchars($r['nama_bahan']) ?></td>
-        <td class="center"><?= htmlspecialchars($r['satuan']) ?></td>
-        <td class="center"><?= htmlspecialchars($r['bulan']) ?></td>
-        <td class="center"><?= (int)$r['tahun'] ?></td>
-        <td class="right"><?= number_format($sa,2) ?></td>
-        <td class="right"><?= number_format($mm,2) ?></td>
-        <td class="right"><?= number_format($mk,2) ?></td>
-        <td class="right"><?= number_format($ps,2) ?></td>
-        <td class="right"><?= number_format($dp,2) ?></td>
-        <td class="right"><?= number_format($sisa,2) ?></td>
+        <td><?= h(($r['kebun_kode'] ?? '').' — '.($r['nama_kebun'] ?? '')) ?></td>
+        <td><?= h(($r['bahan_kode'] ?? '').' — '.($r['nama_bahan'] ?? '').' ('.($r['satuan'] ?? '').')') ?></td>
+        <td class="center"><?= h(($r['bulan'] ?? '').' '.($r['tahun'] ?? '')) ?></td>
+        <td class="right"><?= number_format($stok_awal, 2, ',', '.') ?></td>
+        <td class="right"><?= number_format($masuk, 2, ',', '.') ?></td>
+        <td class="right"><?= number_format($keluar, 2, ',', '.') ?></td>
+        <td class="right"><?= number_format($pasokan, 2, ',', '.') ?></td>
+        <td class="right"><?= number_format($dipakai, 2, ',', '.') ?></td>
+        <td class="right"><?= number_format($net, 2, ',', '.') ?></td>
+        <td class="right"><strong><?= number_format($sisa, 2, ',', '.') ?></strong></td>
       </tr>
-    <?php endforeach; endif; ?>
+      <?php endforeach; endif; ?>
     </tbody>
   </table>
 
-  <p style="font-size:10px; margin-top:5px;">Dicetak oleh sistem pada <?= $nowStr ?>.</p>
-  <footer>Halaman {PAGE_NUM} / {PAGE_COUNT}</footer>
+  <div class="foot">
+    <strong>Filter:</strong>
+    Kebun: <?= h($kebunNama) ?> | Bahan: <?= h($bahanNama) ?> |
+    Bulan: <?= h($bulan !== '' ? $bulan : 'Semua Bulan') ?> | Tahun: <?= h($tahun) ?>
+  </div>
 </body>
 </html>
 <?php
 $html = ob_get_clean();
 
-// PDF render
+/* ===== Dompdf ===== */
 $options = new Options();
 $options->set('isRemoteEnabled', true);
 $options->set('isHtml5ParserEnabled', true);
 
 $dompdf = new Dompdf($options);
-$dompdf->loadHtml($html);
-$dompdf->setPaper('A4', 'landscape'); // lebih lebar supaya muat
+$dompdf->loadHtml($html, 'UTF-8');
+$dompdf->setPaper('A4', 'landscape');
 $dompdf->render();
-$canvas = $dompdf->getCanvas();
-$canvas->page_script(function ($pageNumber, $pageCount, $canvas, $fontMetrics) {
-  $text = "Halaman $pageNumber / $pageCount";
-  $font = $fontMetrics->get_font("Helvetica", "normal");
-  $canvas->text(520, 570, $text, $font, 9);
-});
-$dompdf->stream('StokGudang_'.date('Ymd_His').'.pdf', ['Attachment'=>0]);
-exit;
+
+$fname = 'Stok_Gudang';
+if ($kebun_id!=='') $fname .= '_K'.$kebun_id;
+if ($bahan_id!=='') $fname .= '_B'.$bahan_id;
+if ($bulan!=='')    $fname .= '_'.$bulan;
+$fname .= '_'.$tahun.'.pdf';
+
+$dompdf->stream($fname, ['Attachment'=>true]);

@@ -1,14 +1,10 @@
 <?php
-// admin/pemupukan_organik_crud.php (FULL CRUD + CSRF)
+// admin/pemupukan_organik_crud.php — sekarang menyimpan kebun_id ke dua tabel.
 session_start();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-  echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit;
-}
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-  echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit;
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit; }
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit; }
 if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
   echo json_encode(['success'=>false,'message'=>'Token keamanan tidak valid. Refresh halaman.']); exit;
 }
@@ -17,189 +13,227 @@ require_once '../config/database.php';
 
 $action = $_POST['action'] ?? '';
 $tab    = $_POST['tab']    ?? '';
-if (!in_array($tab, ['angkutan','menabur'], true)) {
-  echo json_encode(['success'=>false,'message'=>'Tab tidak valid.']); exit;
-}
+if (!in_array($tab, ['angkutan','menabur'], true)) { echo json_encode(['success'=>false,'message'=>'Tab tidak valid.']); exit; }
 
+// helpers
 function s($k){ return trim((string)($_POST[$k] ?? '')); }
-function f($k){
-  $v = $_POST[$k] ?? null;
-  if ($v === '' || $v === null) return null;
-  return is_numeric($v) ? (float)$v : null;
-}
+function f($k){ $v = $_POST[$k] ?? null; if ($v===''||$v===null) return null; return is_numeric($v) ? (float)$v : null; }
+function i($k){ $v = $_POST[$k] ?? null; if ($v===''||$v===null) return null; return ctype_digit((string)$v) ? (int)$v : null; }
 function validDate($d){ return (bool)strtotime($d); }
 
-try {
+try{
   $db = new Database();
   $conn = $db->getConnection();
+  $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-  // ======= STORE =======
-  if ($action === 'store' || $action === 'create') {
-    $errors = [];
+  // cache kolom (untuk dosis)
+  $colsCache = [];
+  $hasCol = function(string $table, string $col) use (&$colsCache, $conn){
+    if (!isset($colsCache[$table])) {
+      $st=$conn->prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t");
+      $st->execute([':t'=>$table]);
+      $colsCache[$table]=array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME');
+    }
+    return in_array($col, $colsCache[$table], true);
+  };
 
-    if ($tab === 'angkutan') {
-      $gudang_asal   = s('gudang_asal');
-      $unit_tujuan_id= s('unit_tujuan_id');
-      $tanggal       = s('tanggal');
-      $jenis_pupuk   = s('jenis_pupuk');
-      $jumlah        = f('jumlah');
-      $nomor_do      = s('nomor_do');
-      $supir         = s('supir');
+  // validasi master
+  $blokExists = function(int $unitId, string $blokKode) use ($conn){
+    if ($unitId<=0 || $blokKode==='') return false;
+    $st=$conn->prepare("SELECT 1 FROM md_blok WHERE unit_id=:u AND kode=:k LIMIT 1");
+    $st->execute([':u'=>$unitId, ':k'=>$blokKode]);
+    return (bool)$st->fetchColumn();
+  };
+  $pupukExists = function(string $namaPupuk) use ($conn){
+    if ($namaPupuk==='') return false;
+    $st=$conn->prepare("SELECT 1 FROM md_pupuk WHERE nama=:n LIMIT 1");
+    $st->execute([':n'=>$namaPupuk]);
+    return (bool)$st->fetchColumn();
+  };
+  $kebunExists = function(?int $kebunId) use ($conn){
+    if ($kebunId===null) return false;
+    $st=$conn->prepare("SELECT 1 FROM md_kebun WHERE id=:id LIMIT 1");
+    $st->execute([':id'=>$kebunId]);
+    return (bool)$st->fetchColumn();
+  };
 
+  /* =================== STORE =================== */
+  if ($action==='store' || $action==='create') {
+    $errors=[];
+
+    if ($tab==='angkutan') {
+      $kebun_id       = i('kebun_id');
+      $gudang_asal    = s('gudang_asal');
+      $unit_tujuan_id = i('unit_tujuan_id'); // boleh NULL di DB, tapi form minta isi
+      $tanggal        = s('tanggal');
+      $jenis_pupuk    = s('jenis_pupuk');
+      $jumlah         = f('jumlah');
+      $nomor_do       = s('nomor_do');
+      $supir          = s('supir');
+
+      if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
       if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
-      if ($unit_tujuan_id==='') $errors[]='Unit tujuan wajib dipilih.';
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
+      if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
 
-      if ($errors) { echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
+      if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      $sql = "INSERT INTO angkutan_pupuk_organik
-              (gudang_asal, unit_tujuan_id, tanggal, jenis_pupuk, jumlah, nomor_do, supir, created_at, updated_at)
-              VALUES (:ga,:ut,:tgl,:jp,:jml,:ndo,:sp,NOW(),NOW())";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute([
+      $sql="INSERT INTO angkutan_pupuk_organik
+            (kebun_id, gudang_asal, unit_tujuan_id, tanggal, jenis_pupuk, jumlah, nomor_do, supir, created_at, updated_at)
+            VALUES (:kid,:ga,:ut,:tgl,:jp,:jml,:ndo,:sp,NOW(),NOW())";
+      $st=$conn->prepare($sql);
+      $st->execute([
+        ':kid'=>$kebun_id,
         ':ga'=>$gudang_asal,
-        ':ut'=>(int)$unit_tujuan_id,
+        ':ut'=>$unit_tujuan_id, // boleh NULL
         ':tgl'=>$tanggal,
         ':jp'=>$jenis_pupuk,
-        ':jml'=>$jumlah ?? 0,
+        ':jml'=>$jumlah??0,
         ':ndo'=>$nomor_do,
         ':sp'=>$supir
       ]);
+
     } else {
-      $unit_id  = s('unit_id');
-      $blok     = s('blok');
+      $kebun_id = i('kebun_id');
+      $unit_id  = i('unit_id');
+      $blok     = s('blok');     // md_blok.kode
       $tanggal  = s('tanggal');
-      $jenis    = s('jenis_pupuk');
+      $jenis    = s('jenis_pupuk'); // md_pupuk.nama
+      $dosis    = f('dosis');    // opsional
       $jumlah   = f('jumlah');
       $luas     = f('luas');
-      $invt     = $_POST['invt_pokok'] ?? null; $invt = ($invt===''||$invt===null) ? null : (int)$invt;
+      $invt     = $_POST['invt_pokok'] ?? null; $invt = ($invt===''||$invt===null)? null : (int)$invt;
       $catatan  = s('catatan');
 
-      if ($unit_id==='') $errors[]='Unit wajib dipilih.';
+      if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
+      if (!$unit_id) $errors[]='Unit wajib dipilih.';
       if ($blok==='') $errors[]='Blok wajib diisi.';
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis==='') $errors[]='Jenis pupuk wajib diisi.';
+      if ($dosis!==null && $dosis<0) $errors[]='Dosis tidak boleh negatif.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($luas!==null && $luas<0) $errors[]='Luas tidak boleh negatif.';
       if ($invt!==null && $invt<0) $errors[]='Invt. Pokok tidak boleh negatif.';
+      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      if ($jenis!=='' && !$pupukExists($jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      if ($errors) { echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
+      $table   = 'menabur_pupuk_organik';
+      $hasDosis= $hasCol($table,'dosis');
 
-      $sql = "INSERT INTO menabur_pupuk_organik
-              (unit_id, blok, tanggal, jenis_pupuk, jumlah, luas, invt_pokok, catatan, created_at, updated_at)
-              VALUES (:uid,:blk,:tgl,:jp,:jml,:luas,:invt,:cat,NOW(),NOW())";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute([
-        ':uid'=>(int)$unit_id,
-        ':blk'=>$blok,
-        ':tgl'=>$tanggal,
-        ':jp'=>$jenis,
-        ':jml'=>$jumlah ?? 0,
-        ':luas'=>$luas ?? 0,
-        ':invt'=>$invt ?? 0,
-        ':cat'=>$catatan
-      ]);
+      $cols   = "kebun_id, unit_id, blok, tanggal, jenis_pupuk, ".($hasDosis?'dosis, ':'')."jumlah, luas, invt_pokok, catatan, created_at, updated_at";
+      $vals   = ":kid,:uid,:blk,:tgl,:jp,".($hasDosis?':ds, ':'').":jml,:luas,:invt,:cat,NOW(),NOW()";
+      $params = [
+        ':kid'=>$kebun_id, ':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal, ':jp'=>$jenis,
+        ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':cat'=>$catatan
+      ];
+      if ($hasDosis) $params[':ds'] = $dosis??null;
+
+      $st=$conn->prepare("INSERT INTO $table ($cols) VALUES ($vals)");
+      $st->execute($params);
     }
 
     echo json_encode(['success'=>true,'message'=>'Data berhasil ditambahkan.']); exit;
   }
 
-  // ======= UPDATE =======
-  if ($action === 'update') {
+  /* =================== UPDATE =================== */
+  if ($action==='update') {
     $id = (int)($_POST['id'] ?? 0);
-    if ($id<=0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
+    if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
 
-    $errors = [];
+    $errors=[];
 
-    if ($tab === 'angkutan') {
-      $gudang_asal   = s('gudang_asal');
-      $unit_tujuan_id= s('unit_tujuan_id');
-      $tanggal       = s('tanggal');
-      $jenis_pupuk   = s('jenis_pupuk');
-      $jumlah        = f('jumlah');
-      $nomor_do      = s('nomor_do');
-      $supir         = s('supir');
+    if ($tab==='angkutan') {
+      $kebun_id       = i('kebun_id');
+      $gudang_asal    = s('gudang_asal');
+      $unit_tujuan_id = i('unit_tujuan_id');
+      $tanggal        = s('tanggal');
+      $jenis_pupuk    = s('jenis_pupuk');
+      $jumlah         = f('jumlah');
+      $nomor_do       = s('nomor_do');
+      $supir          = s('supir');
 
+      if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
       if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
-      if ($unit_tujuan_id==='') $errors[]='Unit tujuan wajib dipilih.';
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
+      if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      if ($errors) { echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
-
-      $sql = "UPDATE angkutan_pupuk_organik SET
-                gudang_asal=:ga, unit_tujuan_id=:ut, tanggal=:tgl, jenis_pupuk=:jp,
-                jumlah=:jml, nomor_do=:ndo, supir=:sp, updated_at=NOW()
-              WHERE id=:id";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute([
-        ':ga'=>$gudang_asal,
-        ':ut'=>(int)$unit_tujuan_id,
-        ':tgl'=>$tanggal,
-        ':jp'=>$jenis_pupuk,
-        ':jml'=>$jumlah ?? 0,
-        ':ndo'=>$nomor_do,
-        ':sp'=>$supir,
-        ':id'=>$id
+      $sql="UPDATE angkutan_pupuk_organik SET
+              kebun_id=:kid, gudang_asal=:ga, unit_tujuan_id=:ut, tanggal=:tgl, jenis_pupuk=:jp,
+              jumlah=:jml, nomor_do=:ndo, supir=:sp, updated_at=NOW()
+            WHERE id=:id";
+      $st=$conn->prepare($sql);
+      $st->execute([
+        ':kid'=>$kebun_id, ':ga'=>$gudang_asal, ':ut'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk,
+        ':jml'=>$jumlah??0, ':ndo'=>$nomor_do, ':sp'=>$supir, ':id'=>$id
       ]);
+
     } else {
-      $unit_id  = s('unit_id');
+      $kebun_id = i('kebun_id');
+      $unit_id  = i('unit_id');
       $blok     = s('blok');
       $tanggal  = s('tanggal');
       $jenis    = s('jenis_pupuk');
+      $dosis    = f('dosis'); // opsional
       $jumlah   = f('jumlah');
       $luas     = f('luas');
-      $invt     = $_POST['invt_pokok'] ?? null; $invt = ($invt===''||$invt===null) ? null : (int)$invt;
+      $invt     = $_POST['invt_pokok'] ?? null; $invt = ($invt===''||$invt===null)? null : (int)$invt;
       $catatan  = s('catatan');
 
-      if ($unit_id==='') $errors[]='Unit wajib dipilih.';
+      if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
+      if (!$unit_id) $errors[]='Unit wajib dipilih.';
       if ($blok==='') $errors[]='Blok wajib diisi.';
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis==='') $errors[]='Jenis pupuk wajib diisi.';
+      if ($dosis!==null && $dosis<0) $errors[]='Dosis tidak boleh negatif.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($luas!==null && $luas<0) $errors[]='Luas tidak boleh negatif.';
       if ($invt!==null && $invt<0) $errors[]='Invt. Pokok tidak boleh negatif.';
+      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      if ($jenis!=='' && !$pupukExists($jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      if ($errors) { echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
+      $table   = 'menabur_pupuk_organik';
+      $hasDosis= $hasCol($table,'dosis');
 
-      $sql = "UPDATE menabur_pupuk_organik SET
-                unit_id=:uid, blok=:blk, tanggal=:tgl, jenis_pupuk=:jp,
+      if ($hasDosis) {
+        $sql="UPDATE $table SET
+                kebun_id=:kid, unit_id=:uid, blok=:blk, tanggal=:tgl, jenis_pupuk=:jp,
+                dosis=:ds, jumlah=:jml, luas=:luas, invt_pokok=:invt, catatan=:cat, updated_at=NOW()
+              WHERE id=:id";
+        $params=[':kid'=>$kebun_id, ':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal, ':jp'=>$jenis, ':ds'=>$dosis??null,
+                 ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':cat'=>$catatan, ':id'=>$id];
+      } else {
+        $sql="UPDATE $table SET
+                kebun_id=:kid, unit_id=:uid, blok=:blk, tanggal=:tgl, jenis_pupuk=:jp,
                 jumlah=:jml, luas=:luas, invt_pokok=:invt, catatan=:cat, updated_at=NOW()
               WHERE id=:id";
-      $stmt = $conn->prepare($sql);
-      $stmt->execute([
-        ':uid'=>(int)$unit_id,
-        ':blk'=>$blok,
-        ':tgl'=>$tanggal,
-        ':jp'=>$jenis,
-        ':jml'=>$jumlah ?? 0,
-        ':luas'=>$luas ?? 0,
-        ':invt'=>$invt ?? 0,
-        ':cat'=>$catatan,
-        ':id'=>$id
-      ]);
+        $params=[':kid'=>$kebun_id, ':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal, ':jp'=>$jenis,
+                 ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':cat'=>$catatan, ':id'=>$id];
+      }
+      $st=$conn->prepare($sql); $st->execute($params);
     }
 
     echo json_encode(['success'=>true,'message'=>'Data berhasil diperbarui.']); exit;
   }
 
-  // ======= DELETE =======
-  if ($action === 'delete') {
+  /* =================== DELETE =================== */
+  if ($action==='delete') {
     $id = (int)($_POST['id'] ?? 0);
-    if ($id<=0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
-
-    $stmt = $conn->prepare($tab==='angkutan'
+    if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
+    $st=$conn->prepare($tab==='angkutan'
       ? "DELETE FROM angkutan_pupuk_organik WHERE id=:id"
       : "DELETE FROM menabur_pupuk_organik WHERE id=:id");
-    $stmt->execute([':id'=>$id]);
-
+    $st->execute([':id'=>$id]);
     echo json_encode(['success'=>true,'message'=>'Data berhasil dihapus.']); exit;
   }
 
   echo json_encode(['success'=>false,'message'=>'Aksi tidak dikenali.']);
-} catch (PDOException $e) {
+}catch(PDOException $e){
   echo json_encode(['success'=>false,'message'=>'Database error: '.$e->getMessage()]);
 }
