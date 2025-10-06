@@ -20,58 +20,82 @@ include_once '../layouts/header.php';
 ?>
 
 <div class="space-y-6">
- <div class="flex justify-between items-center">
-  <div>
-    <h1 class="text-3xl font-bold text-gray-800">Pengajuan AU-58 (Permintaan Bahan)</h1>
-    <p class="text-gray-500 mt-1">Kelola permintaan bahan untuk aktivitas kebun</p>
+  <div class="flex justify-between items-center">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-800">Pengajuan AU-58 (Permintaan Bahan)</h1>
+      <p class="text-gray-500 mt-1">Kelola permintaan bahan untuk aktivitas kebun</p>
+    </div>
+
+    <div class="flex items-center gap-2">
+      <!-- Export Excel -->
+      <button id="btn-export-excel" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Export Excel">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+          <path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/>
+        </svg>
+        <span>Excel</span>
+      </button>
+
+      <!-- Cetak PDF -->
+      <button id="btn-export-pdf" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Cetak PDF">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+          <path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/>
+        </svg>
+        <span>PDF</span>
+      </button>
+
+      <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
+        + Tambah Pengajuan
+      </button>
+    </div>
   </div>
 
-  <div class="flex items-center gap-2">
-    <!-- Export Excel -->
-    <button id="btn-export-excel" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Export Excel">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-        <path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/>
-      </svg>
-      <span>Excel</span>
-    </button>
+  <!-- CARD TABEL: header sticky + scroll internal + pagination -->
+  <div class="bg-white rounded-xl shadow-sm">
+    <!-- Scroll horizontal untuk layar sempit -->
+    <div class="overflow-x-auto">
+      <!-- Scroll vertikal internal; header sticky -->
+      <div class="max-h-[520px] overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr class="text-gray-600">
+              <th class="py-3 px-4 text-left">No. Dokumen</th>
+              <th class="py-3 px-4 text-left">Kebun</th>
+              <th class="py-3 px-4 text-left">Unit/Devisi</th>
+              <th class="py-3 px-4 text-left">Tanggal</th>
+              <th class="py-3 px-4 text-left">Blok</th>
+              <th class="py-3 px-4 text-left">Pokok</th>
+              <th class="py-3 px-4 text-left">Dosis/Norma</th>
+              <th class="py-3 px-4 text-left">Jumlah Diminta</th>
+              <th class="py-3 px-4 text-left">Keterangan</th>
+              <th class="py-3 px-4 text-left">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-data" class="text-gray-800">
+            <tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
 
-    <!-- Cetak PDF -->
-    <button id="btn-export-pdf" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Cetak PDF">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
-        <path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/>
-      </svg>
-      <span>PDF</span>
-    </button>
+    <!-- Pagination Bar -->
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3 border-t">
+      <div class="flex items-center gap-2">
+        <label for="page-size" class="text-sm text-gray-600">Tampilkan</label>
+        <select id="page-size" class="border rounded px-2 py-1 text-sm">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span class="text-sm text-gray-600">baris</span>
+      </div>
 
-    <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
-      + Tambah Pengajuan
-    </button>
-  </div>
-</div>
-
-
-  <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
-        <tr class="text-gray-600">
-          <th class="py-3 px-4 text-left">No. Dokumen</th>
-          <th class="py-3 px-4 text-left">Kebun</th>
-          <th class="py-3 px-4 text-left">Unit/Devisi</th>
-          <th class="py-3 px-4 text-left">Tanggal</th>
-          <th class="py-3 px-4 text-left">Blok</th>
-          <th class="py-3 px-4 text-left">Pokok</th>
-          <th class="py-3 px-4 text-left">Dosis/Norma</th>
-          <th class="py-3 px-4 text-left">Jumlah Diminta</th>
-          <th class="py-3 px-4 text-left">Keterangan</th>
-          <th class="py-3 px-4 text-left">Aksi</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-data" class="text-gray-800">
-        <tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
-      </tbody>
-    </table>
+      <div class="flex items-center gap-2" id="pager"><!-- tombol pager by JS --></div>
+      <div class="text-sm text-gray-600" id="range-info"><!-- info range --></div>
+    </div>
   </div>
 </div>
 
@@ -163,57 +187,145 @@ document.addEventListener('DOMContentLoaded', () => {
   const formId = $('#form-id');
   const title = $('#modal-title');
 
+  // pagination controls
+  const pageSizeSel = document.getElementById('page-size');
+  const pagerEl = document.getElementById('pager');
+  const rangeInfoEl = document.getElementById('range-info');
+
   const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); }
   const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 
-  // Refresh list
+  // ===== State Pagination (client-side) =====
+  let allData = [];
+  let currentPage = 1;
+
+  function paginate(array, pageSize, pageNumber) {
+    const start = (pageNumber - 1) * pageSize;
+    return array.slice(start, start + pageSize);
+  }
+
+  function renderPager(page, totalPages) {
+    const windowSize = 5;
+    let start = Math.max(1, page - Math.floor(windowSize / 2));
+    let end = start + windowSize - 1;
+    if (end > totalPages) { end = totalPages; start = Math.max(1, end - windowSize + 1); }
+
+    const btn = (label, disabled, goPage, extra='') => `
+      <button ${disabled ? 'disabled' : ''} data-goto="${goPage}"
+        class="px-3 py-1 border rounded text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'} ${extra}">
+        ${label}
+      </button>`;
+
+    let html = '';
+    html += btn('« Prev', page <= 1, page - 1);
+    for (let p = start; p <= end; p++) {
+      html += btn(p, false, p, p === page ? 'bg-gray-200 font-semibold' : '');
+    }
+    html += btn('Next »', page >= totalPages, page + 1);
+    pagerEl.innerHTML = html;
+  }
+
+  function renderTable() {
+    const size = parseInt(pageSizeSel.value || '10', 10);
+    const total = allData.length;
+    const totalPages = Math.max(1, Math.ceil(total / size));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    if (!total) {
+      tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+      renderPager(1, 1);
+      rangeInfoEl.textContent = '';
+      return;
+    }
+
+    const rows = paginate(allData, size, currentPage);
+    tbody.innerHTML = rows.map(row => `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="py-2 px-3">${row.no_dokumen ?? '-'}</td>
+        <td class="py-2 px-3">${row.nama_kebun ?? '-'}</td>
+        <td class="py-2 px-3">${row.nama_unit ?? '-'}</td>
+        <td class="py-2 px-3">${row.tanggal ?? '-'}</td>
+        <td class="py-2 px-3">${row.blok ?? '-'}</td>
+        <td class="py-2 px-3">${row.pokok ?? '-'}</td>
+        <td class="py-2 px-3">${row.dosis_norma ?? '-'}</td>
+        <td class="py-2 px-3">${row.jumlah_diminta ?? '-'}</td>
+        <td class="py-2 px-3">${row.keterangan ?? '-'}</td>
+        <td class="py-2 px-3">
+          <div class="flex items-center gap-2">
+            <button
+              class="btn-edit p-2 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-blue-600"
+              title="Edit" aria-label="Edit"
+              data-json='${JSON.stringify(row)}'>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M16.862 3.487a2.1 2.1 0 0 1 2.97 2.97l-9.9 9.9-4.2 1.23 1.23-4.2 9.9-9.9z" />
+              </svg>
+            </button>
+
+            <button
+              class="btn-delete p-2 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-300 text-red-600"
+              title="Hapus" aria-label="Hapus"
+              data-id="${row.id}">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3m-9 0h12" />
+              </svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    const start = (currentPage - 1) * size + 1;
+    const end = Math.min(currentPage * size, total);
+    rangeInfoEl.textContent = `Menampilkan ${start}–${end} dari ${total} data`;
+
+    renderPager(currentPage, totalPages);
+  }
+
+  // Ambil semua data → simpan → render page 1
   function refreshList(){
     const fd = new FormData();
     fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
     fd.append('action','list');
     fetch('permintaan_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json()).then(j=>{
-        if(!j.success){ tbody.innerHTML=`<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return;}
-        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return;}
-        tbody.innerHTML = j.data.map(row=>`
-          <tr class="border-b hover:bg-gray-50">
-            <td class="py-2 px-3">${row.no_dokumen}</td>
-            <td class="py-2 px-3">${row.nama_kebun || '-'}</td>
-            <td class="py-2 px-3">${row.nama_unit}</td>
-            <td class="py-2 px-3">${row.tanggal}</td>
-            <td class="py-2 px-3">${row.blok||'-'}</td>
-            <td class="py-2 px-3">${row.pokok||'-'}</td>
-            <td class="py-2 px-3">${row.dosis_norma||'-'}</td>
-            <td class="py-2 px-3">${row.jumlah_diminta||'-'}</td>
-            <td class="py-2 px-3">${row.keterangan||'-'}</td>
-            <td class="py-2 px-3">
-              <div class="flex items-center gap-2">
-                <button
-                  class="btn-edit p-2 rounded-lg border border-gray-200 hover:bg-blue-50 hover:border-blue-300 text-blue-600"
-                  title="Edit" aria-label="Edit"
-                  data-json='${JSON.stringify(row)}'>
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M16.862 3.487a2.1 2.1 0 0 1 2.97 2.97l-9.9 9.9-4.2 1.23 1.23-4.2 9.9-9.9z" />
-                  </svg>
-                </button>
-
-                <button
-                  class="btn-delete p-2 rounded-lg border border-gray-200 hover:bg-red-50 hover:border-red-300 text-red-600"
-                  title="Hapus" aria-label="Hapus"
-                  data-id="${row.id}">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3m-9 0h12" />
-                  </svg>
-                </button>
-              </div>
-            </td>
-          </tr>`).join('');
+      .then(r=>r.json())
+      .then(j=>{
+        if(!j.success){
+          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`;
+          allData = [];
+          renderPager(1,1);
+          rangeInfoEl.textContent = '';
+          return;
+        }
+        allData = Array.isArray(j.data) ? j.data : [];
+        currentPage = 1;
+        renderTable();
+      })
+      .catch(()=>{
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">Gagal memuat data</td></tr>`;
       });
   }
   refreshList();
 
+  // Ubah jumlah baris
+  pageSizeSel.addEventListener('change', ()=>{
+    currentPage = 1;
+    renderTable();
+  });
+
+  // Klik pager
+  pagerEl.addEventListener('click', (e)=>{
+    const btn = e.target.closest('button[data-goto]');
+    if(!btn || btn.disabled) return;
+    const goto = parseInt(btn.dataset.goto,10);
+    if(!Number.isNaN(goto)){
+      currentPage = goto;
+      renderTable();
+    }
+  });
+
+  // === CRUD ===
   btnAdd.addEventListener('click',()=>{form.reset(); formAction.value='store'; formId.value=''; title.textContent='Tambah Pengajuan'; open();});
   btnClose.addEventListener('click',close);
   btnCancel.addEventListener('click',close);
@@ -225,21 +337,27 @@ document.addEventListener('DOMContentLoaded', () => {
       formAction.value='update'; formId.value=row.id;
       title.textContent='Edit Pengajuan';
       ['no_dokumen','kebun_id','unit_id','tanggal','blok','pokok','dosis_norma','jumlah_diminta','keterangan'].forEach(k=>{
-        if(document.getElementById(k)) document.getElementById(k).value=row[k]??'';
+        const el = document.getElementById(k);
+        if(el) el.value = row[k] ?? '';
       });
       open();
     }
+
     if(e.target.closest('.btn-delete')){
       const btn = e.target.closest('.btn-delete');
       const id = btn.dataset.id;
       Swal.fire({title:'Hapus?',text:'Data tidak bisa dikembalikan',icon:'warning',showCancelButton:true})
         .then(res=>{
           if(res.isConfirmed){
-            const fd=new FormData(); fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>'); fd.append('action','delete'); fd.append('id',id);
+            const fd=new FormData();
+            fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+            fd.append('action','delete');
+            fd.append('id',id);
             fetch('permintaan_crud.php',{method:'POST',body:fd})
-              .then(r=>r.json()).then(j=>{
-                if(j.success){ Swal.fire('OK','Data terhapus','success'); refreshList();}
-                else Swal.fire('Gagal',j.message||'Error','error');
+              .then(r=>r.json())
+              .then(j=>{
+                if(j.success){ Swal.fire('OK','Data terhapus','success'); refreshList(); }
+                else { Swal.fire('Gagal',j.message||'Error','error'); }
               });
           }
         });
@@ -250,12 +368,14 @@ document.addEventListener('DOMContentLoaded', () => {
     e.preventDefault();
     const fd=new FormData(form);
     fetch('permintaan_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json()).then(j=>{
-        if(j.success){ close(); Swal.fire('Berhasil',j.message,'success'); refreshList();}
-        else Swal.fire('Gagal',j.message||'Error','error');
+      .then(r=>r.json())
+      .then(j=>{
+        if(j.success){ close(); Swal.fire('Berhasil',j.message,'success'); refreshList(); }
+        else { Swal.fire('Gagal',j.message||'Error','error'); }
       });
   });
 });
+
 // === Export Excel & PDF (pakai CSRF aktif) ===
 document.getElementById('btn-export-excel').addEventListener('click', () => {
   const qs = new URLSearchParams({ csrf_token: '<?= htmlspecialchars($CSRF) ?>' }).toString();

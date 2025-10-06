@@ -1,6 +1,6 @@
 <?php
-// admin/dashboard.php (FULL — Filtering Lengkap + KPI Fix + Seksi Baru)
-// Versi: 2025-09-30
+// admin/dashboard.php (FULL — +Filter Kebun + KPI tambahan + Section Pemeliharaan & Chart LM)
+// Versi: 2025-10-01
 declare(strict_types=1);
 session_start();
 
@@ -24,9 +24,10 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
   }
 
   $section  = trim($_POST['section']  ?? '');  // Section selector
-  $afdeling = trim($_POST['afdeling'] ?? '');  // pakai units.nama_unit
+  $afdeling = trim($_POST['afdeling'] ?? '');  // pakai units.nama_unit / string afdeling
   $bulan    = trim($_POST['bulan']    ?? '');  // enum IND
   $tahun    = trim($_POST['tahun']    ?? '');  // YEAR
+  $kebun    = trim($_POST['kebun']    ?? '');  // md_kebun.nama_kebun
 
   // helper enum bulan dari DATE column
   $bulanFromDate = "ELT(MONTH(tanggal),
@@ -35,13 +36,12 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
 
   try {
     /* =========================
-     * 1) STOK GUDANG (FIXED)
-     * =========================
-     * join ke md_bahan_kimia & md_satuan agar ada nama_bahan + satuan
-     */
+     * 1) STOK GUDANG
+     * ========================= */
     if ($section === 'gudang') {
       $sql = "
         SELECT
+          mk.nama_kebun,
           b.nama_bahan,
           s.nama AS satuan,
           sg.bulan, sg.tahun,
@@ -49,29 +49,122 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
         FROM stok_gudang sg
         JOIN md_bahan_kimia b ON b.id = sg.bahan_id
         LEFT JOIN md_satuan s ON s.id = b.satuan_id
-        /* filter afdeling TIDAK diaplikasikan karena stok_gudang tidak punya unit/afdeling */
+        JOIN md_kebun mk ON mk.id = sg.kebun_id
         WHERE (:bulan='' OR sg.bulan = :bulan)
           AND (:tahun='' OR sg.tahun = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY sg.tahun DESC,
           FIELD(sg.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
                           'Agustus','September','Oktober','November','Desember'),
           b.nama_bahan ASC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
     /* ==========================================
-     * 2) PEMAKAIAN (gabungan untuk komponen lama)
-     * ==========================================
-     * (dikembalikan untuk kompatibilitas chart lama)
-     * pbk + menabur_pupuk (anorganik) + menabur_pupuk_organik
-     */
+     * 1b) KPI Pemeliharaan ringkas (TU/TBM/TM/PN/MN)
+     * ========================================== */
+    if ($section === 'pemeliharaan_kpi') {
+      // Map label tampil -> nilai enum tabel
+      $map = [
+        'TU' => 'TU',
+        'TBM'=> 'TBM',
+        'TM' => 'TM',
+        'PN' => 'BIBIT_PN',
+        'MN' => 'BIBIT_MN',
+      ];
+      $rows = [];
+      foreach ($map as $label => $kategori) {
+        $sql = "
+          SELECT
+            :label AS label,
+            COALESCE(SUM(pml.rencana),0)  AS rencana,
+            COALESCE(SUM(pml.realisasi),0) AS realisasi
+          FROM pemeliharaan pml
+          LEFT JOIN units u ON u.id = pml.unit_id
+          WHERE pml.kategori = :kat
+            AND (:afdeling='' OR COALESCE(NULLIF(pml.afdeling,''), u.nama_unit) = :afdeling)
+            AND (:bulan='' OR {$bulanFromDate} = :bulan)
+            AND (:tahun='' OR YEAR(pml.tanggal) = :tahun)
+        ";
+        $st = $pdo->prepare($sql);
+        $st->execute([
+          ':label'=>$label, ':kat'=>$kategori,
+          ':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun
+        ]);
+        $rows[] = $st->fetch(PDO::FETCH_ASSOC);
+      }
+      echo json_encode(['success'=>true,'data'=>$rows]); exit;
+    }
+
+    /* ==========================================
+     * 1c) Tren LM76 per bulan (sum prod_bi_realisasi)
+     * ========================================== */
+    if ($section === 'lm76_tren') {
+      $sql = "
+        SELECT lm.bulan, lm.tahun, SUM(COALESCE(lm.prod_bi_realisasi,0)) AS total
+        FROM lm76 lm
+        LEFT JOIN units u ON u.id = lm.unit_id
+        WHERE (:afdeling='' OR u.nama_unit = :afdeling)
+          AND (:tahun='' OR lm.tahun = :tahun)
+          AND (:bulan='' OR lm.bulan = :bulan)
+        GROUP BY lm.tahun, FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), lm.bulan
+        ORDER BY lm.tahun DESC
+      ";
+      $st = $pdo->prepare($sql);
+      $st->execute([':afdeling'=>$afdeling, ':tahun'=>$tahun, ':bulan'=>$bulan]);
+      echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+    }
+
+    /* ==========================================
+     * 1d) Tren LM77 per bulan (sum prestasi_kg_hk_bi)
+     * ========================================== */
+    if ($section === 'lm77_tren') {
+      $sql = "
+        SELECT lm.bulan, lm.tahun, SUM(COALESCE(lm.prestasi_kg_hk_bi,0)) AS total
+        FROM lm77 lm
+        LEFT JOIN units u ON u.id = lm.unit_id
+        WHERE (:afdeling='' OR u.nama_unit = :afdeling)
+          AND (:tahun='' OR lm.tahun = :tahun)
+          AND (:bulan='' OR lm.bulan = :bulan)
+        GROUP BY lm.tahun, FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), lm.bulan
+        ORDER BY lm.tahun DESC
+      ";
+      $st = $pdo->prepare($sql);
+      $st->execute([':afdeling'=>$afdeling, ':tahun'=>$tahun, ':bulan'=>$bulan]);
+      echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+    }
+
+    /* ==========================================
+     * 1e) Tren LM Biaya per bulan (sum realisasi_bi)
+     * ========================================== */
+    if ($section === 'lm_biaya_tren') {
+      $sql = "
+        SELECT lb.bulan, lb.tahun, SUM(COALESCE(lb.realisasi_bi,0)) AS total
+        FROM lm_biaya lb
+        LEFT JOIN units u ON u.id = lb.unit_id
+        LEFT JOIN md_kebun mk ON mk.id = lb.kebun_id
+        WHERE (:afdeling='' OR u.nama_unit = :afdeling)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
+          AND (:tahun='' OR lb.tahun = :tahun)
+          AND (:bulan='' OR lb.bulan = :bulan)
+        GROUP BY lb.tahun, FIELD(lb.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), lb.bulan
+        ORDER BY lb.tahun DESC
+      ";
+      $st = $pdo->prepare($sql);
+      $st->execute([':afdeling'=>$afdeling, ':kebun'=>$kebun, ':tahun'=>$tahun, ':bulan'=>$bulan]);
+      echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
+    }
+
+    /* ==========================================
+     * 2) PEMAKAIAN (gabungan kompat lama)
+     * ========================================== */
     if ($section === 'pemakaian') {
       $sql = "
         SELECT * FROM (
-          /* 2.1 pemakaian bahan kimia */
+          /* 2.1 pemakaian bahan kimia (TIDAK ada kolom kebun di tabel ini) */
           SELECT
             pbk.no_dokumen,
             u.nama_unit AS afdeling,
@@ -80,7 +173,8 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
             pbk.nama_bahan,
             pbk.jenis_pekerjaan,
             COALESCE(pbk.jlh_diminta,0) AS jlh_diminta,
-            COALESCE(pbk.jlh_fisik,0)   AS jlh_fisik
+            COALESCE(pbk.jlh_fisik,0)   AS jlh_fisik,
+            NULL AS nama_kebun
           FROM pemakaian_bahan_kimia pbk
           LEFT JOIN units u ON u.id = pbk.unit_id
           WHERE (:afdeling='' OR u.nama_unit = :afdeling)
@@ -97,11 +191,14 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
             mp.jenis_pupuk   AS nama_bahan,
             'Pemupukan'      AS jenis_pekerjaan,
             COALESCE(mp.jumlah,0) AS jlh_diminta,
-            COALESCE(mp.jumlah,0) AS jlh_fisik
+            COALESCE(mp.jumlah,0) AS jlh_fisik,
+            mk.nama_kebun
           FROM menabur_pupuk mp
+          JOIN md_kebun mk ON mk.kode = mp.kebun_kode
           WHERE (:afdeling='' OR mp.afdeling = :afdeling)
             AND (:bulan='' OR {$bulanFromDate} = :bulan)
             AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
+            AND (:kebun='' OR mk.nama_kebun = :kebun)
 
           UNION ALL
           /* 2.3 menabur pupuk organik */
@@ -113,12 +210,15 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
             mpo.jenis_pupuk    AS nama_bahan,
             'Pemupukan Organik' AS jenis_pekerjaan,
             COALESCE(mpo.jumlah,0) AS jlh_diminta,
-            COALESCE(mpo.jumlah,0) AS jlh_fisik
+            COALESCE(mpo.jumlah,0) AS jlh_fisik,
+            mk2.nama_kebun
           FROM menabur_pupuk_organik mpo
           LEFT JOIN units uo ON uo.id = mpo.unit_id
+          LEFT JOIN md_kebun mk2 ON mk2.id = mpo.kebun_id
           WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
             AND (:bulan='' OR {$bulanFromDate} = :bulan)
             AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
+            AND (:kebun='' OR mk2.nama_kebun = :kebun)
         ) x
         ORDER BY
           tahun DESC,
@@ -127,7 +227,7 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           no_dokumen ASC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -166,23 +266,26 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
         SELECT
           lb.bulan, lb.tahun,
           u.nama_unit AS afdeling,
+          mk.nama_kebun,
           ka.kode AS kode_aktivitas, ka.nama AS nama_aktivitas,
           jp.nama AS jenis_pekerjaan,
           lb.rencana_bi, lb.realisasi_bi
         FROM lm_biaya lb
         LEFT JOIN units u ON u.id = lb.unit_id
+        LEFT JOIN md_kebun mk ON mk.id = lb.kebun_id
         LEFT JOIN md_kode_aktivitas ka ON ka.id = lb.kode_aktivitas_id
         LEFT JOIN md_jenis_pekerjaan jp ON jp.id = lb.jenis_pekerjaan_id
         WHERE (:afdeling='' OR u.nama_unit = :afdeling)
           AND (:bulan='' OR lb.bulan = :bulan)
           AND (:tahun='' OR lb.tahun = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY lb.tahun DESC,
           FIELD(lb.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
                            'Agustus','September','Oktober','November','Desember'),
           ka.kode ASC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -197,9 +300,11 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           pml.tanggal,
           {$bulanFromDate} AS bulan,
           YEAR(pml.tanggal) AS tahun,
-          pml.rencana, pml.realisasi, pml.status
+          pml.rencana, pml.realisasi, pml.status,
+          mk.nama_kebun
         FROM pemeliharaan pml
         LEFT JOIN units u ON u.id = pml.unit_id
+        LEFT JOIN md_kebun mk ON mk.id = NULL  /* placeholder: tidak ada kolom kebun di tabel ini */
         WHERE (:afdeling='' OR COALESCE(NULLIF(pml.afdeling,''), u.nama_unit) = :afdeling)
           AND (:bulan='' OR {$bulanFromDate} = :bulan)
           AND (:tahun='' OR YEAR(pml.tanggal) = :tahun)
@@ -225,11 +330,14 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
             mp.jenis_pupuk,
             COALESCE(mp.jumlah,0) AS jumlah,
             COALESCE(mp.luas,0)   AS luas,
-            COALESCE(mp.invt_pokok,0) AS invt_pokok
+            COALESCE(mp.invt_pokok,0) AS invt_pokok,
+            mk.nama_kebun
           FROM menabur_pupuk mp
+          JOIN md_kebun mk ON mk.kode = mp.kebun_kode
           WHERE (:afdeling='' OR mp.afdeling = :afdeling)
             AND (:bulan='' OR {$bulanFromDate} = :bulan)
             AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
+            AND (:kebun='' OR mk.nama_kebun = :kebun)
 
           UNION ALL
 
@@ -242,12 +350,15 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
             mpo.jenis_pupuk,
             COALESCE(mpo.jumlah,0) AS jumlah,
             COALESCE(mpo.luas,0)   AS luas,
-            COALESCE(mpo.invt_pokok,0) AS invt_pokok
+            COALESCE(mpo.invt_pokok,0) AS invt_pokok,
+            mk2.nama_kebun
           FROM menabur_pupuk_organik mpo
           LEFT JOIN units uo ON uo.id = mpo.unit_id
+          LEFT JOIN md_kebun mk2 ON mk2.id = mpo.kebun_id
           WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
             AND (:bulan='' OR {$bulanFromDate} = :bulan)
             AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
+            AND (:kebun='' OR mk2.nama_kebun = :kebun)
         ) x
         ORDER BY tahun DESC,
           FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
@@ -255,7 +366,7 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           tanggal DESC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -272,15 +383,18 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           mp.jenis_pupuk,
           COALESCE(mp.jumlah,0) AS jumlah,
           COALESCE(mp.luas,0)   AS luas,
-          COALESCE(mp.invt_pokok,0) AS invt_pokok
+          COALESCE(mp.invt_pokok,0) AS invt_pokok,
+          mk.nama_kebun
         FROM menabur_pupuk mp
+        JOIN md_kebun mk ON mk.kode = mp.kebun_kode
         WHERE (:afdeling='' OR mp.afdeling = :afdeling)
           AND (:bulan='' OR {$bulanFromDate} = :bulan)
           AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY mp.tanggal DESC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -297,16 +411,19 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           mpo.jenis_pupuk,
           COALESCE(mpo.jumlah,0) AS jumlah,
           COALESCE(mpo.luas,0)   AS luas,
-          COALESCE(mpo.invt_pokok,0) AS invt_pokok
+          COALESCE(mpo.invt_pokok,0) AS invt_pokok,
+          mk.nama_kebun
         FROM menabur_pupuk_organik mpo
         LEFT JOIN units uo ON uo.id = mpo.unit_id
+        LEFT JOIN md_kebun mk ON mk.id = mpo.kebun_id
         WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
           AND (:bulan='' OR {$bulanFromDate} = :bulan)
           AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY mpo.tanggal DESC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -315,9 +432,6 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
      * =================================== */
     if ($section === 'angkutan_kimia' || $section === 'angkutan_organik') {
       $isOrganik = ($section === 'angkutan_organik');
-
-      // angkutan_pupuk: kolom 'jenis_pupuk' berisi string ('Organik', 'Urea', 'NPK ...', 'Dolomite', dll)
-      // Kita anggap: jika jenis_pupuk = 'Organik' -> ORGANIK, selain itu -> KIMIA.
       $whereJenis = $isOrganik ? "ap.jenis_pupuk = 'Organik'" : "ap.jenis_pupuk <> 'Organik'";
 
       $sql = "
@@ -326,20 +440,23 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           {$bulanFromDate} AS bulan,
           YEAR(ap.tanggal) AS tahun,
           u.nama_unit AS unit_tujuan,
+          mk.nama_kebun,
           ap.gudang_asal,
           ap.jenis_pupuk,
           COALESCE(ap.jumlah,0) AS jumlah,
           ap.nomor_do, ap.supir
         FROM angkutan_pupuk ap
         LEFT JOIN units u ON u.id = ap.unit_tujuan_id
+        LEFT JOIN md_kebun mk ON mk.kode = ap.kebun_kode
         WHERE {$whereJenis}
           AND (:afdeling='' OR u.nama_unit = :afdeling)
           AND (:bulan='' OR {$bulanFromDate} = :bulan)
           AND (:tahun='' OR YEAR(ap.tanggal) = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY ap.tanggal DESC, ap.nomor_do ASC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -349,6 +466,7 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
     if ($section === 'alat_panen') {
       $sql = "
         SELECT
+          mk.nama_kebun,
           u.nama_unit AS afdeling,
           ap.bulan, ap.tahun,
           ap.jenis_alat,
@@ -360,16 +478,18 @@ if (($_POST['ajax'] ?? '') === 'dashboard') {
           ap.krani_afdeling
         FROM alat_panen ap
         LEFT JOIN units u ON u.id = ap.unit_id
+        LEFT JOIn md_kebun mk ON mk.id = ap.kebun_id
         WHERE (:afdeling='' OR u.nama_unit = :afdeling)
           AND (:bulan='' OR ap.bulan = :bulan)
           AND (:tahun='' OR ap.tahun = :tahun)
+          AND (:kebun='' OR mk.nama_kebun = :kebun)
         ORDER BY ap.tahun DESC,
           FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
                            'Agustus','September','Oktober','November','Desember'),
           ap.jenis_alat ASC
       ";
       $st = $pdo->prepare($sql);
-      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
+      $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
       echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
     }
 
@@ -388,8 +508,9 @@ $hariIni = $HARI_ID[(int)$now->format('w')] . ', ' . $now->format('d') . ' ' . $
 $tahunNow = (int)date('Y');
 $bulanList = $BULAN_ID; array_shift($bulanList);
 
-// Ambil daftar Afdeling (real)
+// Ambil daftar Afdeling & Kebun
 $opsiAfdeling = [];
+$opsiKebun    = [];
 try {
   $sqlAfd = "
     SELECT afd FROM (
@@ -409,7 +530,9 @@ try {
     ORDER BY afd
   ";
   $opsiAfdeling = $pdo->query($sqlAfd)->fetchAll(PDO::FETCH_COLUMN);
-} catch (Throwable $e) { $opsiAfdeling = []; }
+
+  $opsiKebun = $pdo->query("SELECT nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) { $opsiAfdeling = []; $opsiKebun = []; }
 
 include_once '../layouts/header.php';
 ?>
@@ -423,22 +546,6 @@ include_once '../layouts/header.php';
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-slate-50 text-slate-800">
-
-  <!-- Banner Cuaca (dummy) -->
-  <div class="bg-slate-900 text-white">
-    <div class="mx-auto max-w-7xl px-4 py-3">
-      <div class="flex items-center gap-3">
-        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 0 0 4 4h9a5 5 0 0 0 0-10 6 6 0 0 0-11.3 2.5M8 20l1.5-2M12 20l1.5-2M16 20l1.5-2" />
-        </svg>
-        <div class="flex items-baseline gap-3">
-          <span class="text-base font-medium">Cuaca Hari Ini</span>
-          <span class="text-3xl font-extrabold leading-none">30°C</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
   <div class="min-h-screen flex">
     <main class="flex-1">
       <header class="bg-white border-b sticky top-0 z-10">
@@ -447,7 +554,13 @@ include_once '../layouts/header.php';
             <div class="text-sm text-slate-500">Dashboard Utama</div>
             <h1 class="text-2xl font-bold"><?= htmlspecialchars($hariIni) ?></h1>
           </div>
-          <div class="flex items-center gap-3">
+          <div class="flex flex-wrap gap-3 items-center">
+            <select id="f-kebun" class="border rounded-lg px-3 py-2 min-w-[180px]">
+              <option value="">Semua Kebun</option>
+              <?php foreach ($opsiKebun as $kb): ?>
+                <option value="<?= htmlspecialchars($kb) ?>"><?= htmlspecialchars($kb) ?></option>
+              <?php endforeach; ?>
+            </select>
             <select id="f-afdeling" class="border rounded-lg px-3 py-2 min-w-[170px]">
               <option value="">Semua Afdeling</option>
               <?php foreach ($opsiAfdeling as $afd): ?>
@@ -469,29 +582,74 @@ include_once '../layouts/header.php';
       </header>
 
       <div class="mx-auto max-w-7xl px-4 py-6">
-        <!-- KPIs -->
+        <!-- KPIs (12 kotak existing) -->
         <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div class="bg-white p-5 rounded-xl shadow-sm">
-            <p class="text-slate-500 text-sm">Total Item Gudang</p>
-            <h3 id="kpi-total-item" class="text-3xl font-extrabold mt-1">—</h3>
-            <p class="text-xs text-slate-400 mt-1">Distinct nama bahan (periode dipilih)</p>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Total Item Gudang</p><h3 id="kpi-total-item" class="text-3xl font-extrabold mt-1">—</h3><p class="text-xs text-slate-400 mt-1">Distinct nama bahan (periode dipilih)</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Stok Bersih</p><h3 id="kpi-stok-bersih" class="text-3xl font-extrabold mt-1 text-emerald-600">—</h3><p class="text-xs text-slate-400 mt-1">Awal + Masuk + Pasokan − Keluar − Dipakai</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Total Pemakaian (fisik)</p><h3 id="kpi-pemakaian" class="text-3xl font-extrabold mt-1 text-sky-600">—</h3><p class="text-xs text-slate-400 mt-1">Σ jlh_fisik (kimia + pemupukan)</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Dokumen Pemakaian</p><h3 id="kpi-doc" class="text-3xl font-extrabold mt-1 text-amber-600">—</h3><p class="text-xs text-slate-400 mt-1">Count no_dokumen</p></div>
+
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Pemupukan Kimia (Σ jumlah)</p><h3 id="kpi-ppk-kimia" class="text-2xl font-extrabold mt-1 text-indigo-600">—</h3><p class="text-xs text-slate-400 mt-1">menabur_pupuk</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Pemupukan Organik (Σ jumlah)</p><h3 id="kpi-ppk-organik" class="text-2xl font-extrabold mt-1 text-teal-600">—</h3><p class="text-xs text-slate-400 mt-1">menabur_pupuk_organik</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Angkutan Kimia (Σ jumlah)</p><h3 id="kpi-ang-kimia" class="text-2xl font-extrabold mt-1 text-fuchsia-600">—</h3><p class="text-xs text-slate-400 mt-1">angkutan_pupuk ≠ Organik</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Angkutan Organik (Σ jumlah)</p><h3 id="kpi-ang-organik" class="text-2xl font-extrabold mt-1 text-rose-600">—</h3><p class="text-xs text-slate-400 mt-1">angkutan_pupuk = Organik</p></div>
+
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Distinct Bahan Terpakai</p><h3 id="kpi-bahan-pakai" class="text-2xl font-extrabold mt-1 text-slate-700">—</h3><p class="text-xs text-slate-400 mt-1">Dari pemakaian & pemupukan</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Afdeling Aktif</p><h3 id="kpi-afdeling-aktif" class="text-2xl font-extrabold mt-1 text-slate-700">—</h3><p class="text-xs text-slate-400 mt-1">Memiliki transaksi</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Alat Panen Dipakai (Σ)</p><h3 id="kpi-alat-dipakai" class="text-2xl font-extrabold mt-1 text-emerald-700">—</h3><p class="text-xs text-slate-400 mt-1">Σ dipakai</p></div>
+          <div class="bg-white p-5 rounded-xl shadow-sm"><p class="text-slate-500 text-sm">Sisa Alat Panen (Σ stok akhir)</p><h3 id="kpi-alat-sisa" class="text-2xl font-extrabold mt-1 text-orange-700">—</h3><p class="text-xs text-slate-400 mt-1">Σ stok_akhir</p></div>
+        </section>
+
+        <!-- =======================================================
+             NEW: Ringkasan Pemeliharaan + Chart LM (di atas bagian lain)
+             ======================================================= -->
+        <section class="mt-6">
+          <!-- 5 kartu pemeliharaan -->
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <?php
+              // helper untuk render kartu (kanvas donut + angka)
+              function cardPem($id,$title){
+                echo '
+                <div class="bg-white p-4 rounded-xl shadow">
+                  <div class="text-sm font-semibold">'.htmlspecialchars($title).'</div>
+                  <div class="mt-2 grid grid-cols-[1fr_80px] gap-2 items-center">
+                    <div>
+                      <div class="text-xs text-slate-500">Rencana</div>
+                      <div class="text-xl font-bold text-red-600"><span id="rcn-'.$id.'">0</span></div>
+                      <div class="mt-2 text-xs text-slate-500">Realisasi</div>
+                      <div class="text-xl font-bold text-sky-700"><span id="real-'.$id.'">0</span></div>
+                    </div>
+                    <div class="flex items-center justify-center">
+                      <canvas id="donut-'.$id.'" width="80" height="80" aria-label="Progress"></canvas>
+                    </div>
+                  </div>
+                </div>';
+              }
+              cardPem('TU','Pemeliharaan TU');
+              cardPem('TBM','Pemeliharaan TBM');
+              cardPem('TM','Pemeliharaan TM');
+              cardPem('PN','Pemeliharaan PN');
+              cardPem('MN','Pemeliharaan MN');
+            ?>
           </div>
-          <div class="bg-white p-5 rounded-xl shadow-sm">
-            <p class="text-slate-500 text-sm">Stok Bersih</p>
-            <h3 id="kpi-stok-bersih" class="text-3xl font-extrabold mt-1 text-emerald-600">—</h3>
-            <p class="text-xs text-slate-400 mt-1">Awal + Masuk + Pasokan − Keluar − Dipakai</p>
-          </div>
-          <div class="bg-white p-5 rounded-xl shadow-sm">
-            <p class="text-slate-500 text-sm">Total Pemakaian (fisik)</p>
-            <h3 id="kpi-pemakaian" class="text-3xl font-extrabold mt-1 text-sky-600">—</h3>
-            <p class="text-xs text-slate-400 mt-1">Σ jlh_fisik (kimia + pemupukan)</p>
-          </div>
-          <div class="bg-white p-5 rounded-xl shadow-sm">
-            <p class="text-slate-500 text-sm">Dokumen Pemakaian</p>
-            <h3 id="kpi-doc" class="text-3xl font-extrabold mt-1 text-amber-600">—</h3>
-            <p class="text-xs text-slate-400 mt-1">Count no_dokumen</p>
+
+          <!-- 3 chart LM -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+            <div class="bg-white p-6 rounded-xl shadow">
+              <div class="font-semibold mb-2">Chart LM 76</div>
+              <canvas id="ch-lm76" height="180"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow">
+              <div class="font-semibold mb-2">Chart LM 77</div>
+              <canvas id="ch-lm77" height="180"></canvas>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow">
+              <div class="font-semibold mb-2">Chart LM Biaya</div>
+              <canvas id="ch-lmbiaya" height="180"></canvas>
+            </div>
           </div>
         </section>
+        <!-- ======================================================= -->
 
         <!-- STOK & PEMAKAIAN (lama) -->
         <section class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
@@ -607,7 +765,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const $ = s => document.querySelector(s);
 
   // Filter controls
-  const fAfd = $('#f-afdeling');
+  const fKebun = $('#f-kebun');
+  const fAfd   = $('#f-afdeling');
   const fBulan = $('#f-bulan');
   const fTahun = $('#f-tahun');
   const limitStok = $('#limit-stok');
@@ -618,7 +777,15 @@ document.addEventListener('DOMContentLoaded', () => {
     total:  $('#kpi-total-item'),
     stok:   $('#kpi-stok-bersih'),
     pakai:  $('#kpi-pemakaian'),
-    doc:    $('#kpi-doc')
+    doc:    $('#kpi-doc'),
+    ppkK:   $('#kpi-ppk-kimia'),
+    ppkO:   $('#kpi-ppk-organik'),
+    angK:   $('#kpi-ang-kimia'),
+    angO:   $('#kpi-ang-organik'),
+    bahan:  $('#kpi-bahan-pakai'),
+    afd:    $('#kpi-afdeling-aktif'),
+    alatD:  $('#kpi-alat-dipakai'),
+    alatS:  $('#kpi-alat-sisa'),
   };
 
   // chart refs
@@ -627,6 +794,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let chPpkTrenKimia, chPpkTrenOrganik, chPpkKomKimia, chPpkKomOrganik;
   let chAngTrenKimia, chAngTrenOrganik;
   let chAlatDipakai, chAlatSisa;
+
+  // NEW: refs donut + chart LM
+  const donut = {TU:null,TBM:null,TM:null,PN:null,MN:null};
+  let chLM76, chLM77, chLMBiaya;
 
   const bulanOrder = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
   const palette = n => Array.from({length:n}, (_,i)=>['#16a34a','#f59e0b','#0ea5e9','#a855f7','#ef4444','#10b981','#6366f1','#22c55e','#eab308','#06b6d4','#f97316','#84cc16'][i%12]);
@@ -638,6 +809,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fd.append('ajax','dashboard');
     fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
     fd.append('section', section);
+    fd.append('kebun',    fKebun.value || '');
     fd.append('afdeling', fAfd.value || '');
     fd.append('bulan',    fBulan.value || '');
     fd.append('tahun',    fTahun.value || '');
@@ -664,6 +836,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const fetchAngO     = async()=> (await postJSON('angkutan_organik'))?.data || [];
   const fetchAlat     = async()=> (await postJSON('alat_panen'))?.data || [];
 
+  // NEW loaders
+  const fetchPemKPI   = async()=> (await postJSON('pemeliharaan_kpi'))?.data || [];
+  const fetchLM76     = async()=> (await postJSON('lm76_tren'))?.data || [];
+  const fetchLM77     = async()=> (await postJSON('lm77_tren'))?.data || [];
+  const fetchLMBiaya  = async()=> (await postJSON('lm_biaya_tren'))?.data || [];
+
   // chart helpers
   function renderOrUpdate(ctxId, cfg, holder){
     const ctx = document.getElementById(ctxId)?.getContext('2d');
@@ -675,22 +853,100 @@ document.addEventListener('DOMContentLoaded', () => {
   const lineCfg = (labels, dataset)=>({type:'line', data:{labels, datasets:[dataset]}, options:{responsive:true, plugins:{legend:{display:true}}, tension:.35, elements:{point:{radius:3}}, scales:{y:{beginAtZero:true}}}});
   const pieCfg  = (labels, data)=>({type:'pie', data:{labels, datasets:[{data, backgroundColor: palette(labels.length)}]}, options:{responsive:true, plugins:{legend:{position:'right'}}}});
 
+  /* ====== Tambahan: Plugin teks di tengah donut ====== */
+  const CenterTextPlugin = {
+    id: 'centerText',
+    beforeDraw(chart, args, opts) {
+      const txt = chart?.options?.plugins?.centerText?.text;
+      if (!txt) return;
+      const {ctx} = chart;
+      const meta = chart.getDatasetMeta(0);
+      if (!meta || !meta.data || !meta.data[0]) return;
+      const {x, y} = meta.data[0];
+      ctx.save();
+      // ukuran font adaptif berdasar diameter hole
+      const cutout = chart.getDatasetMeta(0).controller.innerRadius || 28;
+      const size = Math.max(12, Math.min(24, Math.floor(cutout * 0.6)));
+      ctx.font = `600 ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+      ctx.fillStyle = (chart.options.plugins.centerText.color || '#111827');
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, x, y);
+      ctx.restore();
+    }
+  };
+  Chart.register(CenterTextPlugin);
+  /* ==================================================== */
+
+  // NEW: donut config (ditambah centerText)
+  const donutCfg = (percent)=>({
+    type:'doughnut',
+    data:{ labels:['Progress','Sisa'], datasets:[{ data:[percent, 100-percent], borderWidth:0, backgroundColor:['#3b82f6','#e5e7eb'] }]},
+    options:{
+      cutout:'70%',
+      responsive:true,
+      plugins:{
+        legend:{display:false},
+        tooltip:{enabled:false},
+        centerText:{ text: `${Math.round(percent)}%`, color:'#111827' } // << teks persen di tengah
+      }
+    }
+  });
+
+  function setPemCard(id, rcn, real){
+    const p = rcn>0 ? Math.max(0, Math.min(100, (real/rcn)*100)) : 0;
+    document.getElementById('rcn-'+id).textContent  = fmt(rcn);
+    document.getElementById('real-'+id).textContent = fmt(real);
+    const holder = { get value(){ return donut[id]; }, set value(v){ donut[id]=v; } };
+    renderOrUpdate('donut-'+id, donutCfg(+p.toFixed(2)), holder);
+  }
+
   async function refreshDashboard(showLoading=true){
-    if (showLoading) KPI.total.textContent = KPI.stok.textContent = KPI.pakai.textContent = KPI.doc.textContent = '…';
+    if (showLoading) Object.values(KPI).forEach(el => el.textContent = '…');
 
     const [
-      rowsG, rowsMix, rowsPkj, rowsPml, rowsPpkK, rowsPpkO, rowsAngK, rowsAngO, rowsAlat
+      rowsG, rowsMix, rowsPkj, rowsPml, rowsPpkK, rowsPpkO, rowsAngK, rowsAngO, rowsAlat,
+      pemKPI, lm76, lm77, lmbiaya
     ] = await Promise.all([
-      fetchGudang(), fetchMixPem(), fetchPkj(), fetchPml(), fetchPpkK(), fetchPpkO(), fetchAngK(), fetchAngO(), fetchAlat()
+      fetchGudang(), fetchMixPem(), fetchPkj(), fetchPml(), fetchPpkK(), fetchPpkO(), fetchAngK(), fetchAngO(), fetchAlat(),
+      fetchPemKPI(), fetchLM76(), fetchLM77(), fetchLMBiaya()
     ]);
 
-    /* ===== KPI (fixed) ===== */
+    /* ===== KPI (lebih banyak) ===== */
     const distinctItems = new Set(rowsG.map(r => r.nama_bahan || '-'));
     KPI.total.textContent = fmt(distinctItems.size);
     KPI.stok.textContent  = fmt(rowsG.reduce((a,r)=> a + sisaStok(r), 0));
 
     KPI.pakai.textContent = fmt(rowsMix.reduce((a,r)=> a + (+r.jlh_fisik||0), 0));
     KPI.doc.textContent   = fmt(rowsMix.length);
+
+    KPI.ppkK.textContent  = fmt(rowsPpkK.reduce((a,r)=> a + (+r.jumlah||0), 0));
+    KPI.ppkO.textContent  = fmt(rowsPpkO.reduce((a,r)=> a + (+r.jumlah||0), 0));
+    KPI.angK.textContent  = fmt(rowsAngK.reduce((a,r)=> a + (+r.jumlah||0), 0));
+    KPI.angO.textContent  = fmt(rowsAngO.reduce((a,r)=> a + (+r.jumlah||0), 0));
+
+    const bahanSet = new Set();
+    rowsMix.forEach(r => { if (r.nama_bahan) bahanSet.add(r.nama_bahan); });
+    KPI.bahan.textContent = fmt(bahanSet.size);
+
+    const afdSet = new Set();
+    rowsMix.forEach(r => { if (r.afdeling) afdSet.add(r.afdeling); });
+    rowsPpkK.forEach(r => { if (r.afdeling) afdSet.add(r.afdeling); });
+    rowsPpkO.forEach(r => { if (r.afdeling) afdSet.add(r.afdeling); });
+    rowsPml.forEach(r => { if (r.afdeling) afdSet.add(r.afdeling); });
+    KPI.afd.textContent = fmt(afdSet.size);
+
+    KPI.alatD.textContent = fmt(rowsAlat.reduce((a,r)=> a + (+r.dipakai||0), 0));
+    KPI.alatS.textContent = fmt(rowsAlat.reduce((a,r)=> a + (+r.stok_akhir||0), 0));
+
+    /* ======= NEW: Kartu Pemeliharaan ======= */
+    const map = {}; // label -> {rencana,realisasi}
+    pemKPI.forEach(r => { map[r.label] = {rencana:+r.rencana||0, realisasi:+r.realisasi||0}; });
+    setPemCard('TU',  map.TU?.rencana||0,  map.TU?.realisasi||0);
+    setPemCard('TBM', map.TBM?.rencana||0, map.TBM?.realisasi||0);
+    setPemCard('TM',  map.TM?.rencana||0,  map.TM?.realisasi||0);
+    setPemCard('PN',  map.PN?.rencana||0,  map.PN?.realisasi||0);
+    setPemCard('MN',  map.MN?.rencana||0,  map.MN?.realisasi||0);
 
     /* ===== STOK: Top sisa ===== */
     const aggStok = {};
@@ -702,7 +958,6 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     /* ===== Pemakaian (gabungan) ===== */
-    const bulanOrder = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     const mapTren = new Map(bulanOrder.map(b=>[b,0]));
     rowsMix.forEach(r=> mapTren.set(r.bulan, (mapTren.get(r.bulan)||0) + (+r.jlh_fisik||0)));
     renderOrUpdate('ch-pemakaian-tren',
@@ -795,6 +1050,15 @@ document.addEventListener('DOMContentLoaded', () => {
       {get value(){return chPmlStatus}, set value(v){chPmlStatus=v}}
     );
 
+    /* ===== NEW: Chart LM 76, 77, LM Biaya ===== */
+    const lm76Map = new Map(bulanOrder.map(b=>[b,0])); lm76.forEach(r=> lm76Map.set(r.bulan, (+lm76Map.get(r.bulan)||0) + (+r.total||0)));
+    const lm77Map = new Map(bulanOrder.map(b=>[b,0])); lm77.forEach(r=> lm77Map.set(r.bulan, (+lm77Map.get(r.bulan)||0) + (+r.total||0)));
+    const lmbMap  = new Map(bulanOrder.map(b=>[b,0])); lmbiaya.forEach(r=> lmbMap.set(r.bulan, (+lmbMap.get(r.bulan)||0) + (+r.total||0)));
+
+    renderOrUpdate('ch-lm76',   lineCfg(bulanOrder, {label:`Pemakaian Total (${fTahun.value||'Tahun ini'})`, data: bulanOrder.map(b=>lm76Map.get(b)||0)}), {get value(){return chLM76}, set value(v){chLM76=v}});
+    renderOrUpdate('ch-lm77',   lineCfg(bulanOrder, {label:`Pemakaian Total (${fTahun.value||'Tahun ini'})`, data: bulanOrder.map(b=>lm77Map.get(b)||0)}), {get value(){return chLM77}, set value(v){chLM77=v}});
+    renderOrUpdate('ch-lmbiaya',lineCfg(bulanOrder, {label:`Pemakaian Total (${fTahun.value||'Tahun ini'})`, data: bulanOrder.map(b=>lmbMap.get(b)||0)}),  {get value(){return chLMBiaya}, set value(v){chLMBiaya=v}});
+
     /* ===== Pemupukan Kimia ===== */
     const ppkTrenK = new Map(bulanOrder.map(b=>[b,0]));
     const ppkJenisK = {};
@@ -867,12 +1131,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // events
-  [fAfd, fBulan, fTahun, limitStok].forEach(el => el.addEventListener('change', () => refreshDashboard(false)));
+  [fKebun, fAfd, fBulan, fTahun, limitStok].forEach(el => el.addEventListener('change', () => refreshDashboard(false)));
 
   // init
   refreshDashboard(true);
   setInterval(()=>refreshDashboard(false), 30000);
 });
 </script>
+
 </body>
 </html>

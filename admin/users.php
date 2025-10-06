@@ -24,22 +24,46 @@ include_once '../layouts/header.php';
     </button>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50 text-gray-600">
-        <tr>
-          <th class="py-3 px-4 text-left font-semibold">Username</th>
-          <th class="py-3 px-4 text-left font-semibold">Nama Lengkap</th>
-          <th class="py-3 px-4 text-left font-semibold">NIK</th>
-          <th class="py-3 px-4 text-left font-semibold">Role</th>
-          <th class="py-3 px-4 text-left font-semibold">Dibuat</th>
-          <th class="py-3 px-4 text-left font-semibold w-28">Aksi</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-data">
-        <tr><td colspan="6" class="py-10 text-center text-gray-500">Memuat data…</td></tr>
-      </tbody>
-    </table>
+  <!-- Card tabel + scroll + pagination -->
+  <div class="bg-white rounded-xl shadow-sm border border-gray-100">
+    <div class="overflow-x-auto">
+      <div class="max-h-[520px] overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600 sticky top-0 z-10">
+            <tr>
+              <th class="py-3 px-4 text-left font-semibold">Username</th>
+              <th class="py-3 px-4 text-left font-semibold">Nama Lengkap</th>
+              <th class="py-3 px-4 text-left font-semibold">NIK</th>
+              <th class="py-3 px-4 text-left font-semibold">Role</th>
+              <th class="py-3 px-4 text-left font-semibold">Dibuat</th>
+              <th class="py-3 px-4 text-left font-semibold w-28">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-data">
+            <tr><td colspan="6" class="py-10 text-center text-gray-500">Memuat data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination bar -->
+    <div class="flex flex-wrap items-center justify-between gap-3 p-3 border-t">
+      <div class="flex items-center gap-2">
+        <label for="page-size" class="text-sm text-gray-600">Tampilkan</label>
+        <select id="page-size" class="border rounded px-2 py-1 text-sm">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span class="text-sm text-gray-600">baris</span>
+      </div>
+
+      <div class="flex items-center gap-2" id="pager"><!-- tombol pager --></div>
+
+      <div class="text-sm text-gray-600" id="range-info"><!-- Menampilkan x–y dari z --></div>
+    </div>
   </div>
 </div>
 
@@ -102,7 +126,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   const CSRF = '<?= htmlspecialchars($CSRF, ENT_QUOTES) ?>';
 
-  // ===== Helpers: Icons (inline SVG) =====
+  // ===== Icons
   const Icon = {
     edit: `<svg xmlns="http://www.w3.org/2000/svg" class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -115,7 +139,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
 
   function renderActions(u) {
-    const payload = encodeURIComponent(JSON.stringify(u)); // aman untuk dataset
+    const payload = encodeURIComponent(JSON.stringify(u));
     return `
       <div class="flex items-center gap-2">
         <button
@@ -132,6 +156,77 @@ document.addEventListener('DOMContentLoaded', ()=>{
     `;
   }
 
+  // ===== Pagination (client-side)
+  const pageSizeSel = document.getElementById('page-size');
+  const pagerEl = document.getElementById('pager');
+  const rangeInfoEl = document.getElementById('range-info');
+
+  let allData = [];     // semua data dari server
+  let currentPage = 1;  // halaman aktif
+
+  function paginate(arr, size, page){
+    const start = (page - 1) * size;
+    return arr.slice(start, start + size);
+  }
+
+  function renderPager(page, totalPages){
+    const windowSize = 5;
+    let start = Math.max(1, page - Math.floor(windowSize/2));
+    let end   = start + windowSize - 1;
+    if (end > totalPages) { end = totalPages; start = Math.max(1, end - windowSize + 1); }
+
+    const btn = (label, disabled, goPage, extra='') => `
+      <button ${disabled ? 'disabled' : ''} data-goto="${goPage}"
+        class="px-3 py-1 border rounded text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'} ${extra}">
+        ${label}
+      </button>`;
+
+    let html = '';
+    html += btn('« Prev', page <= 1, page - 1);
+    for (let p = start; p <= end; p++){
+      html += btn(p, false, p, p===page ? 'bg-gray-200 font-semibold' : '');
+    }
+    html += btn('Next »', page >= totalPages, page + 1);
+    pagerEl.innerHTML = html;
+  }
+
+  function renderTable(){
+    const size = parseInt(pageSizeSel.value || '10', 10);
+    const total = allData.length;
+    const totalPages = Math.max(1, Math.ceil(total / size));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    if (!total){
+      tbody.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-500">Belum ada data.</td></tr>';
+      renderPager(1,1);
+      rangeInfoEl.textContent = '';
+      return;
+    }
+
+    const rows = paginate(allData, size, currentPage);
+    tbody.innerHTML = rows.map(u=>`
+      <tr class="border-b last:border-0 hover:bg-gray-50">
+        <td class="py-3 px-4">${u.username ?? '-'}</td>
+        <td class="py-3 px-4">${u.nama_lengkap ?? '-'}</td>
+        <td class="py-3 px-4">${u.nik ?? '-'}</td>
+        <td class="py-3 px-4">
+          <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium
+            ${u.role==='admin' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-50 text-slate-700 ring-1 ring-slate-200'}">
+            ${u.role ?? '-'}
+          </span>
+        </td>
+        <td class="py-3 px-4">${u.created_at ?? '-'}</td>
+        <td class="py-3 px-4">${renderActions(u)}</td>
+      </tr>
+    `).join('');
+
+    const startIdx = (currentPage - 1) * size + 1;
+    const endIdx   = Math.min(currentPage * size, total);
+    rangeInfoEl.textContent = `Menampilkan ${startIdx}–${endIdx} dari ${total} data`;
+
+    renderPager(currentPage, totalPages);
+  }
+
   function refresh(){
     const fd = new FormData();
     fd.append('csrf_token', CSRF);
@@ -142,31 +237,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
       .then(j=>{
         if(!j.success){
           tbody.innerHTML = `<tr><td colspan="6" class="py-10 text-center text-red-500">${j.message||'Error'}</td></tr>`;
+          allData = [];
+          renderPager(1,1);
+          rangeInfoEl.textContent = '';
           return;
         }
-        const rows = j.data || [];
-        if(!rows.length){
-          tbody.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-gray-500">Belum ada data.</td></tr>';
-          return;
-        }
-        tbody.innerHTML = rows.map(u=>`
-          <tr class="border-b last:border-0 hover:bg-gray-50">
-            <td class="py-3 px-4">${u.username ?? '-'}</td>
-            <td class="py-3 px-4">${u.nama_lengkap ?? '-'}</td>
-            <td class="py-3 px-4">${u.nik ?? '-'}</td>
-            <td class="py-3 px-4">
-              <span class="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium
-                ${u.role==='admin' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' : 'bg-slate-50 text-slate-700 ring-1 ring-slate-200'}">
-                ${u.role ?? '-'}
-              </span>
-            </td>
-            <td class="py-3 px-4">${u.created_at ?? '-'}</td>
-            <td class="py-3 px-4">${renderActions(u)}</td>
-          </tr>
-        `).join('');
+        allData = j.data || [];
+        currentPage = 1;
+        renderTable();
       })
       .catch(_=>{
         tbody.innerHTML = '<tr><td colspan="6" class="py-10 text-center text-red-500">Gagal memuat data.</td></tr>';
+        allData = [];
+        renderPager(1,1);
+        rangeInfoEl.textContent = '';
       });
   }
 
@@ -182,7 +266,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('btn-close').onclick = close;
   document.getElementById('btn-cancel').onclick = close;
 
-  // ===== Delegated actions =====
+  // ===== Delegated actions (tetap bekerja di hasil pagination)
   tbody.addEventListener('click', (e)=>{
     const btn = e.target.closest('button');
     if(!btn) return;
@@ -272,6 +356,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(e.key === 'Escape' && !modal.classList.contains('hidden')) close();
   });
 
+  // Pagination events
+  pageSizeSel.addEventListener('change', ()=>{ currentPage = 1; renderTable(); });
+  pagerEl.addEventListener('click', (e)=>{
+    const b = e.target.closest('button[data-goto]');
+    if(!b || b.disabled) return;
+    const goto = parseInt(b.dataset.goto, 10);
+    if(!Number.isNaN(goto)){
+      currentPage = goto;
+      renderTable();
+    }
+  });
+
+  // Initial load
   refresh();
 });
 </script>

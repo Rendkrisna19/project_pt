@@ -1,5 +1,5 @@
 <?php
-// stok_gudang.php (FINAL) — filter & CRUD stok gudang berbasis kebun/bahan (relasi ID), mutasi & sisa dihitung backend
+// stok_gudang.php (FINAL+) — sticky header + scroll body + client-side pagination
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
@@ -25,6 +25,26 @@ $currentPage = 'stok_gudang';
 
 include_once '../layouts/header.php';
 ?>
+<style>
+  /* Sticky header untuk thead */
+  .table-sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #f9fafb; /* Tailwind bg-gray-50 */
+    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.06); /* border-b tipis */
+  }
+  /* Supaya scroll halus pada container tabel saja */
+  .table-scroll {
+    max-height: 60vh;         /* bisa kamu ubah sesuai kebutuhan */
+    overflow: auto;
+  }
+  /* Hindari loncat saat scrollbar muncul */
+  .scrollbar-gutter-stable {
+    scrollbar-gutter: stable both-edges;
+  }
+</style>
+
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
@@ -86,27 +106,56 @@ include_once '../layouts/header.php';
     </div>
   </div>
 
-  <!-- Tabel -->
-  <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
-        <tr class="text-gray-600">
-          <th class="py-3 px-4 text-left">Kebun</th>
-          <th class="py-3 px-4 text-left">Bahan (Satuan)</th>
-          <th class="py-3 px-4 text-right">Stok Awal</th>
-          <th class="py-3 px-4 text-right text-green-700">Mutasi Masuk</th>
-          <th class="py-3 px-4 text-right text-red-700">Mutasi Keluar</th>
-          <th class="py-3 px-4 text-right text-blue-700">Pasokan</th>
-          <th class="py-3 px-4 text-right text-red-700">Dipakai</th>
-          <th class="py-3 px-4 text-right">Net Mutasi</th>
-          <th class="py-3 px-4 text-right font-semibold">Sisa Stok</th>
-          <th class="py-3 px-4 text-left">Aksi</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-stok" class="text-gray-800">
-        <tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>
-      </tbody>
-    </table>
+  <!-- Tabel (sticky header + scroll body) -->
+  <div class="bg-white rounded-xl shadow-sm">
+    <!-- Toolbar kecil untuk page size -->
+    <div class="flex items-center justify-between px-4 py-3 border-b">
+      <div class="flex items-center gap-2 text-sm text-gray-600">
+        <span>Tampilkan</span>
+        <select id="page-size" class="border rounded px-2 py-1">
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+        <span>baris</span>
+      </div>
+      <div id="range-label" class="text-sm text-gray-500">—</div>
+    </div>
+
+    <div class="table-scroll scrollbar-gutter-stable">
+      <table class="min-w-full text-sm table-sticky">
+        <thead class="bg-gray-50">
+          <tr class="text-gray-600">
+            <th class="py-3 px-4 text-left">Kebun</th>
+            <th class="py-3 px-4 text-left">Bahan (Satuan)</th>
+            <th class="py-3 px-4 text-right">Stok Awal</th>
+            <th class="py-3 px-4 text-right text-green-700">Mutasi Masuk</th>
+            <th class="py-3 px-4 text-right text-red-700">Mutasi Keluar</th>
+            <th class="py-3 px-4 text-right text-blue-700">Pasokan</th>
+            <th class="py-3 px-4 text-right text-red-700">Dipakai</th>
+            <th class="py-3 px-4 text-right">Net Mutasi</th>
+            <th class="py-3 px-4 text-right font-semibold">Sisa Stok</th>
+            <th class="py-3 px-4 text-left">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-stok" class="text-gray-800">
+          <tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-4 py-3 border-t">
+      <div id="total-label" class="text-sm text-gray-600">—</div>
+      <div class="flex items-center gap-1">
+        <button id="btn-first" class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">&laquo; First</button>
+        <button id="btn-prev"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">&lsaquo; Prev</button>
+        <span id="page-info" class="px-3 text-sm text-gray-600">Page 1/1</span>
+        <button id="btn-next"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">Next &rsaquo;</button>
+        <button id="btn-last"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">Last &raquo;</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -196,6 +245,7 @@ include_once '../layouts/header.php';
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const $ = s => document.querySelector(s);
+
   const tbody = $('#tbody-stok');
 
   const selKebun = $('#filter-kebun');
@@ -212,8 +262,87 @@ document.addEventListener('DOMContentLoaded', () => {
   const formAction = $('#form-action');
   const formId = $('#form-id');
 
+  // Pagination elements
+  const pageSizeEl = $('#page-size');
+  const rangeLabel = $('#range-label');
+  const totalLabel = $('#total-label');
+  const pageInfo   = $('#page-info');
+  const btnFirst   = $('#btn-first');
+  const btnPrev    = $('#btn-prev');
+  const btnNext    = $('#btn-next');
+  const btnLast    = $('#btn-last');
+
   const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); }
   const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+
+  // ===== Client-side pagination state =====
+  let allRows = [];          // cache hasil list dari server (sesuai filter)
+  let currentPage = 1;       // mulai dari 1
+  let pageSize = parseInt(pageSizeEl.value || '10', 10);
+
+  function numberFmt(x){
+    return Number(x ?? 0).toLocaleString(undefined,{maximumFractionDigits:2});
+  }
+
+  function renderPage(){
+    const total = allRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx   = Math.min(startIdx + pageSize, total);
+    const pageRows = allRows.slice(startIdx, endIdx);
+
+    if (total === 0){
+      tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+    } else {
+      tbody.innerHTML = pageRows.map(row => `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="py-3 px-4">
+            <div class="font-semibold">${row.kebun_kode || ''}</div>
+            <div class="text-xs text-gray-500">${row.nama_kebun || ''}</div>
+          </td>
+          <td class="py-3 px-4">
+            <div class="font-semibold">${row.bahan_kode || ''}</div>
+            <div class="text-xs text-gray-500">${row.nama_bahan || ''} (${row.satuan||''})</div>
+          </td>
+          <td class="py-3 px-4 text-right">${numberFmt(row.stok_awal)}</td>
+          <td class="py-3 px-4 text-right text-green-700">${numberFmt(row.mutasi_masuk)}</td>
+          <td class="py-3 px-4 text-right text-red-700">${numberFmt(row.mutasi_keluar)}</td>
+          <td class="py-3 px-4 text-right text-blue-700">${numberFmt(row.pasokan)}</td>
+          <td class="py-3 px-4 text-right text-red-700">${numberFmt(row.dipakai)}</td>
+          <td class="py-3 px-4 text-right">${numberFmt(row.net_mutasi)}</td>
+          <td class="py-3 px-4 text-right font-semibold">${numberFmt(row.sisa_stok)}</td>
+          <td class="py-3 px-4">
+            <div class="flex items-center gap-3">
+              <button class="btn-edit text-blue-600 underline" data-json='${JSON.stringify(row)}'>✏️</button>
+              <button class="btn-delete text-red-600 underline" data-id="${row.id}">🗑️</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Labels & controls
+    const showFrom = total === 0 ? 0 : (startIdx + 1);
+    const showTo   = endIdx;
+
+    rangeLabel.textContent = `Menampilkan ${showFrom}–${showTo}`;
+    totalLabel.textContent = `Total data: ${total}`;
+    pageInfo.textContent   = `Page ${currentPage}/${totalPages}`;
+
+    // Enable/disable
+    btnFirst.disabled = (currentPage <= 1);
+    btnPrev.disabled  = (currentPage <= 1);
+    btnNext.disabled  = (currentPage >= totalPages);
+    btnLast.disabled  = (currentPage >= totalPages);
+
+    [btnFirst, btnPrev, btnNext, btnLast].forEach(b=>{
+      b.classList.toggle('opacity-50', b.disabled);
+      b.classList.toggle('cursor-not-allowed', b.disabled);
+    });
+  }
 
   function refreshList(){
     const fd = new FormData();
@@ -224,45 +353,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selBulan.value) fd.append('bulan', selBulan.value);
     fd.append('tahun', selTahun.value || '<?= (int)date('Y') ?>');
 
+    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
+
     fetch('stok_gudang_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
       .then(j=>{
         if (!j.success) {
+          allRows = [];
+          renderPage();
           tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
           return;
         }
-        if (!j.data || j.data.length===0) {
-          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
-          return;
-        }
-        tbody.innerHTML = j.data.map(row=>{
-          return `
-          <tr class="border-b hover:bg-gray-50">
-            <td class="py-3 px-4">
-              <div class="font-semibold">${row.kebun_kode || ''}</div>
-              <div class="text-xs text-gray-500">${row.nama_kebun || ''}</div>
-            </td>
-            <td class="py-3 px-4">
-              <div class="font-semibold">${row.bahan_kode || ''}</div>
-              <div class="text-xs text-gray-500">${row.nama_bahan || ''} (${row.satuan||''})</div>
-            </td>
-            <td class="py-3 px-4 text-right">${Number(row.stok_awal).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right text-green-700">${Number(row.mutasi_masuk).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right text-red-700">${Number(row.mutasi_keluar).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right text-blue-700">${Number(row.pasokan).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right text-red-700">${Number(row.dipakai).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right">${Number(row.net_mutasi).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4 text-right font-semibold">${Number(row.sisa_stok).toLocaleString(undefined,{maximumFractionDigits:2})}</td>
-            <td class="py-3 px-4">
-              <div class="flex items-center gap-3">
-                <button class="btn-edit text-blue-600 underline" data-json='${JSON.stringify(row)}'>✏️</button>
-                <button class="btn-delete text-red-600 underline" data-id="${row.id}">🗑️</button>
-              </div>
-            </td>
-          </tr>`;
-        }).join('');
+        allRows = Array.isArray(j.data) ? j.data : [];
+        currentPage = 1; // reset ke halaman 1 setiap filter berubah
+        renderPage();
       })
       .catch(err=>{
+        allRows = [];
+        renderPage();
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
       });
   }
@@ -270,6 +378,26 @@ document.addEventListener('DOMContentLoaded', () => {
   // init load & filter events
   refreshList();
   [selKebun, selBahan, selBulan, selTahun].forEach(el=> el.addEventListener('change', refreshList));
+
+  // page size change
+  pageSizeEl.addEventListener('change', ()=>{
+    pageSize = parseInt(pageSizeEl.value || '10', 10);
+    currentPage = 1;
+    renderPage();
+  });
+
+  // pagination buttons
+  btnFirst.addEventListener('click', ()=>{ currentPage = 1; renderPage(); });
+  btnPrev.addEventListener('click',  ()=>{ currentPage = Math.max(1, currentPage-1); renderPage(); });
+  btnNext.addEventListener('click',  ()=>{ 
+    const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
+    currentPage = Math.min(totalPages, currentPage+1); 
+    renderPage(); 
+  });
+  btnLast.addEventListener('click',  ()=>{ 
+    currentPage = Math.max(1, Math.ceil(allRows.length / pageSize)); 
+    renderPage(); 
+  });
 
   // set satuan hint saat pilih bahan
   function updateSatuanHint(){

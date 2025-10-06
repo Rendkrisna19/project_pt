@@ -1,6 +1,6 @@
 <?php
 // pages/cetak/pemeliharaan_excel.php
-// Output: Excel (.xlsx) daftar pemeliharaan mengikuti filter ?tab= & ?unit_id=
+// Excel mengikuti SEMUA filter dari pages/pemeliharaan.php
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -13,159 +13,215 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-$db = new Database(); 
+$db  = new Database(); 
 $pdo = $db->getConnection();
 
-$allowedTab = ['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
-$daftar_tab = [
-  'TU'=>'Pemeliharaan TU',
-  'TBM'=>'Pemeliharaan TBM',
-  'TM'=>'Pemeliharaan TM',
-  'BIBIT_PN'=>'Pemeliharaan Bibit PN',
-  'BIBIT_MN'=>'Pemeliharaan Bibit MN'
-];
-
-$tab = $_GET['tab'] ?? 'TU';
-if (!in_array($tab, $allowedTab, true)) $tab = 'TU';
-
-$f_unit_id = isset($_GET['unit_id']) ? (($_GET['unit_id']==='') ? '' : (int)$_GET['unit_id']) : '';
-
-$sql = "SELECT p.*, u.nama_unit AS unit_nama
-        FROM pemeliharaan p
-        LEFT JOIN units u ON u.id = p.unit_id
-        WHERE p.kategori = :k";
-$params = [':k'=>$tab];
-if ($f_unit_id !== '' && $f_unit_id !== null) { 
-  $sql .= " AND p.unit_id = :unit_id"; 
-  $params[':unit_id'] = (int)$f_unit_id; 
+/* Helpers */
+function colExists(PDO $pdo,$table,$col){
+  static $cache=[]; $k=$table;
+  if(!isset($cache[$k])){
+    $st=$pdo->prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t");
+    $st->execute([':t'=>$table]);
+    $cache[$k]=array_flip(array_map('strtolower', array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME')));
+  }
+  return isset($cache[$k][strtolower($col)]);
 }
-$sql .= " ORDER BY p.tanggal DESC, p.id DESC";
+function pickCol(PDO $pdo,$table,array $cands){ foreach($cands as $c){ if(colExists($pdo,$table,$c)) return $c; } return null; }
+$bulanNama=[1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
 
-$st = $pdo->prepare($sql);
-$st->execute($params);
-$rows = $st->fetchAll(PDO::FETCH_ASSOC);
+$allowedTab=['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
+$titles=['TU'=>'Pemeliharaan TU','TBM'=>'Pemeliharaan TBM','TM'=>'Pemeliharaan TM','BIBIT_PN'=>'Pemeliharaan Bibit PN','BIBIT_MN'=>'Pemeliharaan Bibit MN'];
+$tab=$_GET['tab']??'TU'; if(!in_array($tab,$allowedTab,true)) $tab='TU';
+$isBibit=in_array($tab,['BIBIT_PN','BIBIT_MN'],true);
 
-// === TOTALS (sesuai filter) ===
-$tot_rencana = 0.0; $tot_realisasi = 0.0;
-foreach ($rows as $r) {
-  $tot_rencana   += (float)($r['rencana'] ?? 0);
-  $tot_realisasi += (float)($r['realisasi'] ?? 0);
+/* Filters (sinkron dgn halaman) */
+$f_unit_id   = isset($_GET['unit_id'])   && $_GET['unit_id']   !== '' ? (int)$_GET['unit_id'] : '';
+$f_bulan     = isset($_GET['bulan'])     && $_GET['bulan']     !== '' ? (string)$_GET['bulan'] : '';
+$f_tahun     = isset($_GET['tahun'])     && $_GET['tahun']     !== '' ? (int)$_GET['tahun'] : '';
+$f_jenis_id  = isset($_GET['jenis_id'])  && $_GET['jenis_id']  !== '' ? (int)$_GET['jenis_id'] : '';
+$f_tenaga_id = isset($_GET['tenaga_id']) && $_GET['tenaga_id'] !== '' ? (int)$_GET['tenaga_id'] : '';
+$f_kebun_id  = isset($_GET['kebun_id'])  && $_GET['kebun_id']  !== '' ? (int)$_GET['kebun_id'] : '';
+$f_rayon     = isset($_GET['rayon'])     && $_GET['rayon']     !== '' ? (string)$_GET['rayon'] : '';
+$f_bibit     = isset($_GET['bibit'])     && $_GET['bibit']     !== '' ? (string)$_GET['bibit'] : '';
+
+/* Map ID→Nama */
+$jenis_nama = ''; if($f_jenis_id!==''){ $s=$pdo->prepare("SELECT nama FROM md_jenis_pekerjaan WHERE id=:i"); $s->execute([':i'=>$f_jenis_id]); $jenis_nama=(string)$s->fetchColumn(); }
+$tenaga_nama= ''; if($f_tenaga_id!==''){ $s=$pdo->prepare("SELECT nama FROM md_tenaga WHERE id=:i"); $s->execute([':i'=>$f_tenaga_id]); $tenaga_nama=(string)$s->fetchColumn(); }
+$kebun_nama = ''; if($f_kebun_id!==''){ $s=$pdo->prepare("SELECT nama_kebun FROM md_kebun WHERE id=:i"); $s->execute([':i'=>$f_kebun_id]); $kebun_nama=(string)$s->fetchColumn(); }
+
+/* Dynamic cols */
+$hasTanggal   = colExists($pdo,'pemeliharaan','tanggal');
+$hasBulanCol  = colExists($pdo,'pemeliharaan','bulan');
+$hasTahunCol  = colExists($pdo,'pemeliharaan','tahun');
+$hasKebunId   = colExists($pdo,'pemeliharaan','kebun_id');
+$hasKebunKode = colExists($pdo,'pemeliharaan','kebun_kode');
+
+$colKebunText = pickCol($pdo,'pemeliharaan',['kebun_nama','kebun','nama_kebun','kebun_text']);
+$colRayon     = pickCol($pdo,'pemeliharaan',['rayon','rayon_nama']);
+$colBibit     = pickCol($pdo,'pemeliharaan',['stood','stood_jenis','jenis_bibit','bibit']);
+
+/* SELECT pieces */
+$joinKebun=''; $selKebun='';
+if ($hasKebunId)      { $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=p.kebun_id ";    $selKebun=", kb.nama_kebun AS kebun_nama"; }
+elseif ($hasKebunKode){ $joinKebun=" LEFT JOIN md_kebun kb ON kb.kode=p.kebun_kode ";$selKebun=", kb.nama_kebun AS kebun_nama"; }
+elseif ($colKebunText){ $selKebun=", p.$colKebunText AS kebun_nama"; }
+else { $selKebun=", NULL AS kebun_nama"; }
+$selRayon=$colRayon?", p.$colRayon AS rayon_val":", NULL AS rayon_val";
+$selBibit=$colBibit?", p.$colBibit AS bibit_val":", NULL AS bibit_val";
+
+/* Query + filters */
+$sql="SELECT p.*, u.nama_unit AS unit_nama $selKebun $selRayon $selBibit
+      FROM pemeliharaan p
+      LEFT JOIN units u ON u.id=p.unit_id
+      $joinKebun
+      WHERE p.kategori=:k";
+$params=[':k'=>$tab];
+
+if ($f_unit_id!==''){ $sql.=" AND p.unit_id=:uid"; $params[':uid']=$f_unit_id; }
+if ($f_bulan!==''){
+  if ($hasBulanCol)    { $sql.=" AND p.bulan=:bln"; $params[':bln']=$f_bulan; }
+  elseif ($hasTanggal) { $sql.=" AND MONTH(p.tanggal)=:blnnum"; $params[':blnnum']=array_search($f_bulan,$bulanNama,true) ?: array_search($f_bulan,array_values($bulanNama),true); }
 }
-$tot_progress = $tot_rencana > 0 ? ($tot_realisasi / $tot_rencana) * 100 : 0.0;
+if ($f_tahun!==''){
+  if ($hasTahunCol)    { $sql.=" AND p.tahun=:th"; $params[':th']=$f_tahun; }
+  elseif ($hasTanggal) { $sql.=" AND YEAR(p.tanggal)=:th"; $params[':th']=$f_tahun; }
+}
+if ($f_jenis_id!==''){ if($jenis_nama!==''){ $sql.=" AND p.jenis_pekerjaan=:jn"; $params[':jn']=$jenis_nama; } else { $sql.=" AND 1=0"; } }
+if ($f_tenaga_id!==''){ if($tenaga_nama!==''){ $sql.=" AND p.tenaga=:tn"; $params[':tn']=$tenaga_nama; } else { $sql.=" AND 1=0"; } }
+if ($f_kebun_id!==''){
+  if     ($hasKebunId)   { $sql.=" AND p.kebun_id=:kid"; $params[':kid']=$f_kebun_id; }
+  elseif ($joinKebun)    { $sql.=" AND kb.id=:kid";      $params[':kid']=$f_kebun_id; }
+  elseif ($colKebunText && $kebun_nama!==''){ $sql.=" AND p.$colKebunText=:kname"; $params[':kname']=$kebun_nama; }
+}
+if ($isBibit){
+  if ($f_bibit!==''){ $col = $colBibit ?: 'bibit'; $sql.=" AND p.$col LIKE :bb"; $params[':bb']="%{$f_bibit}%"; }
+}else{
+  if ($f_rayon!==''){ $col = $colRayon ?: 'rayon'; $sql.=" AND p.$col LIKE :ry"; $params[':ry']="%{$f_rayon}%"; }
+}
+$sql .= $hasTanggal ? " ORDER BY p.tanggal DESC, p.id DESC" : " ORDER BY p.tahun DESC, p.id DESC";
+$st=$pdo->prepare($sql);
+foreach($params as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
+$st->execute();
+$rows=$st->fetchAll(PDO::FETCH_ASSOC);
 
-// Spreadsheet setup
-$sheetTitle = $daftar_tab[$tab] ?? 'Pemeliharaan';
-$spreadsheet = new Spreadsheet();
-$sheet = $spreadsheet->getActiveSheet();
-$sheet->setTitle(substr($sheetTitle,0,31));
+/* Totals */
+$tot_r=0.0; $tot_e=0.0;
+foreach($rows as $r){ $tot_r+=(float)($r['rencana']??0); $tot_e+=(float)($r['realisasi']??0); }
+$tot_d=$tot_e-$tot_r; $tot_p=$tot_r>0?($tot_e/$tot_r*100):0;
 
-// Header brand (merge + hijau)
-$sheet->mergeCells('A1:I1');
-$sheet->setCellValue('A1', 'PTPN IV REGIONAL 3');
+/* Spreadsheet */
+$spreadsheet=new Spreadsheet();
+$sheet=$spreadsheet->getActiveSheet();
+$sheet->setTitle(substr($titles[$tab],0,31));
+
+$sheet->mergeCells('A1:L1');
+$sheet->setCellValue('A1','PTPN IV REGIONAL 3');
 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('FFFFFF');
 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('0F7B4F');
 
-// Subjudul
-$sheet->mergeCells('A2:I2');
-$sheet->setCellValue('A2', $sheetTitle);
+$sheet->mergeCells('A2:L2');
+$sheet->setCellValue('A2',$titles[$tab]);
 $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('0F7B4F');
 $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-// (Opsional) baris filter ringkas
-$filterLine = 'Filter: Kategori '.$tab.' | '.(($f_unit_id!=='')?('Unit '.$f_unit_id):'Semua Unit');
-$sheet->mergeCells('A3:I3');
-$sheet->setCellValue('A3', $filterLine);
+/* filter line */
+$parts=["Kategori $tab"];
+if ($f_unit_id!==''){ $u=$pdo->prepare("SELECT nama_unit FROM units WHERE id=:i"); $u->execute([':i'=>$f_unit_id]); $parts[]='Unit '.$u->fetchColumn(); }
+if ($f_bulan!==''){ $parts[]='Bulan '.$f_bulan; }
+if ($f_tahun!==''){ $parts[]='Tahun '.$f_tahun; }
+if ($f_jenis_id!==''){ $parts[]='Jenis '.$jenis_nama; }
+if ($f_tenaga_id!==''){ $parts[]='Tenaga '.$tenaga_nama; }
+if ($f_kebun_id!==''){ $parts[]='Kebun '.$kebun_nama; }
+if ($isBibit){ if ($f_bibit!==''){ $parts[]='Stood/Jenis '.$f_bibit; } } else { if ($f_rayon!==''){ $parts[]='Rayon '.$f_rayon; } }
+$sheet->mergeCells('A3:L3');
+$sheet->setCellValue('A3','Filter: '.implode(' | ',$parts));
 $sheet->getStyle('A3')->getFont()->setSize(10)->getColor()->setRGB('666666');
 $sheet->getStyle('A3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-// Header tabel
-$headers = [
-  'A' => 'Jenis Pekerjaan',
-  'B' => 'Tenaga',
-  'C' => 'Unit/Devisi',
-  'D' => 'Kebun',
-  'E' => 'Periode',
-  'F' => 'Rencana',
-  'G' => 'Realisasi',
-  'H' => 'Progress (%)',
-  'I' => 'Status',
+/* Headers */
+$headers=[
+  'A'=>'Tahun',
+  'B'=>'Kebun',
+  'C'=>$isBibit?'Stood / Jenis Bibit':'Rayon',
+  'D'=>'Unit/Devisi',
+  'E'=>'Jenis Pekerjaan',
+  'F'=>'Periode',
+  'G'=>'Tenaga',
+  'H'=>'Rencana',
+  'I'=>'Realisasi',
+  'J'=>'+/-',
+  'K'=>'Progress (%)',
+  'L'=>'Status',
 ];
+$row=5; foreach($headers as $c=>$t){ $sheet->setCellValue($c.$row,$t); }
+$sheet->getStyle("A{$row}:L{$row}")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+$sheet->getStyle("A{$row}:L{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle("A{$row}:L{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1FAB61');
+$sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$row++;
 
-$rowIdx = 5;
-foreach ($headers as $col => $title) {
-  $sheet->setCellValue($col.$rowIdx, $title);
-}
-$sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getFont()->setBold(true);
-$sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E8F4EF');
-$sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+/* Body */
+if (empty($rows)){
+  $sheet->mergeCells("A{$row}:L{$row}");
+  $sheet->setCellValue("A{$row}",'Tidak ada data.');
+  $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+  $row++;
+}else{
+  foreach($rows as $r){
+    $rencana=(float)($r['rencana']??0);
+    $realisasi=(float)($r['realisasi']??0);
+    $delta=$realisasi-$rencana;
+    $th = $hasTahunCol ? (string)($r['tahun']??'') : ($hasTanggal && !empty($r['tanggal']) ? date('Y',strtotime($r['tanggal'])) : '');
+    $bln= $hasBulanCol ? (string)($r['bulan']??'') : ($hasTanggal && !empty($r['tanggal']) ? ($bulanNama[(int)date('n',strtotime($r['tanggal']))]??'') : '');
+    $periode=trim($bln.' '.$th);
+    $progress=$rencana>0?($realisasi/$rencana*100):0;
 
-$rowIdx++;
+    $sheet->setCellValue("A{$row}", $th);
+    $sheet->setCellValue("B{$row}", (string)($r['kebun_nama']??''));
+    $sheet->setCellValue("C{$row}", (string)( $isBibit?($r['bibit_val']??''):($r['rayon_val']??'') ));
+    $sheet->setCellValue("D{$row}", (string)($r['unit_nama']??''));
+    $sheet->setCellValue("E{$row}", (string)($r['jenis_pekerjaan']??''));
+    $sheet->setCellValue("F{$row}", $periode);
+    $sheet->setCellValue("G{$row}", (string)($r['tenaga']??''));
+    $sheet->setCellValue("H{$row}", $rencana);
+    $sheet->setCellValue("I{$row}", $realisasi);
+    $sheet->setCellValue("J{$row}", $delta);
+    $sheet->setCellValue("K{$row}", round($progress,2));
+    $sheet->setCellValue("L{$row}", (string)($r['status']??''));
 
-// Body
-if (empty($rows)) {
-  $sheet->mergeCells("A{$rowIdx}:I{$rowIdx}");
-  $sheet->setCellValue("A{$rowIdx}", 'Tidak ada data.');
-  $sheet->getStyle("A{$rowIdx}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-  $rowIdx++;
-} else {
-  foreach ($rows as $r) {
-    $rencana   = (float)($r['rencana'] ?? 0);
-    $realisasi = (float)($r['realisasi'] ?? 0);
-    $progress  = $rencana > 0 ? ($realisasi/$rencana)*100 : 0;
-
-    $sheet->setCellValue("A{$rowIdx}", (string)($r['jenis_pekerjaan'] ?? ''));
-    $sheet->setCellValue("B{$rowIdx}", (string)($r['tenaga'] ?? ''));
-    $sheet->setCellValue("C{$rowIdx}", (string)($r['unit_nama'] ?: ''));
-    $sheet->setCellValue("D{$rowIdx}", (string)($r['rayon'] ?: ''));
-    $sheet->setCellValue("E{$rowIdx}", trim(($r['bulan'] ?? '').' '.($r['tahun'] ?? '')));
-    $sheet->setCellValue("F{$rowIdx}", $rencana);
-    $sheet->setCellValue("G{$rowIdx}", $realisasi);
-    $sheet->setCellValue("H{$rowIdx}", round($progress, 2));
-    $sheet->setCellValue("I{$rowIdx}", (string)($r['status'] ?? ''));
-
-    $sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $sheet->getStyle("F{$rowIdx}:H{$rowIdx}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-
-    $rowIdx++;
+    $sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle("H{$row}:K{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $row++;
   }
 }
 
-// TOTAL row (jika ada data)
-if (!empty($rows)) {
-  $sheet->setCellValue("A{$rowIdx}", 'TOTAL');
-  // merge TOTAL label across A..E
-  $sheet->mergeCells("A{$rowIdx}:E{$rowIdx}");
-  $sheet->setCellValue("F{$rowIdx}", $tot_rencana);
-  $sheet->setCellValue("G{$rowIdx}", $tot_realisasi);
-  $sheet->setCellValue("H{$rowIdx}", round($tot_progress, 2));
-  $sheet->setCellValue("I{$rowIdx}", '');
-
-  // style TOTAL row
-  $sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getFont()->setBold(true);
-  $sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
-  $sheet->getStyle("A{$rowIdx}:I{$rowIdx}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-  $sheet->getStyle("F{$rowIdx}:H{$rowIdx}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-  $rowIdx++;
+/* Totals */
+if (!empty($rows)){
+  $sheet->setCellValue("A{$row}",'TOTAL');
+  $sheet->mergeCells("A{$row}:G{$row}");
+  $sheet->setCellValue("H{$row}", $tot_r);
+  $sheet->setCellValue("I{$row}", $tot_e);
+  $sheet->setCellValue("J{$row}", $tot_d);
+  $sheet->setCellValue("K{$row}", round($tot_p,2));
+  $sheet->setCellValue("L{$row}", '');
+  $sheet->getStyle("A{$row}:L{$row}")->getFont()->setBold(true);
+  $sheet->getStyle("A{$row}:L{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
+  $sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+  $sheet->getStyle("H{$row}:K{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  $row++;
 }
 
-// Auto width
-foreach (range('A','I') as $col) {
-  $sheet->getColumnDimension($col)->setAutoSize(true);
-}
+/* width & format */
+foreach(range('A','L') as $c){ $sheet->getColumnDimension($c)->setAutoSize(true); }
+$sheet->getStyle("H6:H{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("I6:I{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("J6:J{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("K6:K{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
 
-// Number formats for numeric columns
-$sheet->getStyle("F6:F{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
-$sheet->getStyle("G6:G{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
-$sheet->getStyle("H6:H{$rowIdx}")->getNumberFormat()->setFormatCode('#,##0.00');
-
-// Output
-$fname = 'Pemeliharaan_'.$tab.(($f_unit_id!=='')?('_UNIT-'.$f_unit_id):'').'.xlsx';
+/* Output */
+$fname='Pemeliharaan_'.$tab.'.xlsx';
 header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 header('Content-Disposition: attachment; filename="'.$fname.'"');
 header('Cache-Control: max-age=0');
-
-$writer = new Xlsx($spreadsheet);
-$writer->save('php://output');
-exit;
+$writer=new Xlsx($spreadsheet); $writer->save('php://output'); exit;

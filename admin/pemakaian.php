@@ -1,9 +1,8 @@
 <?php
-// pemakaian.php (FINAL FIXED: kolom 11, edit payload decode, keterangan pakai keterangan_clean)
+// pemakaian.php (FINAL + Sticky Header + Scrollable + Client Pagination + Totals Bottom)
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-  header("Location: ../auth/login.php");
-  exit;
+  header("Location: ../auth/login.php"); exit;
 }
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
@@ -12,15 +11,13 @@ require_once '../config/database.php';
 $db = new Database();
 $conn = $db->getConnection();
 
-$bulanList = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+$bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $tahunNow = (int)date('Y');
 
 // master units
 $units = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit ASC")->fetchAll(PDO::FETCH_ASSOC);
-
 // master kebun
 $kebunList = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
-
 // master bahan kimia
 $bahanList = $conn->query("
   SELECT b.nama_bahan, s.nama AS satuan
@@ -28,10 +25,8 @@ $bahanList = $conn->query("
   LEFT JOIN md_satuan s ON s.id=b.satuan_id
   ORDER BY b.nama_bahan
 ")->fetchAll(PDO::FETCH_ASSOC);
-
 // master jenis pekerjaan
 $jenisList = $conn->query("SELECT nama FROM md_jenis_pekerjaan ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
-
 // master fisik
 $fisikList = $conn->query("SELECT nama FROM md_fisik ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -84,30 +79,73 @@ include_once '../layouts/header.php';
     </div>
   </div>
 
-  <!-- Tabel -->
-  <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
-        <tr class="text-gray-600">
-          <th class="py-3 px-4 text-left">No. Dokumen</th>
-          <th class="py-3 px-4 text-left">Kebun</th>
-          <th class="py-3 px-4 text-left">Unit</th>
-          <th class="py-3 px-4 text-left">Periode</th>
-          <th class="py-3 px-4 text-left">Nama Bahan</th>
-          <th class="py-3 px-4 text-left">Jenis Pekerjaan</th>
-          <th class="py-3 px-4 text-right">Jlh Bahan Diminta</th>
-          <th class="py-3 px-4 text-right">Jumlah Fisik</th>
-          <th class="py-3 px-4 text-left">Dokumen</th>
-          <th class="py-3 px-4 text-left">Keterangan</th>
-          <th class="py-3 px-4 text-left">Aksi</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-data" class="text-gray-800">
-        <tr>
-          <td colspan="11" class="text-center py-8 text-gray-500">Memuat data…</td>
-        </tr>
-      </tbody>
-    </table>
+  <!-- Tabel + Controls -->
+  <div class="bg-white rounded-xl shadow-sm border">
+    <!-- Top controls: info + page size -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 p-3">
+      <div class="text-sm text-gray-700">
+        Menampilkan <span id="info-from" class="font-semibold">0</span>–<span id="info-to" class="font-semibold">0</span>
+        dari <span id="info-total" class="font-semibold">0</span> data
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-700">Baris per halaman</label>
+        <select id="per-page" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-800">
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <!-- Scrollable viewport; thead sticky -->
+      <div class="max-h-[60vh] overflow-y-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr class="text-gray-600">
+              <th class="py-3 px-4 text-left">No. Dokumen</th>
+              <th class="py-3 px-4 text-left">Kebun</th>
+              <th class="py-3 px-4 text-left">Unit</th>
+              <th class="py-3 px-4 text-left">Periode</th>
+              <th class="py-3 px-4 text-left">Nama Bahan</th>
+              <th class="py-3 px-4 text-left">Jenis Pekerjaan</th>
+              <th class="py-3 px-4 text-right">Jlh Bahan Diminta</th>
+              <th class="py-3 px-4 text-right">Jumlah Fisik</th>
+              <th class="py-3 px-4 text-left">Dokumen</th>
+              <th class="py-3 px-4 text-left">Keterangan</th>
+              <th class="py-3 px-4 text-left">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-data" class="text-gray-800">
+            <tr>
+              <td colspan="11" class="text-center py-8 text-gray-500">Memuat data…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Bottom pagination -->
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 p-3">
+      <div class="text-sm text-gray-700">
+        Halaman <span id="page-now" class="font-semibold">1</span> dari <span id="page-total" class="font-semibold">1</span>
+      </div>
+      <div class="inline-flex gap-2">
+        <button id="btn-prev" class="px-3 py-2 rounded-lg border hover:bg-gray-50 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">Prev</button>
+        <button id="btn-next" class="px-3 py-2 rounded-lg border hover:bg-gray-50 text-gray-800 disabled:opacity-50 disabled:cursor-not-allowed">Next</button>
+      </div>
+    </div>
+
+    <!-- TOTALS (paling bawah) -->
+    <div class="p-3 border-t bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-end gap-4">
+      <div class="text-sm text-gray-700">Σ Jlh Bahan Diminta:
+        <span id="sum-diminta" class="font-semibold">0</span>
+      </div>
+      <div class="text-sm text-gray-700">Σ Jumlah Fisik:
+        <span id="sum-fisik" class="font-semibold">0</span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -231,23 +269,114 @@ include_once '../layouts/header.php';
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const $ = s => document.querySelector(s);
-  const tbody = $('#tbody-data');
-  const q = $('#filter-q');
-  const selUnit = $('#filter-unit');
-  const selBulan = $('#filter-bulan');
-  const selTahun = $('#filter-tahun');
 
-  const modal = $('#crud-modal');
-  const btnAdd = $('#btn-add');
-  const btnClose = $('#btn-close');
+  // ===== Elements
+  const tbody     = $('#tbody-data');
+  const q         = $('#filter-q');
+  const selUnit   = $('#filter-unit');
+  const selBulan  = $('#filter-bulan');
+  const selTahun  = $('#filter-tahun');
+  const perPageEl = $('#per-page');
+  const btnPrev   = $('#btn-prev');
+  const btnNext   = $('#btn-next');
+  const infoFrom  = $('#info-from');
+  const infoTo    = $('#info-to');
+  const infoTotal = $('#info-total');
+  const pageNow   = $('#page-now');
+  const pageTotal = $('#page-total');
+
+  // totals (baru)
+  const sumDimintaEl = document.getElementById('sum-diminta');
+  const sumFisikEl   = document.getElementById('sum-fisik');
+
+  const modal     = $('#crud-modal');
+  
+  const btnClose  = $('#btn-close');
   const btnCancel = $('#btn-cancel');
-  const form = $('#crud-form');
-  const formAction = $('#form-action');
-  const formId = $('#form-id');
-  const title = $('#modal-title');
+  const form      = $('#crud-form');
+  const formAction= $('#form-action');
+  const formId    = $('#form-id');
+  const title     = $('#modal-title');
 
   const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); }
-  const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+  const close= () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+
+  // ===== Pagination state
+  let ALL_ROWS = [];
+  let CURRENT_PAGE = 1;          
+  let PER_PAGE = parseInt(perPageEl.value, 10) || 10;
+
+  function fmt(n){ return Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2}); }
+
+  function buildRowHTML(row) {
+    const jumlahDiminta = fmt(row.jlh_diminta);
+    const jumlahFisik   = fmt(row.jlh_fisik);
+    const fisikSuffix   = row.fisik_label ? ` <span class="text-xs text-gray-500">(${row.fisik_label})</span>` : '';
+    const docLink       = row.dokumen_path ? `<a href="${row.dokumen_path}" target="_blank" class="text-violet-600 underline">Lihat</a>` : 'N/A';
+    const payload       = encodeURIComponent(JSON.stringify(row));
+
+    return `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="py-3 px-4"><span class="font-semibold">${row.no_dokumen || '-'}</span></td>
+        <td class="py-3 px-4">${row.kebun_label || '-'}</td>
+        <td class="py-3 px-4">${row.unit_nama   || '-'}</td>
+        <td class="py-3 px-4">${row.bulan || '-'} ${row.tahun || '-'}</td>
+        <td class="py-3 px-4">${row.nama_bahan     || '-'}</td>
+        <td class="py-3 px-4">${row.jenis_pekerjaan|| '-'}</td>
+        <td class="py-3 px-4 text-right">${jumlahDiminta}</td>
+        <td class="py-3 px-4 text-right">${jumlahFisik}${fisikSuffix}</td>
+        <td class="py-3 px-4">${docLink}</td>
+        <td class="py-3 px-4">${row.keterangan_clean || '-'}</td>
+        <td class="py-3 px-4">
+          <div class="flex items-center gap-3">
+            <button class="btn-edit text-blue-600 underline" data-json="${payload}">Edit</button>
+            <button class="btn-delete text-red-600 underline" data-id="${row.id}">Hapus</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderTotals(){
+    // jumlahkan seluruh data hasil filter (ALL_ROWS), tidak terpengaruh pagination
+    const totalDiminta = ALL_ROWS.reduce((a,r)=> a + (+r.jlh_diminta||0), 0);
+    const totalFisik   = ALL_ROWS.reduce((a,r)=> a + (+r.jlh_fisik||0),   0);
+    sumDimintaEl.textContent = fmt(totalDiminta);
+    sumFisikEl.textContent   = fmt(totalFisik);
+  }
+
+  function renderPage() {
+    const total = ALL_ROWS.length;
+    const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+    if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
+    if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
+
+    const startIdx = (CURRENT_PAGE - 1) * PER_PAGE;          // 0-based
+    const endIdx   = Math.min(startIdx + PER_PAGE, total);   // exclusive
+
+    // Update info
+    infoTotal.textContent = total.toLocaleString();
+    infoFrom.textContent  = total ? (startIdx + 1).toLocaleString() : 0;
+    infoTo.textContent    = endIdx.toLocaleString();
+    pageNow.textContent   = CURRENT_PAGE.toString();
+    pageTotal.textContent = totalPages.toString();
+
+    // Enable/disable buttons
+    btnPrev.disabled = CURRENT_PAGE <= 1;
+    btnNext.disabled = CURRENT_PAGE >= totalPages;
+
+    // Render slice
+    if (!total) {
+      tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+      renderTotals(); // tetap nol
+      return;
+    }
+    const rows = ALL_ROWS.slice(startIdx, endIdx).map(buildRowHTML).join('');
+    tbody.innerHTML = rows || `<tr><td colspan="11" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+
+    // Totals tetap dihitung dari ALL_ROWS (bukan halaman)
+    renderTotals();
+  }
 
   function refreshList() {
     const fd = new FormData();
@@ -258,47 +387,22 @@ document.addEventListener('DOMContentLoaded', () => {
     fd.append('bulan', selBulan.value);
     fd.append('tahun', selTahun.value);
 
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
+    sumDimintaEl.textContent = '0';
+    sumFisikEl.textContent   = '0';
+
     fetch('pemakaian_crud.php', { method: 'POST', body: fd })
       .then(r => r.json()).then(j => {
         if (!j.success) {
           tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
-          return;
+          ALL_ROWS = []; renderPage(); return;
         }
-        if (!j.data || j.data.length === 0) {
-          tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
-          return;
-        }
-
-        tbody.innerHTML = j.data.map(row => {
-          const jumlahDiminta = Number(row.jlh_diminta || 0).toLocaleString(undefined,{maximumFractionDigits:2});
-          const jumlahFisik   = Number(row.jlh_fisik   || 0).toLocaleString(undefined,{maximumFractionDigits:2});
-          const fisikSuffix   = row.fisik_label ? ` <span class="text-xs text-gray-500">(${row.fisik_label})</span>` : '';
-          const docLink       = row.dokumen_path ? `<a href="${row.dokumen_path}" target="_blank" class="text-violet-600 underline">Lihat</a>` : 'N/A';
-          const payload       = encodeURIComponent(JSON.stringify(row));
-
-          return `
-            <tr class="border-b hover:bg-gray-50">
-              <td class="py-3 px-4"><span class="font-semibold">${row.no_dokumen || '-'}</span></td>
-              <td class="py-3 px-4">${row.kebun_label || '-'}</td>
-              <td class="py-3 px-4">${row.unit_nama   || '-'}</td>
-              <td class="py-3 px-4">${row.bulan || '-'} ${row.tahun || '-'}</td>
-              <td class="py-3 px-4">${row.nama_bahan     || '-'}</td>
-              <td class="py-3 px-4">${row.jenis_pekerjaan|| '-'}</td>
-              <td class="py-3 px-4 text-right">${jumlahDiminta}</td>
-              <td class="py-3 px-4 text-right">${jumlahFisik}${fisikSuffix}</td>
-              <td class="py-3 px-4">${docLink}</td>
-              <td class="py-3 px-4">${row.keterangan_clean || '-'}</td>
-              <td class="py-3 px-4">
-                <div class="flex items-center gap-3">
-                  <button class="btn-edit text-blue-600 underline" data-json="${payload}">Edit</button>
-                  <button class="btn-delete text-red-600 underline" data-id="${row.id}">Hapus</button>
-                </div>
-              </td>
-            </tr>
-          `;
-        }).join('');
+        ALL_ROWS = Array.isArray(j.data) ? j.data : [];
+        CURRENT_PAGE = 1;
+        renderPage();
       }).catch(err => {
         tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
+        ALL_ROWS = []; renderPage();
       });
   }
 
@@ -307,9 +411,18 @@ document.addEventListener('DOMContentLoaded', () => {
   [q, selUnit, selTahun].forEach(el => el.addEventListener('input', refreshList));
   selBulan.addEventListener('change', refreshList);
 
+  // pagination listeners
+  perPageEl.addEventListener('change', () => {
+    PER_PAGE = parseInt(perPageEl.value, 10) || 10;
+    CURRENT_PAGE = 1;
+    renderPage();
+  });
+  btnPrev.addEventListener('click', () => { CURRENT_PAGE -= 1; renderPage(); });
+  btnNext.addEventListener('click', () => { CURRENT_PAGE += 1; renderPage(); });
+
   // bahan -> hint satuan
   const bahanSelect = document.getElementById('nama_bahan');
-  const hintSatuan = document.getElementById('hint-satuan-bahan');
+  const hintSatuan  = document.getElementById('hint-satuan-bahan');
   function updateSatuanHint() {
     const opt = bahanSelect.options[bahanSelect.selectedIndex];
     hintSatuan.textContent = opt ? (opt.getAttribute('data-satuan') || '-') : '-';
@@ -317,6 +430,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bahanSelect.addEventListener('change', updateSatuanHint);
 
   // ADD
+  const btnAdd = document.getElementById('btn-add');
   btnAdd.addEventListener('click', () => {
     form.reset();
     formId.value = '';
@@ -341,14 +455,12 @@ document.addEventListener('DOMContentLoaded', () => {
       formId.value = row.id;
       title.textContent = 'Edit Pemakaian';
 
-      ['no_dokumen', 'bulan', 'tahun', 'nama_bahan', 'jenis_pekerjaan', 'jlh_diminta', 'jlh_fisik'].forEach(k => {
-        const el = document.getElementById(k);
-        if (el) el.value = row[k] ?? '';
+      ['no_dokumen','bulan','tahun','nama_bahan','jenis_pekerjaan','jlh_diminta','jlh_fisik'].forEach(k=>{
+        const el=document.getElementById(k); if(el) el.value=row[k] ?? '';
       });
       document.getElementById('unit_id').value = row.unit_id ?? '';
       document.getElementById('fisik_label').value = row.fisik_label ?? '';
       document.getElementById('kebun_label').value = row.kebun_label || '';
-      // ⬇️ isi keterangan dengan versi bersih (tanpa tag)
       document.getElementById('keterangan').value = row.keterangan_clean || '';
 
       updateSatuanHint();
@@ -386,13 +498,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // SUBMIT
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const req = ['no_dokumen', 'unit_id', 'bulan', 'tahun', 'nama_bahan', 'jenis_pekerjaan'];
+    const req = ['no_dokumen','unit_id','bulan','tahun','nama_bahan','jenis_pekerjaan'];
     for (const id of req) {
       const el = document.getElementById(id);
-      if (!el || !el.value) {
-        Swal.fire('Validasi', `Field ${id.replace('_',' ')} wajib diisi.`, 'warning');
-        return;
-      }
+      if (!el || !el.value) { Swal.fire('Validasi', `Field ${id.replace('_',' ')} wajib diisi.`, 'warning'); return; }
     }
     const fd = new FormData(form);
     fetch('pemakaian_crud.php', { method: 'POST', body: fd })

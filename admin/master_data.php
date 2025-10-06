@@ -52,15 +52,33 @@ include_once '../layouts/header.php';
     </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm overflow-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50 sticky top-0 z-10">
-        <tr id="thead-row" class="text-gray-600"></tr>
-      </thead>
-      <tbody id="tbody-data" class="[&>tr:nth-child(even)]:bg-gray-50/40">
-        <tr><td class="py-10 text-center text-gray-500">Memuat…</td></tr>
-      </tbody>
-    </table>
+  <!-- Table + Scroll wrapper -->
+  <div class="bg-white rounded-xl shadow-sm">
+    <div class="overflow-x-auto">
+      <div class="max-h-[70vh] overflow-y-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr id="thead-row" class="text-gray-600"></tr>
+          </thead>
+          <tbody id="tbody-data" class="[&>tr:nth-child(even)]:bg-gray-50/40">
+            <tr><td class="py-10 text-center text-gray-500">Memuat…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Pagination bar -->
+    <div class="flex flex-col md:flex-row items-center justify-between gap-3 p-4 border-t">
+      <div class="text-sm text-gray-600" id="page-info">—</div>
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-gray-600">Per Halaman
+          <select id="per-page" class="ml-2 border rounded px-2 py-1">
+            <option>10</option><option selected>15</option><option>20</option><option>25</option><option>50</option><option>100</option>
+          </select>
+        </label>
+        <div id="pager" class="flex items-center flex-wrap gap-1"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -95,6 +113,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // default buka "Nama Kebun"
   let currentEntity='kebun';
 
+  // pagination state
+  let page = 1;
+  let perPage = 15;
+  let total = 0;
+  let totalPages = 1;
+
+  // cache untuk client-side pagination fallback
+  let clientCache = { entity:null, rows:[] };
+
   const OPTIONS_UNITS = [<?php foreach($units as $u){echo "{value:{$u['id']},label:'".htmlspecialchars($u['nama_unit'],ENT_QUOTES)."'},";}?>];
   const OPTIONS_SATUAN= [<?php foreach($satuan as $s){echo "{value:{$s['id']},label:'".htmlspecialchars($s['nama'],ENT_QUOTES)."'},";}?>];
   const OPTIONS_SAP   = [<?php foreach($sap as $s){echo "{value:{$s['id']},label:'".htmlspecialchars($s['no_sap'],ENT_QUOTES)."'},";}?>];
@@ -106,15 +133,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // ================== ENTITIES ==================
   const ENTITIES = {
-    // NEW: Nama Kebun
     kebun:{ title:'Nama Kebun', table:['Kode','Nama Kebun','Keterangan','Aksi'],
       fields:[
         {name:'kode',label:'Kode Kebun',type:'text',required:true},
         {name:'nama_kebun',label:'Nama Kebun',type:'text',required:true},
         {name:'keterangan',label:'Keterangan',type:'text'}
       ]},
-
-    // NEW: Bahan Kimia
     bahan_kimia:{ title:'Bahan Kimia', table:['Kode','Nama Bahan','Satuan','Keterangan','Aksi'],
       fields:[
         {name:'kode',label:'Kode Bahan',type:'text',required:true},
@@ -122,7 +146,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         {name:'satuan_id',label:'Satuan',type:'select',options:OPTIONS_SATUAN},
         {name:'keterangan',label:'Keterangan',type:'text'}
       ]},
-
     jenis_pekerjaan:{ title:'Jenis Pekerjaan', table:['Nama','Keterangan','Aksi'],
       fields:[{name:'nama',label:'Nama',type:'text',required:true},{name:'keterangan',label:'Keterangan',type:'text'}] },
     unit:{ title:'Unit/Devisi', table:['Nama Unit','Keterangan','Aksi'],
@@ -227,60 +250,147 @@ document.addEventListener('DOMContentLoaded', ()=>{
       </div>`;
   }
 
+  function rowCols(entity, r){
+    switch(entity){
+      case 'kebun':
+        return `<td class="py-2.5 px-3">${cell(r.kode)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_kebun)}</td>
+                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'bahan_kimia':
+        return `<td class="py-2.5 px-3">${cell(r.kode)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_bahan)}</td>
+                <td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>
+                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'jenis_pekerjaan': return `<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'unit':           return `<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'tahun_tanam':    return `<td class="py-2.5 px-3">${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'blok':           return `<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.tahun_tanam)}</td><td class="py-2.5 px-3">${cell(r.luas_ha)}</td>`;
+      case 'fisik':          return `<td class="py-2.5 px-3">${cell(r.nama)}</td>`;
+      case 'satuan':         return `<td class="py-2.5 px-3">${cell(r.nama)}</td>`;
+      case 'tenaga':         return `<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`;
+      case 'mobil':          return `<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`;
+      case 'alat_panen':     return `<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
+      case 'sap':            return `<td class="py-2.5 px-3">${cell(r.no_sap)}</td><td class="py-2.5 px-3">${cell(r.deskripsi)}</td>`;
+      case 'jabatan':        return `<td class="py-2.5 px-3">${cell(r.nama)}</td>`;
+      case 'pupuk':          return `<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>`;
+      case 'kode_aktivitas': return `<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.no_sap||'')}</td>`;
+      case 'anggaran':       return `<td class="py-2.5 px-3">${cell(r.bulan)} ${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode_aktivitas)}</td><td class="py-2.5 px-3">${cell(r.nama_pupuk||'')}</td><td class="py-2.5 px-3">${(+r.anggaran_bulan_ini).toLocaleString()}</td><td class="py-2.5 px-3">${(+r.anggaran_tahun).toLocaleString()}</td>`;
+    }
+    return '';
+  }
+
   function renderRows(entity, rows){
     if(!rows.length){
       tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Belum ada data.</td></tr>`;
       return;
     }
-    tbody.innerHTML = rows.map(r=>{
-      let cols='';
-      switch(entity){
-        case 'kebun':
-          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td>
-                <td class="py-2.5 px-3">${cell(r.nama_kebun)}</td>
-                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
-          break;
-        case 'bahan_kimia':
-          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td>
-                <td class="py-2.5 px-3">${cell(r.nama_bahan)}</td>
-                <td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>
-                <td class="py-2.5 px-3">${cell(r.keterangan)}</td>`;
-          break;
-        case 'jenis_pekerjaan': cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'unit':           cols=`<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'tahun_tanam':    cols=`<td class="py-2.5 px-3">${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'blok':           cols=`<td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.tahun_tanam)}</td><td class="py-2.5 px-3">${cell(r.luas_ha)}</td>`; break;
-        case 'fisik':          cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
-        case 'satuan':         cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
-        case 'tenaga':         cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
-        case 'mobil':          cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
-        case 'alat_panen':     cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.keterangan)}</td>`; break;
-        case 'sap':            cols=`<td class="py-2.5 px-3">${cell(r.no_sap)}</td><td class="py-2.5 px-3">${cell(r.deskripsi)}</td>`; break;
-        case 'jabatan':        cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td>`; break;
-        case 'pupuk':          cols=`<td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.nama_satuan||'')}</td>`; break;
-        case 'kode_aktivitas': cols=`<td class="py-2.5 px-3">${cell(r.kode)}</td><td class="py-2.5 px-3">${cell(r.nama)}</td><td class="py-2.5 px-3">${cell(r.no_sap||'')}</td>`; break;
-        case 'anggaran':       cols=`<td class="py-2.5 px-3">${cell(r.bulan)} ${cell(r.tahun)}</td><td class="py-2.5 px-3">${cell(r.nama_unit)}</td><td class="py-2.5 px-3">${cell(r.kode_aktivitas)}</td><td class="py-2.5 px-3">${cell(r.nama_pupuk||'')}</td><td class="py-2.5 px-3">${(+r.anggaran_bulan_ini).toLocaleString()}</td><td class="py-2.5 px-3">${(+r.anggaran_tahun).toLocaleString()}</td>`; break;
-      }
-      return `<tr class="border-b last:border-0 hover:bg-emerald-50/40 transition-colors">
-        ${cols}
+    tbody.innerHTML = rows.map(r=>`
+      <tr class="border-b last:border-0 hover:bg-emerald-50/40 transition-colors">
+        ${rowCols(entity, r)}
         <td class="py-2.5 px-3">${actionButtons(entity, r, r.id)}</td>
-      </tr>`;
-    }).join('');
+      </tr>
+    `).join('');
+  }
+
+  // ===== Pagination UI =====
+  function updatePageInfo(){
+    const info = $('#page-info');
+    const start = total ? ((page-1)*perPage)+1 : 0;
+    const end = Math.min(page*perPage, total);
+    info.textContent = `Menampilkan ${start.toLocaleString()}–${end.toLocaleString()} dari ${total.toLocaleString()} data`;
+  }
+
+  function renderPager(){
+    const pager = $('#pager');
+    pager.innerHTML = '';
+    const makeBtn=(label, targetPage, disabled=false, active=false)=>{
+      const a=document.createElement('button');
+      a.textContent=label;
+      a.className='px-3 py-1 border rounded';
+      if (active){ a.className+=' bg-black text-white border-black'; }
+      else if (!disabled){ a.className+=' hover:bg-gray-50'; }
+      if (disabled){ a.disabled=true; a.classList.add('opacity-40','pointer-events-none'); }
+      a.addEventListener('click', ()=> { if(!disabled){ page=targetPage; renderHeadAndLoad(currentEntity); } });
+      pager.appendChild(a);
+    };
+
+    makeBtn('« First', 1, page<=1);
+    makeBtn('‹ Prev', Math.max(1,page-1), page<=1);
+
+    // window 5
+    const win=5;
+    let start = Math.max(1, page - Math.floor(win/2));
+    let end = Math.min(totalPages, start + win - 1);
+    start = Math.max(1, end - win + 1);
+    for(let p=start; p<=end; p++){
+      makeBtn(String(p), p, false, p===page);
+    }
+
+    makeBtn('Next ›', Math.min(totalPages, page+1), page>=totalPages);
+    makeBtn('Last »', totalPages, page>=totalPages);
+  }
+
+  // ===== Data Loader (server or client pagination) =====
+  function loadServer(entity){
+    const fd=new FormData();
+    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+    fd.append('action','list');
+    fd.append('entity',entity);
+    fd.append('page', String(page));
+    fd.append('per_page', String(perPage));
+
+    return fetch('master_data_crud.php',{method:'POST',body:fd})
+      .then(r=>r.json())
+      .then(j=>{
+        // Jika server mengembalikan total (server-side pagination)
+        if (j && j.success && typeof j.total === 'number') {
+          total = j.total;
+          perPage = j.per_page ? parseInt(j.per_page) : perPage;
+          page = j.page ? parseInt(j.page) : page;
+          totalPages = Math.max(1, Math.ceil(total / perPage));
+          renderRows(entity, j.data||[]);
+          updatePageInfo();
+          renderPager();
+          return true;
+        }
+        // Fallback: anggap j.data adalah full list (client-side)
+        if (j && j.success && Array.isArray(j.data)) {
+          clientCache = { entity, rows: j.data };
+          total = clientCache.rows.length;
+          totalPages = Math.max(1, Math.ceil(total / perPage));
+          const start = (page-1)*perPage;
+          const slice = clientCache.rows.slice(start, start+perPage);
+          renderRows(entity, slice);
+          updatePageInfo();
+          renderPager();
+          return true;
+        }
+        throw new Error(j?.message || 'Gagal memuat data');
+      });
   }
 
   function renderHeadAndLoad(entity){
     renderHead(entity);
     tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Memuat…</td></tr>`;
-    const fd=new FormData();
-    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-    fd.append('action','list');
-    fd.append('entity',entity);
-    fetch('master_data_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json()).then(j=>{
-        if(j.success) renderRows(entity, j.data||[]);
-        else tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-red-500">${j.message||'Error'}</td></tr>`;
-      })
-      .catch(()=> tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-red-500">Gagal memuat data.</td></tr>`);
+
+    // Jika cache entity sama dan kita berada di client-side mode, cukup slice
+    if (clientCache.entity === entity && clientCache.rows.length){
+      total = clientCache.rows.length;
+      totalPages = Math.max(1, Math.ceil(total / perPage));
+      const start = (page-1)*perPage;
+      const slice = clientCache.rows.slice(start, start+perPage);
+      renderRows(entity, slice);
+      updatePageInfo();
+      renderPager();
+      return;
+    }
+
+    // Load dari server
+    loadServer(entity).catch(()=>{
+      tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-red-500">Gagal memuat data.</td></tr>`;
+      $('#page-info').textContent='—';
+      $('#pager').innerHTML='';
+    });
   }
 
   // Tabs
@@ -289,8 +399,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
       document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active','border-emerald-600','text-emerald-700'));
       btn.classList.add('active','border-emerald-600','text-emerald-700');
       currentEntity = btn.dataset.entity;
+      // reset pagination saat pindah entity
+      page = 1;
+      clientCache = { entity:null, rows:[] };
       renderHeadAndLoad(currentEntity);
     });
+  });
+
+  // Per-page selector
+  $('#per-page').addEventListener('change', (e)=>{
+    perPage = parseInt(e.target.value) || 15;
+    page = 1;
+    renderHeadAndLoad(currentEntity);
   });
 
   // Add
@@ -318,7 +438,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
           fetch('master_data_crud.php',{method:'POST',body:fd})
             .then(r=>r.json())
             .then(j=>{
-              if(j.success){ Swal.fire('Terhapus','', 'success'); renderHeadAndLoad(entity); }
+              if(j.success){
+                Swal.fire('Terhapus','', 'success');
+                // refresh list pada halaman sekarang
+                if (clientCache.entity === entity && clientCache.rows.length){
+                  // hapus dari cache juga
+                  clientCache.rows = clientCache.rows.filter(x => String(x.id) !== String(id));
+                }
+                renderHeadAndLoad(entity);
+              }
               else Swal.fire('Gagal', j.message||'Error','error');
             })
             .catch(()=> Swal.fire('Gagal','Jaringan bermasalah','error'));
@@ -345,7 +473,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fetch('master_data_crud.php',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(j=>{
-        if(j.success){ Swal.fire('Berhasil',j.message,'success'); modalEl.classList.add('hidden'); modalEl.classList.remove('flex'); renderHeadAndLoad(entity); }
+        if(j.success){
+          Swal.fire('Berhasil',j.message,'success');
+          modalEl.classList.add('hidden'); modalEl.classList.remove('flex');
+          // invalidasi cache biar refetch bersih (atau kita patch cache)
+          clientCache = { entity:null, rows:[] };
+          // setelah create/update, balik ke halaman 1 biar kelihatan data baru
+          page = 1;
+          renderHeadAndLoad(entity);
+        }
         else Swal.fire('Gagal', j.message||'Error', 'error');
       })
       .catch(()=> Swal.fire('Gagal','Jaringan bermasalah','error'));

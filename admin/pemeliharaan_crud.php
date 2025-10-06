@@ -1,157 +1,124 @@
 <?php
-// pages/pemeliharaan_crud.php
+// pages/pemeliharaan_crud.php — kebun_id dipakai bila ada; rayon/bibit terpisah; status aman enum; tanggal auto; SweetAlert friendly
 session_start();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-  echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit;
-}
-if ($_SERVER['REQUEST_METHOD']!=='POST') {
-  echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit;
-}
-if (empty($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token']??'', $_POST['csrf_token'])) {
-  echo json_encode(['success'=>false,'message'=>'Token keamanan tidak valid. Silakan refresh halaman.']); exit;
-}
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { echo json_encode(['success'=>false,'message'=>'Akses ditolak.']); exit; }
+if ($_SERVER['REQUEST_METHOD']!=='POST') { echo json_encode(['success'=>false,'message'=>'Metode tidak valid.']); exit; }
+if (empty($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token']??'', $_POST['csrf_token'])) { echo json_encode(['success'=>false,'message'=>'CSRF tidak valid.']); exit; }
 
 require_once '../config/database.php';
-$db = new Database(); $pdo = $db->getConnection();
+$db=new Database(); $pdo=$db->getConnection();
 
-$action = $_POST['action'] ?? '';
-
-$allowedKategori = ['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
-$bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-
-function str($k){ return trim((string)($_POST[$k] ?? '')); }
-function num($k){ $v=$_POST[$k]??null; return ($v===''||$v===null)?null:(is_numeric($v)?(float)$v:null); }
-function validDate($d){ return (bool)strtotime($d); }
-
-// lookup helper -> nama
-function namaById(PDO $pdo, $table, $id, $field='nama'){
-  if (!$id) return null;
-  $allowed = ['md_jenis_pekerjaan','md_tenaga','md_kebun'];
-  if (!in_array($table, $allowed, true)) return null;
-  // kolom untuk md_kebun berbeda (nama_kebun)
-  $col = $field;
-  if ($table==='md_kebun') $col = 'nama_kebun';
-  $st = $pdo->prepare("SELECT {$col} AS nama FROM {$table} WHERE id=:id LIMIT 1");
-  $st->execute([':id'=>$id]);
-  $row = $st->fetch(PDO::FETCH_ASSOC);
-  return $row['nama'] ?? null;
+/* helpers */
+function col_exists(PDO $pdo,string $col): bool{
+  static $cols=null;
+  if ($cols===null){
+    $st=$pdo->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='pemeliharaan'");
+    $cols=array_map('strtolower', array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME'));
+  }
+  return in_array(strtolower($col), $cols, true);
+}
+function pick_col(PDO $pdo,array $cands){ foreach($cands as $c) if(col_exists($pdo,$c)) return $c; return null; }
+function namaById(PDO $pdo,string $table,int $id,string $nameField='nama'){
+  if(!$id) return null;
+  if($table==='md_kebun') $nameField='nama_kebun';
+  $st=$pdo->prepare("SELECT $nameField AS n FROM $table WHERE id=:id LIMIT 1"); $st->execute([':id'=>$id]);
+  return $st->fetchColumn() ?: null;
+}
+function bulanToNum(string $b): ?int {
+  $list=["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+  $i=array_search($b,$list,true); return $i===false?null:$i+1;
+}
+function statusForDb(float $rencana,float $realisasi): string {
+  $p = $rencana>0 ? ($realisasi/$rencana*100) : 0;
+  if ($p>=100) return 'Selesai';
+  if ($p<70)   return 'Tertunda';
+  return 'Berjalan';
 }
 
+$allowedKategori=['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
+$action=$_POST['action']??'';
+
 try{
-  if ($action==='store' || $action==='create'){
-    $kategori = str('kategori');
+  if (in_array($action,['store','create','update'],true)){
+    $isUpdate = ($action==='update');
+    $id = (int)($_POST['id']??0);
 
-    // ambil id dari dropdown
-    $jenis_id   = $_POST['jenis_id']!=='' ? (int)$_POST['jenis_id'] : 0;
-    $tenaga_id  = $_POST['tenaga_id']!=='' ? (int)$_POST['tenaga_id'] : 0;
-    $kebun_id   = $_POST['kebun_id']!=='' ? (int)$_POST['kebun_id'] : 0;
+    $kategori = trim((string)($_POST['kategori'] ?? 'TU'));
+    if (!in_array($kategori,$allowedKategori,true)) { echo json_encode(['success'=>false,'message'=>'Kategori tidak valid']); exit; }
 
-    // konversi ke nama (yang akan disimpan)
-    $jenis_nama   = namaById($pdo, 'md_jenis_pekerjaan', $jenis_id);
-    $tenaga_nama  = namaById($pdo, 'md_tenaga', $tenaga_id);
-    $kebun_nama   = $kebun_id ? namaById($pdo, 'md_kebun', $kebun_id, 'nama_kebun') : null;
+    // master id -> nama
+    $jenis_id  = (int)($_POST['jenis_id'] ?? 0);
+    $tenaga_id = (int)($_POST['tenaga_id'] ?? 0);
+    $unit_id   = (int)($_POST['unit_id'] ?? 0);
+    $kebun_id  = (int)($_POST['kebun_id'] ?? 0);
 
-    $unit_id  = $_POST['unit_id']!=='' ? (int)$_POST['unit_id'] : null;
+    $jenis_nama  = namaById($pdo,'md_jenis_pekerjaan',$jenis_id,'nama');
+    $tenaga_nama = namaById($pdo,'md_tenaga',$tenaga_id,'nama');
+    $kebun_nama  = $kebun_id? namaById($pdo,'md_kebun',$kebun_id,'nama_kebun') : null;
 
-    // rayon dipakai untuk MENYIMPAN nama kebun (tanpa ubah skema)
-    $rayon    = $kebun_nama ?: str('rayon'); // jika pilih kebun, override
-    $tanggal  = str('tanggal');
-    $bulan    = str('bulan');
-    $tahun    = str('tahun');
-    $rencana  = num('rencana');
-    $realisasi= num('realisasi');
-    $status   = str('status') ?: 'Berjalan';
+    $bulan = trim((string)($_POST['bulan'] ?? ''));
+    $tahun = (int)($_POST['tahun'] ?? 0);
+    $rencana   = ($_POST['rencana']===''||$_POST['rencana']===null)?0:(float)$_POST['rencana'];
+    $realisasi = ($_POST['realisasi']===''||$_POST['realisasi']===null)?0:(float)$_POST['realisasi'];
 
-    $errors=[];
-    if(!in_array($kategori,$allowedKategori,true)) $errors[]='Kategori tidak valid.';
-    if(!$jenis_id || !$jenis_nama) $errors[]='Jenis pekerjaan wajib dipilih.';
-    if(!$tenaga_id || !$tenaga_nama) $errors[]='Tenaga wajib dipilih.';
-    if(!$unit_id)   $errors[]='Unit/Devisi wajib dipilih.';
-    if($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
-    if(!in_array($bulan,$bulanList,true)) $errors[]='Bulan tidak valid.';
-    if($tahun==='' || !preg_match('/^(20[0-9]{2}|2100)$/',$tahun)) $errors[]='Tahun harus 2000–2100.';
-    if($rencana!==null && $rencana<0) $errors[]='Rencana tidak boleh negatif.';
-    if($realisasi!==null && $realisasi<0) $errors[]='Realisasi tidak boleh negatif.';
-    if(!in_array($status,['Berjalan','Selesai','Tertunda'],true)) $status='Berjalan';
+    $rayon_in = trim((string)($_POST['rayon'] ?? '')); // opsional
+    $bibit_in = trim((string)($_POST['bibit'] ?? '')); // opsional
 
-    if($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
+    $err=[];
+    if(!$jenis_id || !$jenis_nama)  $err[]='Jenis pekerjaan wajib dipilih.';
+    if(!$tenaga_id || !$tenaga_nama)$err[]='Tenaga wajib dipilih.';
+    if(!$unit_id)                   $err[]='Unit/Devisi wajib dipilih.';
+    $blnNum = bulanToNum($bulan);   if(!$blnNum) $err[]='Bulan tidak valid.';
+    if($tahun<2000 || $tahun>2100)  $err[]='Tahun harus 2000–2100.';
+    if($rencana<0 || $realisasi<0)  $err[]='Nilai tidak boleh negatif.';
 
-    $sql="INSERT INTO pemeliharaan
-          (kategori, jenis_pekerjaan, tenaga, unit_id, rayon, tanggal, bulan, tahun, rencana, realisasi, status, created_at, updated_at)
-          VALUES
-          (:kategori,:jenis,:tenaga,:unit_id,:rayon,:tanggal,:bulan,:tahun,:rencana,:realisasi,:status,NOW(),NOW())";
-    $st=$pdo->prepare($sql);
-    $st->execute([
-      ':kategori'=>$kategori, ':jenis'=>$jenis_nama, ':tenaga'=>$tenaga_nama,
-      ':unit_id'=>$unit_id, ':rayon'=>$rayon,
-      ':tanggal'=>$tanggal, ':bulan'=>$bulan, ':tahun'=>$tahun,
-      ':rencana'=>$rencana??0, ':realisasi'=>$realisasi??0, ':status'=>$status
-    ]);
-    echo json_encode(['success'=>true,'message'=>'Data berhasil ditambahkan.']); exit;
-  }
+    if($err){ echo json_encode(['success'=>false,'message'=>'Validasi gagal','errors'=>$err]); exit; }
 
-  if ($action==='update'){
-    $id=(int)($_POST['id']??0);
-    if($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
+    $tanggal = sprintf('%04d-%02d-01', $tahun, $blnNum); // auto first day
+    $status  = statusForDb($rencana,$realisasi);
 
-    $jenis_id   = $_POST['jenis_id']!=='' ? (int)$_POST['jenis_id'] : 0;
-    $tenaga_id  = $_POST['tenaga_id']!=='' ? (int)$_POST['tenaga_id'] : 0;
-    $kebun_id   = $_POST['kebun_id']!=='' ? (int)$_POST['kebun_id'] : 0;
+    $hasKebunId = col_exists($pdo,'kebun_id');
+    $colKebunNm = pick_col($pdo,['kebun_nama','kebun','nama_kebun','kebun_text']); // name column if any
+    $colRayon   = pick_col($pdo,['rayon','rayon_nama']);
+    $colBibit   = pick_col($pdo,['stood','stood_jenis','jenis_bibit','bibit']);
 
-    $jenis_nama   = namaById($pdo, 'md_jenis_pekerjaan', $jenis_id);
-    $tenaga_nama  = namaById($pdo, 'md_tenaga', $tenaga_id);
-    $kebun_nama   = $kebun_id ? namaById($pdo, 'md_kebun', $kebun_id, 'nama_kebun') : null;
+    if(!$isUpdate){
+      $cols=['kategori','jenis_pekerjaan','tenaga','unit_id','tanggal','bulan','tahun','rencana','realisasi','status','created_at','updated_at'];
+      $vals=[':kategori',':jenis',':tenaga',':unit_id',':tanggal',':bulan',':tahun',':rencana',':realisasi',':status','NOW()','NOW()'];
+      $bind=[':kategori'=>$kategori,':jenis'=>$jenis_nama,':tenaga'=>$tenaga_nama,':unit_id'=>$unit_id,':tanggal'=>$tanggal,':bulan'=>$bulan,':tahun'=>$tahun,':rencana'=>$rencana,':realisasi'=>$realisasi,':status'=>$status];
 
-    $unit_id  = $_POST['unit_id']!=='' ? (int)$_POST['unit_id'] : null;
-    // rayon: tetap jadi nama kebun (kalau kebun dipilih); jika tidak, gunakan yang dikirim (hidden)
-    $rayon    = $kebun_nama ?: str('rayon');
-    $tanggal  = str('tanggal');
-    $bulan    = str('bulan');
-    $tahun    = str('tahun');
-    $rencana  = num('rencana');
-    $realisasi= num('realisasi');
-    $status   = str('status') ?: 'Berjalan';
+      // kebun: pakai kebun_id bila ada; kalau tidak, ke kolom nama kebun
+      if ($hasKebunId && $kebun_id){ $cols[]='kebun_id'; $vals[]=':kebun_id'; $bind[':kebun_id']=$kebun_id; }
+      elseif ($colKebunNm && $kebun_nama!==null){ $cols[]=$colKebunNm; $vals[]=':kebun_nm'; $bind[':kebun_nm']=$kebun_nama; }
 
-    $errors=[];
-    if(!$jenis_id || !$jenis_nama) $errors[]='Jenis pekerjaan wajib dipilih.';
-    if(!$tenaga_id || !$tenaga_nama) $errors[]='Tenaga wajib dipilih.';
-    if(!$unit_id)   $errors[]='Unit/Devisi wajib dipilih.';
-    if($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
-    if(!in_array($bulan,$bulanList,true)) $errors[]='Bulan tidak valid.';
-    if($tahun==='' || !preg_match('/^(20[0-9]{2}|2100)$/',$tahun)) $errors[]='Tahun harus 2000–2100.';
-    if($rencana!==null && $rencana<0) $errors[]='Rencana tidak boleh negatif.';
-    if($realisasi!==null && $realisasi<0) $errors[]='Realisasi tidak boleh negatif.';
-    if(!in_array($status,['Berjalan','Selesai','Tertunda'],true)) $status='Berjalan';
+      if ($colRayon) { $cols[]=$colRayon; $vals[]=':rayon'; $bind[':rayon']=$rayon_in; }
+      if ($colBibit) { $cols[]=$colBibit; $vals[]=':bibit'; $bind[':bibit']=$bibit_in; }
 
-    if($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
+      $sql="INSERT INTO pemeliharaan (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
+      $st=$pdo->prepare($sql); $st->execute($bind);
+      echo json_encode(['success'=>true,'message'=>'Data berhasil ditambahkan.']); exit;
 
-    $sql="UPDATE pemeliharaan SET
-            jenis_pekerjaan=:jenis,
-            tenaga=:tenaga,
-            unit_id=:unit_id,
-            rayon=:rayon,
-            tanggal=:tanggal,
-            bulan=:bulan,
-            tahun=:tahun,
-            rencana=:rencana,
-            realisasi=:realisasi,
-            status=:status,
-            updated_at=NOW()
-          WHERE id=:id";
-    $st=$pdo->prepare($sql);
-    $st->execute([
-      ':jenis'=>$jenis_nama, ':tenaga'=>$tenaga_nama, ':unit_id'=>$unit_id, ':rayon'=>$rayon, ':tanggal'=>$tanggal,
-      ':bulan'=>$bulan, ':tahun'=>$tahun, ':rencana'=>$rencana??0, ':realisasi'=>$realisasi??0,
-      ':status'=>$status, ':id'=>$id
-    ]);
-    echo json_encode(['success'=>true,'message'=>'Data berhasil diperbarui.']); exit;
+    } else {
+      if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid']); exit; }
+      $sets=" kategori=:kategori, jenis_pekerjaan=:jenis, tenaga=:tenaga, unit_id=:unit_id, tanggal=:tanggal, bulan=:bulan, tahun=:tahun, rencana=:rencana, realisasi=:realisasi, status=:status, updated_at=NOW() ";
+      $bind=[':kategori'=>$kategori,':jenis'=>$jenis_nama,':tenaga'=>$tenaga_nama,':unit_id'=>$unit_id,':tanggal'=>$tanggal,':bulan'=>$bulan,':tahun'=>$tahun,':rencana'=>$rencana,':realisasi'=>$realisasi,':status'=>$status,':id'=>$id];
+
+      if ($hasKebunId){ $sets.=", kebun_id=:kid"; $bind[':kid']=$kebun_id?:null; }
+      elseif ($colKebunNm){ $sets.=", $colKebunNm=:kname"; $bind[':kname']=$kebun_nama??''; }
+
+      if ($colRayon){ $sets.=", $colRayon=:rayon"; $bind[':rayon']=$rayon_in; }
+      if ($colBibit){ $sets.=", $colBibit=:bibit"; $bind[':bibit']=$bibit_in; }
+
+      $sql="UPDATE pemeliharaan SET $sets WHERE id=:id";
+      $st=$pdo->prepare($sql); $st->execute($bind);
+      echo json_encode(['success'=>true,'message'=>'Data berhasil diperbarui.']); exit;
+    }
   }
 
   if ($action==='delete'){
-    $id=(int)($_POST['id']??0);
-    if($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
+    $id=(int)($_POST['id']??0); if($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid']); exit; }
     $pdo->prepare("DELETE FROM pemeliharaan WHERE id=:id")->execute([':id'=>$id]);
     echo json_encode(['success'=>true,'message'=>'Data berhasil dihapus.']); exit;
   }

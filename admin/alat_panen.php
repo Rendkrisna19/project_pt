@@ -19,84 +19,104 @@ include_once '../layouts/header.php';
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold">Alat Panen</h1>
-      <p class="text-gray-500">Kelola stok alat panen per kebun, unit & periode</p>
+      <p class="text-gray-500">Kelola stok alat panen per kebun, unit &amp; periode</p>
     </div>
     <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Input Alat Panen</button>
   </div>
 
- <!-- Filter -->
-<div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
-  <select id="f-kebun" class="border rounded px-3 py-2">
-    <option value="">Semua Kebun</option>
-    <?php foreach ($kebun as $k): ?>
-      <option value="<?= $k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
-    <?php endforeach; ?>
-  </select>
+  <!-- Filter -->
+  <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-5 gap-3 items-start">
+    <select id="f-kebun" class="border rounded px-3 py-2">
+      <option value="">Semua Kebun</option>
+      <?php foreach ($kebun as $k): ?>
+        <option value="<?= $k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+      <?php endforeach; ?>
+    </select>
 
-  <select id="f-unit" class="border rounded px-3 py-2">
-    <option value="">Semua Unit</option>
-    <?php foreach ($units as $u): ?>
-      <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
-    <?php endforeach; ?>
-  </select>
+    <select id="f-unit" class="border rounded px-3 py-2">
+      <option value="">Semua Unit</option>
+      <?php foreach ($units as $u): ?>
+        <option value="<?= $u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
+      <?php endforeach; ?>
+    </select>
 
-  <select id="f-bulan" class="border rounded px-3 py-2">
-    <option value="">Semua Bulan</option>
-    <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-  </select>
+    <select id="f-bulan" class="border rounded px-3 py-2">
+      <option value="">Semua Bulan</option>
+      <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
+    </select>
 
-  <select id="f-tahun" class="border rounded px-3 py-2">
-    <?php for ($y=$tahunNow-2; $y<=$tahunNow+2; $y++): ?>
-      <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-    <?php endfor; ?>
-  </select>
+    <select id="f-tahun" class="border rounded px-3 py-2">
+      <?php for ($y=$tahunNow-2; $y<=$tahunNow+2; $y++): ?>
+        <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
+      <?php endfor; ?>
+    </select>
 
-  <div class="flex flex-wrap gap-2">
-    <button id="btn-refresh" class="border rounded px-2 py-2 hover:bg-gray-50">Refresh</button>
+    <div class="flex flex-wrap gap-2">
+      <button id="btn-refresh" class="border rounded px-2 py-2 hover:bg-gray-50">Refresh</button>
 
-    <!-- Export Excel -->
-    <button id="btn-export-excel" class="flex items-center gap-2 border px-3 py-2 rounded bg-white hover:bg-gray-50" title="Export Excel">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-        <path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/>
-      </svg>
-      <span>Excel</span>
-    </button>
+      <!-- Export Excel -->
+      <button id="btn-export-excel" class="flex items-center gap-2 border px-3 py-2 rounded bg-white hover:bg-gray-50" title="Export Excel">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
+          <path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/>
+        </svg>
+        <span>Excel</span>
+      </button>
 
-    <!-- Cetak PDF -->
-    <button id="btn-export-pdf" class="flex items-center gap-2 border px-3 py-2 rounded bg-white hover:bg-gray-50" title="Cetak PDF">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
-        <path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/>
-      </svg>
-      <span>PDF</span>
-    </button>
+      <!-- Cetak PDF -->
+      <button id="btn-export-pdf" class="flex items-center gap-2 border px-3 py-2 rounded bg-white hover:bg-gray-50" title="Cetak PDF">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/>
+          <path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/>
+        </svg>
+        <span>PDF</span>
+      </button>
+    </div>
   </div>
-</div>
 
-  <!-- Tabel -->
-  <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
-        <tr class="text-gray-600">
-          <th class="py-3 px-4 text-left">Periode</th>
-          <th class="py-3 px-4 text-left">Kebun</th>
-          <th class="py-3 px-4 text-left">Unit/Devisi</th>
-          <th class="py-3 px-4 text-left">Jenis Alat Panen</th>
-          <th class="py-3 px-4 text-left">Stok Awal</th>
-          <th class="py-3 px-4 text-left">Mutasi Masuk</th>
-          <th class="py-3 px-4 text-left">Mutasi Keluar</th>
-          <th class="py-3 px-4 text-left">Dipakai</th>
-          <th class="py-3 px-4 text-left">Stok Akhir</th>
-          <th class="py-3 px-4 text-left">Krani Afdeling</th>
-          <th class="py-3 px-4 text-left">Catatan</th>
-          <th class="py-3 px-4 text-left">Aksi</th>
-        </tr>
-      </thead>
-      <tbody id="tbody-data">
-        <tr><td colspan="12" class="text-center py-10 text-gray-500">Memuat…</td></tr>
-      </tbody>
-    </table>
+  <!-- Info & Controls Pagination -->
+  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+    <div class="text-sm text-gray-600" id="page-info">Menampilkan 0–0 dari 0 data</div>
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-gray-700">Baris / halaman</label>
+      <select id="per-page" class="border rounded-lg px-2 py-1">
+        <option value="10">10</option>
+        <option value="25" selected>25</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+      </select>
+      <div class="inline-flex gap-2 ml-2">
+        <button id="btn-prev" class="px-3 py-2 rounded-lg border text-gray-800 hover:bg-gray-50" disabled>Prev</button>
+        <button id="btn-next" class="px-3 py-2 rounded-lg border text-gray-800 hover:bg-gray-50" disabled>Next</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabel (sticky header + scroll only the table) -->
+  <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+    <div class="max-h-[70vh] overflow-y-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 sticky top-0 z-10">
+          <tr class="text-gray-600">
+            <th class="py-3 px-4 text-left">Periode</th>
+            <th class="py-3 px-4 text-left">Kebun</th>
+            <th class="py-3 px-4 text-left">Unit/Devisi</th>
+            <th class="py-3 px-4 text-left">Jenis Alat Panen</th>
+            <th class="py-3 px-4 text-right">Stok Awal</th>
+            <th class="py-3 px-4 text-right">Mutasi Masuk</th>
+            <th class="py-3 px-4 text-right">Mutasi Keluar</th>
+            <th class="py-3 px-4 text-right">Dipakai</th>
+            <th class="py-3 px-4 text-right">Stok Akhir</th>
+            <th class="py-3 px-4 text-left">Krani Afdeling</th>
+            <th class="py-3 px-4 text-left">Catatan</th>
+            <th class="py-3 px-4 text-left">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-data">
+          <tr><td colspan="12" class="text-center py-10 text-gray-500">Memuat…</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -199,9 +219,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const $=s=>document.querySelector(s);
   const tbody=$('#tbody-data');
 
+  // ===== Pagination state =====
+  const perSel = $('#per-page');
+  const btnPrev = $('#btn-prev');
+  const btnNext = $('#btn-next');
+  const pageInfo = $('#page-info');
+  let DATA_CACHE = [];
+  let CUR_PAGE = 1;
+
+  // ===== Modal =====
   const modal=$('#crud-modal');
-  const open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
-  const close=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
+  const openModal=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
+  const closeModal=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
 
   // hitung stok akhir realtime
   const calc = ()=>{
@@ -216,12 +245,63 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   // buttons
-  $('#btn-add').addEventListener('click',()=>{document.getElementById('crud-form').reset(); document.getElementById('form-action').value='store'; document.getElementById('form-id').value=''; calc(); open();});
-  $('#btn-close').addEventListener('click',close); $('#btn-cancel').addEventListener('click',close);
+  $('#btn-add').addEventListener('click',()=>{
+    const f=document.getElementById('crud-form');
+    f.reset();
+    document.getElementById('form-action').value='store';
+    document.getElementById('form-id').value='';
+    calc();
+    openModal();
+  });
+  $('#btn-close').addEventListener('click',closeModal);
+  $('#btn-cancel').addEventListener('click',closeModal);
   $('#btn-refresh').addEventListener('click', refresh);
 
-  // filter
+  // filter listeners
   ['f-kebun','f-unit','f-bulan','f-tahun'].forEach(id=>document.getElementById(id).addEventListener('change', refresh));
+
+  function renderPage(){
+    const total = DATA_CACHE.length;
+    const per = parseInt(perSel.value||'25',10);
+    const totalPages = Math.max(1, Math.ceil(total/per));
+    CUR_PAGE = Math.min(Math.max(1, CUR_PAGE), totalPages);
+
+    const start = (CUR_PAGE-1)*per;
+    const end = Math.min(start+per, total);
+    const rows = DATA_CACHE.slice(start, end);
+
+    if(rows.length===0){
+      tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-gray-500">Belum ada data.</td></tr>`;
+    }else{
+      tbody.innerHTML = rows.map(x=>{
+        const payload = encodeURIComponent(JSON.stringify(x));
+        const nf = (n)=>Number(n||0).toLocaleString();
+        return `
+          <tr class="border-b hover:bg-gray-50">
+            <td class="py-2 px-3">${x.bulan} ${x.tahun}</td>
+            <td class="py-2 px-3">${x.nama_kebun || '-'}</td>
+            <td class="py-2 px-3">${x.nama_unit}</td>
+            <td class="py-2 px-3">${x.jenis_alat}</td>
+            <td class="py-2 px-3 text-right">${nf(x.stok_awal)}</td>
+            <td class="py-2 px-3 text-right">${nf(x.mutasi_masuk)}</td>
+            <td class="py-2 px-3 text-right">${nf(x.mutasi_keluar)}</td>
+            <td class="py-2 px-3 text-right">${nf(x.dipakai)}</td>
+            <td class="py-2 px-3 text-right font-semibold">${nf(x.stok_akhir)}</td>
+            <td class="py-2 px-3">${x.krani_afdeling||'-'}</td>
+            <td class="py-2 px-3">${x.catatan||'-'}</td>
+            <td class="py-2 px-3">
+              <button class="text-blue-600 underline btn-edit" data-json="${payload}">Edit</button>
+              <button class="text-red-600 underline btn-del" data-id="${x.id}">Hapus</button>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    const from = total ? start+1 : 0;
+    pageInfo.textContent = `Menampilkan ${from}–${end} dari ${total} data`;
+    btnPrev.disabled = CUR_PAGE<=1;
+    btnNext.disabled = CUR_PAGE>=totalPages;
+  }
 
   function refresh(){
     const fd=new FormData();
@@ -232,42 +312,43 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('bulan',$('#f-bulan').value);
     fd.append('tahun',$('#f-tahun').value);
 
+    tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-gray-500">Memuat…</td></tr>`;
+
     fetch('alat_panen_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{
-        if(!j.success){ tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`; return; }
-        if(!j.data.length){ tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`; return; }
-        tbody.innerHTML = j.data.map(x=>`
-          <tr class="border-b hover:bg-gray-50">
-            <td class="py-2 px-3">${x.bulan} ${x.tahun}</td>
-            <td class="py-2 px-3">${x.nama_kebun || '-'}</td>
-            <td class="py-2 px-3">${x.nama_unit}</td>
-            <td class="py-2 px-3">${x.jenis_alat}</td>
-            <td class="py-2 px-3">${(+x.stok_awal).toLocaleString()}</td>
-            <td class="py-2 px-3">${(+x.mutasi_masuk).toLocaleString()}</td>
-            <td class="py-2 px-3">${(+x.mutasi_keluar).toLocaleString()}</td>
-            <td class="py-2 px-3">${(+x.dipakai).toLocaleString()}</td>
-            <td class="py-2 px-3 font-semibold">${(+x.stok_akhir).toLocaleString()}</td>
-            <td class="py-2 px-3">${x.krani_afdeling||'-'}</td>
-            <td class="py-2 px-3">${x.catatan||'-'}</td>
-            <td class="py-2 px-3">
-              <button class="text-blue-600 underline btn-edit" data-json='${JSON.stringify(x)}'>Edit</button>
-              <button class="text-red-600 underline btn-del" data-id="${x.id}">Hapus</button>
-            </td>
-          </tr>`).join('');
+        if(!j.success){
+          DATA_CACHE=[]; renderPage();
+          tbody.innerHTML=`<tr><td colspan="12" class="text-center py-10 text-red-500">${j.message||'Error'}</td></tr>`;
+          return;
+        }
+        DATA_CACHE = Array.isArray(j.data)? j.data : [];
+        CUR_PAGE = 1;
+        renderPage();
       })
-      .catch(()=> tbody.innerHTML=`<tr><td colspan="12" class="text-center py-8 text-red-500">Gagal memuat data.</td></tr>`);
+      .catch(()=>{
+        DATA_CACHE=[]; renderPage();
+        tbody.innerHTML=`<tr><td colspan="12" class="text-center py-10 text-red-500">Gagal memuat data.</td></tr>`;
+      });
   }
   refresh();
 
+  // pagination controls
+  perSel.addEventListener('change', ()=>{ CUR_PAGE=1; renderPage(); });
+  btnPrev.addEventListener('click', ()=>{ CUR_PAGE--; renderPage(); });
+  btnNext.addEventListener('click', ()=>{ CUR_PAGE++; renderPage(); });
+
+  // row actions
   document.body.addEventListener('click',e=>{
     if(e.target.classList.contains('btn-edit')){
-      const d=JSON.parse(e.target.dataset.json);
-      const form=document.getElementById('crud-form'); form.reset();
-      document.getElementById('form-action').value='update'; document.getElementById('form-id').value=d.id;
+      const d=JSON.parse(decodeURIComponent(e.target.dataset.json));
+      const f=document.getElementById('crud-form'); f.reset();
+      document.getElementById('form-action').value='update';
+      document.getElementById('form-id').value=d.id;
       ['bulan','tahun','kebun_id','unit_id','jenis_alat','stok_awal','mutasi_masuk','mutasi_keluar','dipakai','stok_akhir','krani_afdeling','catatan'].forEach(k=>{
         if(document.getElementById(k)) document.getElementById(k).value = d[k] ?? '';
       });
-      calc(); open();
+      calc();
+      openModal();
     }
     if(e.target.classList.contains('btn-del')){
       const id=e.target.dataset.id;
@@ -290,21 +371,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // submit
   document.getElementById('crud-form').addEventListener('submit',e=>{
     e.preventDefault();
-    if(!$('#kebun_id').value || !$('#unit_id').value || !$('#bulan').value || !$('#tahun').value || !$('#jenis_alat').value){
-      Swal.fire('Oops', 'Bulan/Tahun/Kebun/Unit dan Jenis Alat wajib diisi.', 'warning'); return;
-    }
+    const need = ['kebun_id','unit_id','bulan','tahun','jenis_alat'];
+    for(const n of need){ if(!document.getElementById(n).value){ Swal.fire('Oops', 'Bulan/Tahun/Kebun/Unit dan Jenis Alat wajib diisi.', 'warning'); return; } }
     calc();
     const fd=new FormData(e.target);
     fetch('alat_panen_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{
-        if(j.success){ close(); Swal.fire('Berhasil', j.message, 'success'); refresh(); }
+        if(j.success){ closeModal(); Swal.fire('Berhasil', j.message, 'success'); refresh(); }
         else Swal.fire('Gagal', j.message||'Error', 'error');
       })
       .catch(()=> Swal.fire('Gagal','Terjadi kesalahan jaringan','error'));
   });
 });
 
-// === Export Excel & PDF (bawa filter aktif, termasuk kebun) ===
+// === Export Excel & PDF (ikut filter aktif) ===
 document.getElementById('btn-export-excel').addEventListener('click', () => {
   const qs = new URLSearchParams({
     csrf_token: '<?= htmlspecialchars($CSRF) ?>',
@@ -315,7 +395,6 @@ document.getElementById('btn-export-excel').addEventListener('click', () => {
   }).toString();
   window.open('cetak/alat_panen_export_excel.php?' + qs, '_blank');
 });
-
 document.getElementById('btn-export-pdf').addEventListener('click', () => {
   const qs = new URLSearchParams({
     csrf_token: '<?= htmlspecialchars($CSRF) ?>',

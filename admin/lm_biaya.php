@@ -1,5 +1,5 @@
 <?php
-// admin/lm_biaya.php
+// admin/lm_biaya.php (Pagination + Table Scroll + Sticky Header)
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
   header("Location: ../auth/login.php"); exit;
@@ -15,8 +15,16 @@ function col_exists(PDO $pdo, $table, $col){
   return (bool)$st->fetchColumn();
 }
 
+// helper: build url with merged query params
+function build_url(array $params = []): string {
+  $merged = array_merge($_GET, $params);
+  // remove empty values to keep url clean
+  foreach ($merged as $k=>$v) { if ($v === '') unset($merged[$k]); }
+  return htmlspecialchars($_SERVER['PHP_SELF'].'?'.http_build_query($merged), ENT_QUOTES, 'UTF-8');
+}
+
 try {
-  $db = new Database();
+  $db   = new Database();
   $conn = $db->getConnection();
 
   // cek apakah lm_biaya punya kebun_id
@@ -37,13 +45,15 @@ try {
   $kebun_id = ($hasKebun && isset($_GET['kebun_id']) && $_GET['kebun_id'] !== '') ? (int)$_GET['kebun_id'] : '';
   $q        = isset($_GET['q']) ? trim($_GET['q']) : '';
 
-  // data (ikut filter & pencarian)
-  $sql = "
-    SELECT b.*,
-           u.nama_unit,
-           a.kode AS kode_aktivitas, a.nama AS nama_aktivitas,
-           j.nama AS nama_jenis
-           ".($hasKebun ? ", kb.nama_kebun " : "")."
+  // Pagination params
+  $perPageAllowed = [10, 15, 20, 25, 50, 100];
+  $per_page = isset($_GET['per_page']) && ctype_digit((string)$_GET['per_page']) ? (int)$_GET['per_page'] : 15;
+  if (!in_array($per_page, $perPageAllowed, true)) $per_page = 15;
+  $page = isset($_GET['page']) && ctype_digit((string)$_GET['page']) && (int)$_GET['page'] >= 1 ? (int)$_GET['page'] : 1;
+  $offset = ($page - 1) * $per_page;
+
+  // === Base FROM & JOIN (biar DRY untuk query count dan data)
+  $fromJoin = "
     FROM lm_biaya b
     LEFT JOIN units u ON u.id = b.unit_id
     LEFT JOIN md_kode_aktivitas a ON a.id = b.kode_aktivitas_id
@@ -51,14 +61,16 @@ try {
     ".($hasKebun ? "LEFT JOIN md_kebun kb ON kb.id = b.kebun_id" : "")."
     WHERE 1=1
   ";
-  $bind = [];
-  if ($unit_id  !== '') { $sql .= " AND b.unit_id   = :uid"; $bind[':uid'] = $unit_id; }
-  if ($tahun    !== '') { $sql .= " AND b.tahun     = :thn"; $bind[':thn'] = $tahun; }
-  if ($bulan    !== '') { $sql .= " AND b.bulan     = :bln"; $bind[':bln'] = $bulan; }
-  if ($hasKebun && $kebun_id !== '') { $sql .= " AND b.kebun_id = :kid"; $bind[':kid'] = $kebun_id; }
+
+  // === WHERE & Bind
+  $where = "";
+  $bind  = [];
+  if ($unit_id  !== '') { $where .= " AND b.unit_id   = :uid"; $bind[':uid'] = $unit_id; }
+  if ($tahun    !== '') { $where .= " AND b.tahun     = :thn"; $bind[':thn'] = $tahun; }
+  if ($bulan    !== '') { $where .= " AND b.bulan     = :bln"; $bind[':bln'] = $bulan; }
+  if ($hasKebun && $kebun_id !== '') { $where .= " AND b.kebun_id = :kid"; $bind[':kid'] = $kebun_id; }
   if ($q !== '') {
-    // cari di beberapa kolom yang wajar untuk pencarian teks
-    $sql .= " AND (
+    $where .= " AND (
       a.kode LIKE :kw OR a.nama LIKE :kw OR
       j.nama LIKE :kw OR
       u.nama_unit LIKE :kw OR
@@ -68,14 +80,33 @@ try {
     $bind[':kw'] = "%$q%";
   }
 
-  $sql .= "
+  // === Total rows (untuk pagination)
+  $countSql = "SELECT COUNT(*) ".$fromJoin.$where;
+  $stc = $conn->prepare($countSql);
+  foreach ($bind as $k=>$v) $stc->bindValue($k, $v);
+  $stc->execute();
+  $total_rows = (int)$stc->fetchColumn();
+  $total_pages = max(1, (int)ceil($total_rows / $per_page));
+  if ($page > $total_pages) { $page = $total_pages; $offset = ($page - 1) * $per_page; }
+
+  // === Data dengan LIMIT/OFFSET
+  $dataSql = "
+    SELECT b.*,
+           u.nama_unit,
+           a.kode AS kode_aktivitas, a.nama AS nama_aktivitas,
+           j.nama AS nama_jenis
+           ".($hasKebun ? ", kb.nama_kebun " : "")."
+    ".$fromJoin.$where."
     ORDER BY b.tahun DESC,
              FIELD(b.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
              b.id DESC
+    LIMIT :limit OFFSET :offset
   ";
-
-  $st = $conn->prepare($sql);
-  $st->execute($bind);
+  $st = $conn->prepare($dataSql);
+  foreach ($bind as $k=>$v) $st->bindValue($k, $v);
+  $st->bindValue(':limit',  $per_page, PDO::PARAM_INT);
+  $st->bindValue(':offset', $offset,   PDO::PARAM_INT);
+  $st->execute();
   $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
   // hitung diff (hindari NaN/Div 0)
@@ -84,6 +115,10 @@ try {
     $r['diff_pct'] = ($r['rencana_bi'] ?? 0) > 0 ? (($r['realisasi_bi'] / $r['rencana_bi']) - 1) * 100 : null;
   }
   unset($r);
+
+  // helper untuk info range tampil
+  $fromRow = $total_rows ? $offset + 1 : 0;
+  $toRow   = min($offset + $per_page, $total_rows);
 } catch (PDOException $e) {
   die("DB Error: ".$e->getMessage());
 }
@@ -181,55 +216,99 @@ include_once '../layouts/header.php';
     </div>
 
     <div>
+      <label for="f-perpage" class="block text-xs text-gray-500 mb-1">Per Halaman</label>
+      <select id="f-perpage" name="per_page" class="border rounded px-3 py-2">
+        <?php foreach ([10,15,20,25,50,100] as $pp): ?>
+          <option value="<?= $pp ?>" <?= $per_page===$pp?'selected':'' ?>><?= $pp ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div>
       <button type="submit" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800">Filter</button>
       <a href="lm_biaya.php" class="px-4 py-2 border rounded hover:bg-gray-50">Reset</a>
     </div>
   </form>
 
-  <div class="bg-white p-6 rounded-xl shadow-md overflow-x-auto">
-    <table class="min-w-full text-sm">
-      <thead class="bg-gray-50">
-        <tr class="text-gray-600">
-          <th class="py-2 px-3 text-left">Kode Aktivitas</th>
-          <th class="py-2 px-3 text-left">Jenis Pekerjaan</th>
-          <th class="py-2 px-3 text-left">Bulan</th>
-          <th class="py-2 px-3 text-left">Tahun</th>
-          <?php if ($hasKebun): ?><th class="py-2 px-3 text-left">Kebun</th><?php endif; ?>
-          <th class="py-2 px-3 text-left">Unit/Divisi</th>
-          <th class="py-2 px-3 text-right">Rencana Bulan Ini</th>
-          <th class="py-2 px-3 text-right">Realisasi Bulan Ini</th>
-          <th class="py-2 px-3 text-right">+/− Biaya</th>
-          <th class="py-2 px-3 text-right">+/− %</th>
-          <th class="py-2 px-3 text-left">Aksi</th>
-        </tr>
-      </thead>
-      <tbody class="text-gray-800">
-        <?php if (!$rows): ?>
-          <tr><td colspan="<?= $hasKebun ? 11 : 10 ?>" class="text-center py-6 text-gray-500">Belum ada data.</td></tr>
-        <?php else: foreach ($rows as $r): ?>
-          <tr class="border-b hover:bg-gray-50">
-            <td class="py-2 px-3"><?= htmlspecialchars(($r['kode_aktivitas'] ?? '').' - '.($r['nama_aktivitas'] ?? '')) ?></td>
-            <td class="py-2 px-3"><?= htmlspecialchars($r['nama_jenis'] ?? '-') ?></td>
-            <td class="py-2 px-3"><?= htmlspecialchars($r['bulan']) ?></td>
-            <td class="py-2 px-3"><?= (int)$r['tahun'] ?></td>
-            <?php if ($hasKebun): ?><td class="py-2 px-3"><?= htmlspecialchars($r['nama_kebun'] ?? '-') ?></td><?php endif; ?>
-            <td class="py-2 px-3"><?= htmlspecialchars($r['nama_unit'] ?? '-') ?></td>
-            <td class="py-2 px-3 text-right"><?= number_format((float)$r['rencana_bi'],2) ?></td>
-            <td class="py-2 px-3 text-right"><?= number_format((float)$r['realisasi_bi'],2) ?></td>
-            <td class="py-2 px-3 text-right"><?= number_format((float)$r['diff_bi'],2) ?></td>
-            <td class="py-2 px-3 text-right">
-              <?= is_null($r['diff_pct']) ? '-' : number_format((float)$r['diff_pct'],2).'%' ?>
-            </td>
-            <td class="py-2 px-3">
-              <div class="flex items-center gap-3">
-                <button class="btn-edit text-blue-600 underline" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'>Edit</button>
-                <button class="btn-delete text-red-600 underline" data-id="<?= (int)$r['id'] ?>">Hapus</button>
-              </div>
-            </td>
-          </tr>
-        <?php endforeach; endif; ?>
-      </tbody>
-    </table>
+  <div class="bg-white p-0 rounded-xl shadow-md">
+    <!-- SCROLL WRAPPER: horizontal + vertical -->
+    <div class="overflow-x-auto">
+      <div class="max-h-[70vh] overflow-y-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr class="text-gray-600">
+              <th class="py-2 px-3 text-left">Kode Aktivitas</th>
+              <th class="py-2 px-3 text-left">Jenis Pekerjaan</th>
+              <th class="py-2 px-3 text-left">Bulan</th>
+              <th class="py-2 px-3 text-left">Tahun</th>
+              <?php if ($hasKebun): ?><th class="py-2 px-3 text-left">Kebun</th><?php endif; ?>
+              <th class="py-2 px-3 text-left">Unit/Divisi</th>
+              <th class="py-2 px-3 text-right">Rencana Bulan Ini</th>
+              <th class="py-2 px-3 text-right">Realisasi Bulan Ini</th>
+              <th class="py-2 px-3 text-right">+/− Biaya</th>
+              <th class="py-2 px-3 text-right">+/− %</th>
+              <th class="py-2 px-3 text-left">Aksi</th>
+            </tr>
+          </thead>
+          <tbody class="text-gray-800">
+            <?php if (!$rows): ?>
+              <tr><td colspan="<?= $hasKebun ? 11 : 10 ?>" class="text-center py-6 text-gray-500">Belum ada data.</td></tr>
+            <?php else: foreach ($rows as $r): ?>
+              <tr class="border-b hover:bg-gray-50">
+                <td class="py-2 px-3"><?= htmlspecialchars(($r['kode_aktivitas'] ?? '').' - '.($r['nama_aktivitas'] ?? '')) ?></td>
+                <td class="py-2 px-3"><?= htmlspecialchars($r['nama_jenis'] ?? '-') ?></td>
+                <td class="py-2 px-3"><?= htmlspecialchars($r['bulan']) ?></td>
+                <td class="py-2 px-3"><?= (int)$r['tahun'] ?></td>
+                <?php if ($hasKebun): ?><td class="py-2 px-3"><?= htmlspecialchars($r['nama_kebun'] ?? '-') ?></td><?php endif; ?>
+                <td class="py-2 px-3"><?= htmlspecialchars($r['nama_unit'] ?? '-') ?></td>
+                <td class="py-2 px-3 text-right"><?= number_format((float)$r['rencana_bi'],2) ?></td>
+                <td class="py-2 px-3 text-right"><?= number_format((float)$r['realisasi_bi'],2) ?></td>
+                <td class="py-2 px-3 text-right"><?= number_format((float)$r['diff_bi'],2) ?></td>
+                <td class="py-2 px-3 text-right">
+                  <?= is_null($r['diff_pct']) ? '-' : number_format((float)$r['diff_pct'],2).'%' ?>
+                </td>
+                <td class="py-2 px-3">
+                  <div class="flex items-center gap-3">
+                    <button class="btn-edit text-blue-600 underline" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'>Edit</button>
+                    <button class="btn-delete text-red-600 underline" data-id="<?= (int)$r['id'] ?>">Hapus</button>
+                  </div>
+                </td>
+              </tr>
+            <?php endforeach; endif; ?>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PAGINATION BAR -->
+    <div class="flex flex-col md:flex-row items-center justify-between gap-3 p-4 border-t">
+      <div class="text-sm text-gray-600">
+        Menampilkan <span class="font-semibold"><?= number_format($fromRow) ?></span>–<span class="font-semibold"><?= number_format($toRow) ?></span>
+        dari <span class="font-semibold"><?= number_format($total_rows) ?></span> data
+      </div>
+
+      <?php
+        // buat window halaman (maks 5 angka)
+        $window = 5;
+        $start = max(1, $page - floor($window/2));
+        $end   = min($total_pages, $start + $window - 1);
+        $start = max(1, $end - $window + 1);
+      ?>
+      <div class="flex items-center gap-1">
+        <a href="<?= build_url(['page'=>1]) ?>" class="px-3 py-1 border rounded <?= $page<=1?'pointer-events-none opacity-40':'' ?>">« First</a>
+        <a href="<?= build_url(['page'=> max(1,$page-1)]) ?>" class="px-3 py-1 border rounded <?= $page<=1?'pointer-events-none opacity-40':'' ?>">‹ Prev</a>
+
+        <?php for ($p=$start; $p<=$end; $p++): ?>
+          <a href="<?= build_url(['page'=>$p]) ?>"
+             class="px-3 py-1 border rounded <?= $p===$page ? 'bg-black text-white border-black' : 'hover:bg-gray-50' ?>">
+            <?= $p ?>
+          </a>
+        <?php endfor; ?>
+
+        <a href="<?= build_url(['page'=> min($total_pages,$page+1)]) ?>" class="px-3 py-1 border rounded <?= $page>=$total_pages?'pointer-events-none opacity-40':'' ?>">Next ›</a>
+        <a href="<?= build_url(['page'=> $total_pages]) ?>" class="px-3 py-1 border rounded <?= $page>=$total_pages?'pointer-events-none opacity-40':'' ?>">Last »</a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -411,6 +490,19 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       })
       .catch(err=> Swal.fire('Error', err?.message||'Request gagal', 'error'));
+  });
+
+  // Submit form otomatis kalau per_page berubah (tetap bawa filter lain)
+  const per = document.getElementById('f-perpage');
+  per?.addEventListener('change', ()=> {
+    // reset page ke 1 saat ganti per_page
+    const form = per.closest('form');
+    const hidden = document.createElement('input');
+    hidden.type = 'hidden';
+    hidden.name = 'page';
+    hidden.value = '1';
+    form.appendChild(hidden);
+    form.submit();
   });
 });
 
