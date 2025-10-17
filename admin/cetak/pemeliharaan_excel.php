@@ -1,6 +1,7 @@
 <?php
-// pages/cetak/pemeliharaan_excel.php
-// Excel mengikuti SEMUA filter dari pages/pemeliharaan.php
+// pages/cetak/pemeliharaan_excel.php — FINAL
+// Excel mengikuti SEMUA filter (termasuk Keterangan) & menampilkan Satuan R/E + Keterangan
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -13,7 +14,7 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-$db  = new Database(); 
+$db  = new Database();
 $pdo = $db->getConnection();
 
 /* Helpers */
@@ -29,12 +30,12 @@ function colExists(PDO $pdo,$table,$col){
 function pickCol(PDO $pdo,$table,array $cands){ foreach($cands as $c){ if(colExists($pdo,$table,$c)) return $c; } return null; }
 $bulanNama=[1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
 
-$allowedTab=['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
-$titles=['TU'=>'Pemeliharaan TU','TBM'=>'Pemeliharaan TBM','TM'=>'Pemeliharaan TM','BIBIT_PN'=>'Pemeliharaan Bibit PN','BIBIT_MN'=>'Pemeliharaan Bibit MN'];
+$allowedTab=['TU','TBM','TM','TK','BIBIT_PN','BIBIT_MN'];
+$titles=['TU'=>'Pemeliharaan TU','TBM'=>'Pemeliharaan TBM','TM'=>'Pemeliharaan TM','TK'=>'Pemeliharaan TK','BIBIT_PN'=>'Pemeliharaan Bibit PN','BIBIT_MN'=>'Pemeliharaan Bibit MN'];
 $tab=$_GET['tab']??'TU'; if(!in_array($tab,$allowedTab,true)) $tab='TU';
 $isBibit=in_array($tab,['BIBIT_PN','BIBIT_MN'],true);
 
-/* Filters (sinkron dgn halaman) */
+/* Filters */
 $f_unit_id   = isset($_GET['unit_id'])   && $_GET['unit_id']   !== '' ? (int)$_GET['unit_id'] : '';
 $f_bulan     = isset($_GET['bulan'])     && $_GET['bulan']     !== '' ? (string)$_GET['bulan'] : '';
 $f_tahun     = isset($_GET['tahun'])     && $_GET['tahun']     !== '' ? (int)$_GET['tahun'] : '';
@@ -43,6 +44,7 @@ $f_tenaga_id = isset($_GET['tenaga_id']) && $_GET['tenaga_id'] !== '' ? (int)$_G
 $f_kebun_id  = isset($_GET['kebun_id'])  && $_GET['kebun_id']  !== '' ? (int)$_GET['kebun_id'] : '';
 $f_rayon     = isset($_GET['rayon'])     && $_GET['rayon']     !== '' ? (string)$_GET['rayon'] : '';
 $f_bibit     = isset($_GET['bibit'])     && $_GET['bibit']     !== '' ? (string)$_GET['bibit'] : '';
+$f_ket       = isset($_GET['keterangan'])&& $_GET['keterangan']!== '' ? (string)$_GET['keterangan'] : '';
 
 /* Map ID→Nama */
 $jenis_nama = ''; if($f_jenis_id!==''){ $s=$pdo->prepare("SELECT nama FROM md_jenis_pekerjaan WHERE id=:i"); $s->execute([':i'=>$f_jenis_id]); $jenis_nama=(string)$s->fetchColumn(); }
@@ -55,6 +57,9 @@ $hasBulanCol  = colExists($pdo,'pemeliharaan','bulan');
 $hasTahunCol  = colExists($pdo,'pemeliharaan','tahun');
 $hasKebunId   = colExists($pdo,'pemeliharaan','kebun_id');
 $hasKebunKode = colExists($pdo,'pemeliharaan','kebun_kode');
+$hasKet       = colExists($pdo,'pemeliharaan','keterangan');
+$hasSatR      = colExists($pdo,'pemeliharaan','satuan_rencana');
+$hasSatE      = colExists($pdo,'pemeliharaan','satuan_realisasi');
 
 $colKebunText = pickCol($pdo,'pemeliharaan',['kebun_nama','kebun','nama_kebun','kebun_text']);
 $colRayon     = pickCol($pdo,'pemeliharaan',['rayon','rayon_nama']);
@@ -98,6 +103,8 @@ if ($isBibit){
 }else{
   if ($f_rayon!==''){ $col = $colRayon ?: 'rayon'; $sql.=" AND p.$col LIKE :ry"; $params[':ry']="%{$f_rayon}%"; }
 }
+if ($hasKet && $f_ket!==''){ $sql.=" AND p.keterangan LIKE :ket"; $params[':ket']="%{$f_ket}%"; }
+
 $sql .= $hasTanggal ? " ORDER BY p.tanggal DESC, p.id DESC" : " ORDER BY p.tahun DESC, p.id DESC";
 $st=$pdo->prepare($sql);
 foreach($params as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
@@ -114,13 +121,13 @@ $spreadsheet=new Spreadsheet();
 $sheet=$spreadsheet->getActiveSheet();
 $sheet->setTitle(substr($titles[$tab],0,31));
 
-$sheet->mergeCells('A1:L1');
+$sheet->mergeCells('A1:O1');
 $sheet->setCellValue('A1','PTPN IV REGIONAL 3');
 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('FFFFFF');
 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('0F7B4F');
 
-$sheet->mergeCells('A2:L2');
+$sheet->mergeCells('A2:O2');
 $sheet->setCellValue('A2',$titles[$tab]);
 $sheet->getStyle('A2')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('0F7B4F');
 $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -134,12 +141,14 @@ if ($f_jenis_id!==''){ $parts[]='Jenis '.$jenis_nama; }
 if ($f_tenaga_id!==''){ $parts[]='Tenaga '.$tenaga_nama; }
 if ($f_kebun_id!==''){ $parts[]='Kebun '.$kebun_nama; }
 if ($isBibit){ if ($f_bibit!==''){ $parts[]='Stood/Jenis '.$f_bibit; } } else { if ($f_rayon!==''){ $parts[]='Rayon '.$f_rayon; } }
-$sheet->mergeCells('A3:L3');
+if ($f_ket!==''){ $parts[]='Ket. '.$f_ket; }
+
+$sheet->mergeCells('A3:O3');
 $sheet->setCellValue('A3','Filter: '.implode(' | ',$parts));
 $sheet->getStyle('A3')->getFont()->setSize(10)->getColor()->setRGB('666666');
 $sheet->getStyle('A3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-/* Headers */
+/* Headers (A..O) */
 $headers=[
   'A'=>'Tahun',
   'B'=>'Kebun',
@@ -149,21 +158,26 @@ $headers=[
   'F'=>'Periode',
   'G'=>'Tenaga',
   'H'=>'Rencana',
-  'I'=>'Realisasi',
-  'J'=>'+/-',
-  'K'=>'Progress (%)',
-  'L'=>'Status',
+  'I'=>'Satuan R.',
+  'J'=>'Realisasi',
+  'K'=>'Satuan E.',
+  'L'=>'+/-',
+  'M'=>'Progress (%)',
+  'N'=>'Status',
+  'O'=>'Keterangan',
 ];
 $row=5; foreach($headers as $c=>$t){ $sheet->setCellValue($c.$row,$t); }
-$sheet->getStyle("A{$row}:L{$row}")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
-$sheet->getStyle("A{$row}:L{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-$sheet->getStyle("A{$row}:L{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1FAB61');
-$sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle("A{$row}:O{$row}")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+$sheet->getStyle("A{$row}:O{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle("A{$row}:O{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('1FAB61');
+$sheet->getStyle("A{$row}:O{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 $row++;
 
 /* Body */
+$hasKetCol = $hasKet; $hasSatRCol=$hasSatR; $hasSatECol=$hasSatE;
+
 if (empty($rows)){
-  $sheet->mergeCells("A{$row}:L{$row}");
+  $sheet->mergeCells("A{$row}:O{$row}");
   $sheet->setCellValue("A{$row}",'Tidak ada data.');
   $sheet->getStyle("A{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
   $row++;
@@ -185,13 +199,18 @@ if (empty($rows)){
     $sheet->setCellValue("F{$row}", $periode);
     $sheet->setCellValue("G{$row}", (string)($r['tenaga']??''));
     $sheet->setCellValue("H{$row}", $rencana);
-    $sheet->setCellValue("I{$row}", $realisasi);
-    $sheet->setCellValue("J{$row}", $delta);
-    $sheet->setCellValue("K{$row}", round($progress,2));
-    $sheet->setCellValue("L{$row}", (string)($r['status']??''));
+    $sheet->setCellValue("I{$row}", $hasSatRCol? (string)($r['satuan_rencana']??'') : '');
+    $sheet->setCellValue("J{$row}", $realisasi);
+    $sheet->setCellValue("K{$row}", $hasSatECol? (string)($r['satuan_realisasi']??'') : '');
+    $sheet->setCellValue("L{$row}", $delta);
+    $sheet->setCellValue("M{$row}", round($progress,2));
+    $sheet->setCellValue("N{$row}", (string)($r['status']??''));
+    $sheet->setCellValue("O{$row}", $hasKetCol? (string)($r['keterangan']??'') : '');
 
-    $sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $sheet->getStyle("H{$row}:K{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $sheet->getStyle("A{$row}:O{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle("H{$row}:H{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $sheet->getStyle("J{$row}:J{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $sheet->getStyle("L{$row}:M{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
     $row++;
   }
 }
@@ -201,23 +220,28 @@ if (!empty($rows)){
   $sheet->setCellValue("A{$row}",'TOTAL');
   $sheet->mergeCells("A{$row}:G{$row}");
   $sheet->setCellValue("H{$row}", $tot_r);
-  $sheet->setCellValue("I{$row}", $tot_e);
-  $sheet->setCellValue("J{$row}", $tot_d);
-  $sheet->setCellValue("K{$row}", round($tot_p,2));
-  $sheet->setCellValue("L{$row}", '');
-  $sheet->getStyle("A{$row}:L{$row}")->getFont()->setBold(true);
-  $sheet->getStyle("A{$row}:L{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
-  $sheet->getStyle("A{$row}:L{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-  $sheet->getStyle("H{$row}:K{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  $sheet->setCellValue("I{$row}", '');
+  $sheet->setCellValue("J{$row}", $tot_e);
+  $sheet->setCellValue("K{$row}", '');
+  $sheet->setCellValue("L{$row}", $tot_d);
+  $sheet->setCellValue("M{$row}", round($tot_p,2));
+  $sheet->setCellValue("N{$row}", '');
+  $sheet->setCellValue("O{$row}", '');
+  $sheet->getStyle("A{$row}:O{$row}")->getFont()->setBold(true);
+  $sheet->getStyle("A{$row}:O{$row}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
+  $sheet->getStyle("A{$row}:O{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+  $sheet->getStyle("H{$row}:H{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  $sheet->getStyle("J{$row}:J{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+  $sheet->getStyle("L{$row}:M{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
   $row++;
 }
 
 /* width & format */
-foreach(range('A','L') as $c){ $sheet->getColumnDimension($c)->setAutoSize(true); }
+foreach(range('A','O') as $c){ $sheet->getColumnDimension($c)->setAutoSize(true); }
 $sheet->getStyle("H6:H{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
-$sheet->getStyle("I6:I{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
 $sheet->getStyle("J6:J{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
-$sheet->getStyle("K6:K{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("L6:L{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("M6:M{$row}")->getNumberFormat()->setFormatCode('#,##0.00');
 
 /* Output */
 $fname='Pemeliharaan_'.$tab.'.xlsx';

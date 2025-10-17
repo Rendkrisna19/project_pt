@@ -31,10 +31,8 @@ include_once '../layouts/header.php';
   <!-- Tabs -->
   <div class="bg-white p-2 md:p-3 rounded-xl shadow-sm overflow-x-auto">
     <div id="tabs" class="flex gap-2 md:gap-3 whitespace-nowrap">
-      <!-- NEW: dua tab baru -->
       <button data-entity="kebun" class="tab active">Nama Kebun</button>
       <button data-entity="bahan_kimia" class="tab">Bahan Kimia</button>
-
       <button data-entity="jenis_pekerjaan" class="tab">Jenis Pekerjaan</button>
       <button data-entity="unit" class="tab">Unit/Devisi</button>
       <button data-entity="tahun_tanam" class="tab">Tahun Tanam</button>
@@ -49,6 +47,38 @@ include_once '../layouts/header.php';
       <button data-entity="pupuk" class="tab">Pupuk</button>
       <button data-entity="kode_aktivitas" class="tab">Kode Aktivitas</button>
       <button data-entity="anggaran" class="tab">Anggaran</button>
+    </div>
+  </div>
+
+  <!-- Filter BAR khusus BLOK -->
+  <div id="blok-filter-bar" class="bg-white p-4 rounded-xl shadow-sm border hidden">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+      <div class="md:col-span-2">
+        <label class="block text-sm text-gray-700 mb-1">Unit</label>
+        <select id="blok-filter-unit" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-300">
+          <option value="">— Semua Unit —</option>
+          <?php foreach($units as $u): ?>
+            <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="md:col-span-2">
+        <label class="block text-sm text-gray-700 mb-1">Kode Blok (contains)</label>
+        <input id="blok-filter-kode" type="text" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-300" placeholder="Contoh: A12">
+      </div>
+      <div>
+        <label class="block text-sm text-gray-700 mb-1">Tahun Tanam</label>
+        <input id="blok-filter-tahun" type="number" min="1900" max="2100" class="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-300" placeholder="YYYY">
+      </div>
+
+      <div class="md:col-span-5 flex flex-wrap gap-2">
+        <button id="blok-filter-apply" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          Terapkan
+        </button>
+        <button id="blok-filter-reset" class="px-4 py-2 rounded border bg-white hover:bg-gray-50 text-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-300">
+          Reset
+        </button>
+      </div>
     </div>
   </div>
 
@@ -121,6 +151,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // cache untuk client-side pagination fallback
   let clientCache = { entity:null, rows:[] };
+
+  // === State filter khusus BLOK ===
+  const blokFilter = {
+    unit_id: '',
+    kode: '',
+    tahun: ''
+  };
 
   const OPTIONS_UNITS = [<?php foreach($units as $u){echo "{value:{$u['id']},label:'".htmlspecialchars($u['nama_unit'],ENT_QUOTES)."'},";}?>];
   const OPTIONS_SATUAN= [<?php foreach($satuan as $s){echo "{value:{$s['id']},label:'".htmlspecialchars($s['nama'],ENT_QUOTES)."'},";}?>];
@@ -202,6 +239,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
       if (i===ENTITIES[entity].table.length-1) th.className+=' w-32';
       thead.appendChild(th);
     });
+    // tampilkan/hidden filter bar blok
+    const bar = document.getElementById('blok-filter-bar');
+    bar.classList.toggle('hidden', entity!=='blok');
   }
 
   function inputEl(f){
@@ -219,11 +259,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
 
   function renderForm(entity, data={}){
-    $('#modal-title').textContent=(data.id?'Edit ':'Tambah ')+ENTITIES[entity].title;
-    $('#form-entity').value=entity;
-    $('#form-action').value=data.id?'update':'store';
-    $('#form-id').value=data.id||'';
-    const holder=$('#form-fields');
+    document.getElementById('modal-title').textContent=(data.id?'Edit ':'Tambah ')+ENTITIES[entity].title;
+    document.getElementById('form-entity').value=entity;
+    document.getElementById('form-action').value=data.id?'update':'store';
+    document.getElementById('form-id').value=data.id||'';
+    const holder=document.getElementById('form-fields');
     holder.innerHTML='';
     ENTITIES[entity].fields.forEach(f=>{
       const el=inputEl(f);
@@ -317,7 +357,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     makeBtn('« First', 1, page<=1);
     makeBtn('‹ Prev', Math.max(1,page-1), page<=1);
 
-    // window 5
     const win=5;
     let start = Math.max(1, page - Math.floor(win/2));
     let end = Math.min(totalPages, start + win - 1);
@@ -330,6 +369,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
     makeBtn('Last »', totalPages, page>=totalPages);
   }
 
+  // ===== Helper: apply blok filter locally (client-side) =====
+  function applyBlokFilterClient(rows){
+    let out = rows;
+    if (blokFilter.unit_id) {
+      out = out.filter(r => String(r.unit_id||'') === String(blokFilter.unit_id));
+    }
+    if (blokFilter.kode) {
+      const kw = blokFilter.kode.toLowerCase();
+      out = out.filter(r => String(r.kode||'').toLowerCase().includes(kw));
+    }
+    if (blokFilter.tahun) {
+      out = out.filter(r => String(r.tahun_tanam||'') === String(blokFilter.tahun));
+    }
+    return out;
+  }
+
   // ===== Data Loader (server or client pagination) =====
   function loadServer(entity){
     const fd=new FormData();
@@ -339,10 +394,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('page', String(page));
     fd.append('per_page', String(perPage));
 
+    // sertakan filter blok jika entity blok (server-side filtering)
+    if (entity === 'blok') {
+      fd.append('unit_id', blokFilter.unit_id || '');
+      fd.append('kode', blokFilter.kode || '');
+      fd.append('tahun', blokFilter.tahun || '');
+      // sekaligus kirim JSON jika backend mau: filters
+      fd.append('filters', JSON.stringify(blokFilter));
+    }
+
     return fetch('master_data_crud.php',{method:'POST',body:fd})
       .then(r=>r.json())
       .then(j=>{
-        // Jika server mengembalikan total (server-side pagination)
+        // Server-side pagination supported
         if (j && j.success && typeof j.total === 'number') {
           total = j.total;
           perPage = j.per_page ? parseInt(j.per_page) : perPage;
@@ -353,13 +417,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
           renderPager();
           return true;
         }
-        // Fallback: anggap j.data adalah full list (client-side)
+        // Fallback to client-side
         if (j && j.success && Array.isArray(j.data)) {
           clientCache = { entity, rows: j.data };
-          total = clientCache.rows.length;
+          let list = clientCache.rows;
+
+          if (entity === 'blok') {
+            list = applyBlokFilterClient(list);
+          }
+
+          total = list.length;
           totalPages = Math.max(1, Math.ceil(total / perPage));
           const start = (page-1)*perPage;
-          const slice = clientCache.rows.slice(start, start+perPage);
+          const slice = list.slice(start, start+perPage);
           renderRows(entity, slice);
           updatePageInfo();
           renderPager();
@@ -373,12 +443,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
     renderHead(entity);
     tbody.innerHTML=`<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-gray-500">Memuat…</td></tr>`;
 
-    // Jika cache entity sama dan kita berada di client-side mode, cukup slice
+    // Jika cache entity sama dan client-side mode, cukup slice + filter
     if (clientCache.entity === entity && clientCache.rows.length){
-      total = clientCache.rows.length;
+      let list = clientCache.rows;
+      if (entity === 'blok') {
+        list = applyBlokFilterClient(list);
+      }
+      total = list.length;
       totalPages = Math.max(1, Math.ceil(total / perPage));
       const start = (page-1)*perPage;
-      const slice = clientCache.rows.slice(start, start+perPage);
+      const slice = list.slice(start, start+perPage);
       renderRows(entity, slice);
       updatePageInfo();
       renderPager();
@@ -399,22 +473,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
       document.querySelectorAll('#tabs button').forEach(b=>b.classList.remove('active','border-emerald-600','text-emerald-700'));
       btn.classList.add('active','border-emerald-600','text-emerald-700');
       currentEntity = btn.dataset.entity;
+
       // reset pagination saat pindah entity
       page = 1;
-      clientCache = { entity:null, rows:[] };
+
+      // bersihkan filter input UI saat keluar/masuk blok
+      if (currentEntity !== 'blok') {
+        // no-op
+      } else {
+        // sinkronkan UI dengan state
+        document.getElementById('blok-filter-unit').value = blokFilter.unit_id || '';
+        document.getElementById('blok-filter-kode').value = blokFilter.kode || '';
+        document.getElementById('blok-filter-tahun').value = blokFilter.tahun || '';
+      }
+
       renderHeadAndLoad(currentEntity);
     });
   });
 
   // Per-page selector
-  $('#per-page').addEventListener('change', (e)=>{
+  document.getElementById('per-page').addEventListener('change', (e)=>{
     perPage = parseInt(e.target.value) || 15;
     page = 1;
     renderHeadAndLoad(currentEntity);
   });
 
   // Add
-  $('#btn-add').addEventListener('click', ()=> renderForm(currentEntity));
+  document.getElementById('btn-add').addEventListener('click', ()=> renderForm(currentEntity));
 
   // Edit/Delete
   document.body.addEventListener('click', e=>{
@@ -440,11 +525,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
             .then(j=>{
               if(j.success){
                 Swal.fire('Terhapus','', 'success');
-                // refresh list pada halaman sekarang
+                // hapus dari cache kalau ada
                 if (clientCache.entity === entity && clientCache.rows.length){
-                  // hapus dari cache juga
                   clientCache.rows = clientCache.rows.filter(x => String(x.id) !== String(id));
                 }
+                // refresh
                 renderHeadAndLoad(entity);
               }
               else Swal.fire('Gagal', j.message||'Error','error');
@@ -476,9 +561,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(j.success){
           Swal.fire('Berhasil',j.message,'success');
           modalEl.classList.add('hidden'); modalEl.classList.remove('flex');
-          // invalidasi cache biar refetch bersih (atau kita patch cache)
+          // invalidasi cache biar refetch bersih
           clientCache = { entity:null, rows:[] };
-          // setelah create/update, balik ke halaman 1 biar kelihatan data baru
+          // setelah create/update, balik ke halaman 1
           page = 1;
           renderHeadAndLoad(entity);
         }
@@ -487,15 +572,43 @@ document.addEventListener('DOMContentLoaded', ()=>{
       .catch(()=> Swal.fire('Gagal','Jaringan bermasalah','error'));
   });
 
+  // ====== EVENT: Apply / Reset Filter BLOK ======
+  document.getElementById('blok-filter-apply').addEventListener('click', (e)=>{
+    e.preventDefault();
+    // ambil dari UI
+    blokFilter.unit_id = document.getElementById('blok-filter-unit').value.trim();
+    blokFilter.kode    = document.getElementById('blok-filter-kode').value.trim();
+    blokFilter.tahun   = document.getElementById('blok-filter-tahun').value.trim();
+    // mulai dari halaman 1
+    page = 1;
+    // invalidate cache supaya refetch / re-filter
+    // (boleh tidak direset; namun aman direset agar konsisten)
+    // clientCache = { entity:null, rows:[] }; // optional
+    renderHeadAndLoad('blok');
+  });
+
+  document.getElementById('blok-filter-reset').addEventListener('click', (e)=>{
+    e.preventDefault();
+    // reset state + UI
+    blokFilter.unit_id = '';
+    blokFilter.kode    = '';
+    blokFilter.tahun   = '';
+    document.getElementById('blok-filter-unit').value = '';
+    document.getElementById('blok-filter-kode').value = '';
+    document.getElementById('blok-filter-tahun').value = '';
+    page = 1;
+    renderHeadAndLoad('blok');
+  });
+
   // Load awal
   renderHeadAndLoad(currentEntity);
 });
 </script>
 
 <style>
-#tabs .tab{ padding:.5rem .75rem; border-radius:.5rem; border:1px solid transparent; color:#334155; background:#fff; }
-#tabs .tab:hover{ background:#f8fafc; }
-#tabs .tab.active{ background:#ecfeff; border-color:#34d399; color:#065f46; }
+#tabs .tab{ padding:.5rem .75rem; border-radius:.5rem; border:1px solid transparent; color:#334155; background:#b6d6b9; }
+#tabs .tab:hover{ background:#32a83e; }
+#tabs .tab.active{ background:#32a83e; border-color:#34d399; color:white; }
 .icon-btn{ display:inline-flex; align-items:center; justify-content:center; width:2.25rem; height:2.25rem; border-radius:.5rem; transition:background-color .15s ease, transform .05s ease; }
 .icon-btn:active{ transform:scale(.98); }
 table thead th{ position:sticky; top:0; background:#f9fafb; }

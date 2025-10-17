@@ -1,6 +1,9 @@
 <?php
-// pemupukan_crud.php (FINAL+APL+TAHUN+TTANAM: dukung kebun_kode/kebun_id; mapping by md_kebun; validasi master; tahun input; tahun tanam master)
-// kompatibel dengan form dari pemupukan.php yang mengirim: tahun_tanam_id & tahun_tanam
+// pemupukan_crud.php (FINAL) — sinkron dengan UI terbaru
+// - Menabur: simpan no_au_58 (atau no_au58), fallback catatan bila kolom belum ada
+// - Angkutan: simpan no_spb (ganti no_au_58), tetap kompatibel skema lama
+// - Tetap dukung rayon, keterangan, nomor_do
+
 session_start();
 header('Content-Type: application/json');
 
@@ -86,38 +89,53 @@ try{
     return [null,null];
   };
 
-  // ==== COMMON: deteksi kolom opsional MENABUR ====
-  $hasAfdeling = $columnExists($conn,'menabur_pupuk','afdeling');
-  $hasDosis    = $columnExists($conn,'menabur_pupuk','dosis');
-  $hasTahun    = $columnExists($conn,'menabur_pupuk','tahun');
-  // APL bisa bernama 'apl' atau 'aplikator'
-  $aplCol = null;
-  foreach (['apl','aplikator'] as $cand) { if ($columnExists($conn,'menabur_pupuk',$cand)) { $aplCol = $cand; break; } }
+  // ==== MENABUR: deteksi kolom opsional ====
+  $hasAfdeling   = $columnExists($conn,'menabur_pupuk','afdeling');
+  $hasDosis      = $columnExists($conn,'menabur_pupuk','dosis');
+  $hasTahun      = $columnExists($conn,'menabur_pupuk','tahun');
+  $hasCatMen     = $columnExists($conn,'menabur_pupuk','catatan');
+  $hasNoAU58Men  = $columnExists($conn,'menabur_pupuk','no_au58') || $columnExists($conn,'menabur_pupuk','no_au_58');
+  $noAU58ColMen  = $columnExists($conn,'menabur_pupuk','no_au58') ? 'no_au58' : ($columnExists($conn,'menabur_pupuk','no_au_58') ? 'no_au_58' : null);
+  $hasKetMen     = $columnExists($conn,'menabur_pupuk','keterangan');
+  $hasRayonMen   = $columnExists($conn,'menabur_pupuk','rayon');
+  $aplCol = null; foreach (['apl','aplikator'] as $cand) { if ($columnExists($conn,'menabur_pupuk',$cand)) { $aplCol = $cand; break; } }
+  $hasTTId  = $columnExists($conn,'menabur_pupuk','tahun_tanam_id');
+  $hasTTVal = $columnExists($conn,'menabur_pupuk','tahun_tanam');
 
-  // Tahun Tanam di menabur_pupuk
-  $hasTTId  = $columnExists($conn,'menabur_pupuk','tahun_tanam_id'); // FK ke md_tahun_tanam
-  $hasTTVal = $columnExists($conn,'menabur_pupuk','tahun_tanam');    // angka tahun
-
-  // ==== COMMON: deteksi kolom kebun ====
+  // ==== KEBUN flags ====
   $hasKidMen   = $columnExists($conn,'menabur_pupuk','kebun_id');
   $hasKkodMen  = $columnExists($conn,'menabur_pupuk','kebun_kode');
   $hasKidAng   = $columnExists($conn,'angkutan_pupuk','kebun_id');
   $hasKkodAng  = $columnExists($conn,'angkutan_pupuk','kebun_kode');
+
+  // ==== ANGKUTAN: deteksi kolom baru (no_spb) + legacy ====
+  $hasCatAng      = $columnExists($conn,'angkutan_pupuk','catatan');
+  $hasNoSPBAng    = $columnExists($conn,'angkutan_pupuk','no_spb');   // kolom baru
+  $hasNoAU58Ang   = $columnExists($conn,'angkutan_pupuk','no_au58') || $columnExists($conn,'angkutan_pupuk','no_au_58'); // legacy
+  $noAU58ColAng   = $columnExists($conn,'angkutan_pupuk','no_au58') ? 'no_au58' : ($columnExists($conn,'angkutan_pupuk','no_au_58') ? 'no_au_58' : null);
+  $hasKetAng      = $columnExists($conn,'angkutan_pupuk','keterangan');
+  $hasRayonAng    = $columnExists($conn,'angkutan_pupuk','rayon');
+  $hasNomorDOAng  = $columnExists($conn,'angkutan_pupuk','nomor_do'); // untuk amankan skema lama/baru
 
   /* ====== CREATE ====== */
   if ($action==='store' || $action==='create'){
     $errors=[];
 
     if ($tab==='angkutan'){
-      $kebun_id_post  = i('kebun_id');        // optional
-      $kebun_kode_post= s('kebun_kode');      // optional
-      $gudang_asal   = s('gudang_asal');
-      $unit_tujuan_id= i('unit_tujuan_id');
-      $tanggal       = s('tanggal');
-      $jenis_pupuk   = s('jenis_pupuk');
-      $jumlah        = f('jumlah');
-      $nomor_do      = s('nomor_do');
-      $supir         = s('supir');
+      $kebun_id_post   = i('kebun_id');
+      $kebun_kode_post = s('kebun_kode');
+      $gudang_asal     = s('gudang_asal');
+      $unit_tujuan_id  = i('unit_tujuan_id');
+      $tanggal         = s('tanggal');
+      $jenis_pupuk     = s('jenis_pupuk');
+      $jumlah          = f('jumlah');
+      $nomor_do        = s('nomor_do');
+      $supir           = s('supir');
+
+      // BARU
+      $rayon           = s('rayon');
+      $keterangan      = s('keterangan');
+      $no_spb          = s('no_spb'); // <<-- dari UI baru
 
       if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
       if (!$unit_tujuan_id)  $errors[]='Unit tujuan wajib dipilih.';
@@ -133,34 +151,51 @@ try{
       if ($hasKidAng){  $cols[]='kebun_id';   $vals[]=':kid';  $params[':kid']=$kid; }
       if ($hasKkodAng){ $cols[]='kebun_kode'; $vals[]=':kkod'; $params[':kkod']=$kkod; }
 
-      $cols = array_merge($cols, ['gudang_asal','unit_tujuan_id','tanggal','jenis_pupuk','jumlah','nomor_do','supir','created_at','updated_at']);
-      $vals = array_merge($vals, [':ga',':uid',':tgl',':jp',':jml',':no',':sp','NOW()','NOW()']);
-      $params += [
-        ':ga'=>$gudang_asal, ':uid'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk,
-        ':jml'=>$jumlah??0, ':no'=>$nomor_do, ':sp'=>$supir
-      ];
+      // kolom baru (opsional)
+      if ($hasRayonAng){ $cols[]='rayon'; $vals[]=':ry'; $params[':ry']=$rayon!==''?$rayon:null; }
+      if ($hasKetAng){   $cols[]='keterangan'; $vals[]=':ket'; $params[':ket']=$keterangan!==''?$keterangan:null; }
+
+      // PRIORITAS: simpan ke no_spb jika kolom ada, kalau tidak ada dan masih ada no_au58/no_au_58 -> simpan ke sana, else terakhir catatan
+      if ($hasNoSPBAng){ $cols[]='no_spb'; $vals[]=':spb'; $params[':spb']=$no_spb!==''?$no_spb:null; }
+      elseif ($hasNoAU58Ang){ $cols[]=$noAU58ColAng; $vals[]=':spb'; $params[':spb']=$no_spb!==''?$no_spb:null; }
+      elseif ($hasCatAng && $no_spb!==''){ $cols[]='catatan'; $vals[]=':spb'; $params[':spb']=$no_spb; }
+
+      $cols = array_merge($cols, ['gudang_asal','unit_tujuan_id','tanggal','jenis_pupuk','jumlah']);
+      $vals = array_merge($vals, [':ga',':uid',':tgl',':jp',':jml']);
+      $params += [':ga'=>$gudang_asal, ':uid'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk, ':jml'=>$jumlah??0];
+
+      if ($hasNomorDOAng){ $cols[]='nomor_do'; $vals[]=':no'; $params[':no']=$nomor_do; }
+      $cols[]='supir'; $vals[]=':sp'; $params[':sp']=$supir;
+
+      $cols[]='created_at'; $vals[]='NOW()';
+      $cols[]='updated_at'; $vals[]='NOW()';
 
       $sql="INSERT INTO angkutan_pupuk (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
       $st=$conn->prepare($sql); $st->execute($params);
 
     } else {
-      $kebun_id_post  = i('kebun_id');        // optional
-      $kebun_kode_post= s('kebun_kode');      // optional
-      $unit_id  = i('unit_id');
-      $blok     = s('blok');
-      $tanggal  = s('tanggal');
-      $jenis    = s('jenis_pupuk');
-      $dosis    = f('dosis');
-      $jumlah   = f('jumlah');
-      $luas     = f('luas');
-      $invt     = i('invt_pokok');
-      $catatan  = s('catatan');
-      $aplPost  = s('apl');                   // APL
-      $tahunPost= i('tahun');                 // Tahun (opsional int)
+      $kebun_id_post   = i('kebun_id');
+      $kebun_kode_post = s('kebun_kode');
+      $unit_id   = i('unit_id');
+      $blok      = s('blok');
+      $tanggal   = s('tanggal');
+      $jenis     = s('jenis_pupuk');
+      $dosis     = f('dosis');
+      $jumlah    = f('jumlah');
+      $luas      = f('luas');
+      $invt      = i('invt_pokok');
+      $catatan   = s('catatan');   // legacy
+      $aplPost   = s('apl');       // APL
+      $tahunPost = i('tahun');     // Tahun (opsional)
 
-      // Tahun Tanam (dari form — kirim dua nilai)
-      $tahunTanamId = i('tahun_tanam_id');    // id master (prioritas jika kolom ada)
-      $tahunTanam   = i('tahun_tanam');       // angka tahun (fallback jika kolom angka yang ada)
+      // BARU
+      $rayon      = s('rayon');
+      $keterangan = s('keterangan');
+      $no_au58    = s('no_au_58') !== '' ? s('no_au_58') : s('no_au58'); // terima dua nama dari client jika ada variasi
+
+      // Tahun Tanam (dari form)
+      $tahunTanamId = i('tahun_tanam_id');
+      $tahunTanam   = i('tahun_tanam');
 
       if (!$unit_id) $errors[]='Unit wajib dipilih.';
       if ($blok==='') $errors[]='Blok wajib diisi.';
@@ -172,18 +207,13 @@ try{
       if ($invt!==null && $invt<0) $errors[]='Invt. Pokok tidak boleh negatif.';
       if ($unit_id && $blok && !$blokExists($conn,$unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
       if ($jenis!=='' && !$pupukExists($conn,$jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
-
-      // Tahun input (bukan tahun tanam)
       if ($hasTahun) {
         if ($tahunPost!==null && ($tahunPost<1900 || $tahunPost>2100)) $errors[]='Tahun tidak valid (1900–2100).';
         if ($tahunPost===null && validDate($tanggal)) $tahunPost = (int)date('Y', strtotime($tanggal));
       }
-
-      // Validasi Tahun Tanam ID jika dipakai
       if ($hasTTId && $tahunTanamId!==null && !$tahunTanamIdValid($conn,$tahunTanamId)) {
         $errors[]='Tahun Tanam (ID) tidak ditemukan di master.';
       }
-
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
       [$kid,$kkod] = $kebunFromEither($conn,$kebun_id_post,$kebun_kode_post);
@@ -205,16 +235,24 @@ try{
       if ($aplCol){ $cols[]=$aplCol; $vals[]=':apl'; $params[':apl']=($aplPost!=='') ? $aplPost : null; }
       if ($hasDosis){ $cols[]='dosis'; $vals[]=':ds'; $params[':ds']=$dosis??null; }
 
-      // ===== Tahun Tanam (adaptif) =====
-      if ($hasTTId) { // simpan id master
-        $cols[]='tahun_tanam_id'; $vals[]=':ttid'; $params[':ttid']=$tahunTanamId;
-      } elseif ($hasTTVal) { // simpan angka tahunnya
-        $cols[]='tahun_tanam';    $vals[]=':tt';   $params[':tt']=$tahunTanam;
+      // Tahun Tanam
+      if ($hasTTId) { $cols[]='tahun_tanam_id'; $vals[]=':ttid'; $params[':ttid']=$tahunTanamId; }
+      elseif ($hasTTVal) { $cols[]='tahun_tanam'; $vals[]=':tt'; $params[':tt']=$tahunTanam; }
+
+      // Kolom baru
+      if ($hasRayonMen){ $cols[]='rayon'; $vals[]=':ry'; $params[':ry']=$rayon!==''?$rayon:null; }
+      if ($hasKetMen){   $cols[]='keterangan'; $vals[]=':ket'; $params[':ket']=$keterangan!==''?$keterangan:null; }
+      if ($hasNoAU58Men){ $cols[]=$noAU58ColMen; $vals[]=':au'; $params[':au']=$no_au58!==''?$no_au58:null; }
+      elseif ($hasCatMen && $no_au58!==''){ $cols[]='catatan'; $vals[]=':cat_legacy'; $params[':cat_legacy']=$no_au58; }
+
+      // legacy catatan (opsional)
+      if ($hasCatMen && s('catatan')!==''){
+        $cols[]='catatan'; $vals[]=':cat'; $params[':cat']=s('catatan');
       }
 
-      $cols = array_merge($cols, ['jumlah','luas','invt_pokok','catatan','created_at','updated_at']);
-      $vals = array_merge($vals, [':jml',':luas',':invt',':cat','NOW()','NOW()']);
-      $params += [':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':cat'=>$catatan];
+      $cols = array_merge($cols, ['jumlah','luas','invt_pokok','created_at','updated_at']);
+      $vals = array_merge($vals, [':jml',':luas',':invt','NOW()','NOW()']);
+      $params += [':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0];
 
       $sql="INSERT INTO menabur_pupuk (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
       $st=$conn->prepare($sql); $st->execute($params);
@@ -230,15 +268,20 @@ try{
 
     $errors=[];
     if ($tab==='angkutan'){
-      $kebun_id_post  = i('kebun_id');        // optional
-      $kebun_kode_post= s('kebun_kode');      // optional
-      $gudang_asal   = s('gudang_asal');
-      $unit_tujuan_id= i('unit_tujuan_id');
-      $tanggal       = s('tanggal');
-      $jenis_pupuk   = s('jenis_pupuk');
-      $jumlah        = f('jumlah');
-      $nomor_do      = s('nomor_do');
-      $supir         = s('supir');
+      $kebun_id_post   = i('kebun_id');
+      $kebun_kode_post = s('kebun_kode');
+      $gudang_asal     = s('gudang_asal');
+      $unit_tujuan_id  = i('unit_tujuan_id');
+      $tanggal         = s('tanggal');
+      $jenis_pupuk     = s('jenis_pupuk');
+      $jumlah          = f('jumlah');
+      $nomor_do        = s('nomor_do');
+      $supir           = s('supir');
+
+      // BARU
+      $rayon           = s('rayon');
+      $keterangan      = s('keterangan');
+      $no_spb          = s('no_spb'); // <<--
 
       if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
       if (!$unit_tujuan_id)  $errors[]='Unit tujuan wajib dipilih.';
@@ -250,35 +293,57 @@ try{
 
       [$kid,$kkod] = $kebunFromEither($conn,$kebun_id_post,$kebun_kode_post);
 
-      $sql="UPDATE angkutan_pupuk SET ".
-           ($hasKidAng  ? "kebun_id=:kid, "   : "").
-           ($hasKkodAng ? "kebun_kode=:kkod, ": "").
-           "gudang_asal=:ga, unit_tujuan_id=:uid, tanggal=:tgl, jenis_pupuk=:jp, jumlah=:jml, nomor_do=:no, supir=:sp, updated_at=NOW()
-            WHERE id=:id";
+      $set = [];
+      $params = [
+        ':ga'=>$gudang_asal, ':uid'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk,
+        ':jml'=>$jumlah??0, ':id'=>$id
+      ];
 
-      $params=[':ga'=>$gudang_asal, ':uid'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk,
-               ':jml'=>$jumlah??0, ':no'=>$nomor_do, ':sp'=>$supir, ':id'=>$id];
-      if ($hasKidAng)  $params[':kid']=$kid;
-      if ($hasKkodAng) $params[':kkod']=$kkod;
+      if ($hasKidAng)  { $set[]='kebun_id=:kid';   $params[':kid']=$kid; }
+      if ($hasKkodAng) { $set[]='kebun_kode=:kkod';$params[':kkod']=$kkod; }
 
+      if ($hasRayonAng){ $set[]='rayon=:ry'; $params[':ry']=$rayon!==''?$rayon:null; }
+      if ($hasKetAng){   $set[]='keterangan=:ket'; $params[':ket']=$keterangan!==''?$keterangan:null; }
+
+      // PRIORITAS: update no_spb bila ada kolomnya, kalau tidak ada tapi ada no_au58/no_au_58 pakai itu, else catatan
+      if ($hasNoSPBAng){ $set[]='no_spb=:spb'; $params[':spb']=$no_spb!==''?$no_spb:null; }
+      elseif ($hasNoAU58Ang){ $set[]="$noAU58ColAng=:spb"; $params[':spb']=$no_spb!==''?$no_spb:null; }
+      elseif ($hasCatAng){ $set[]='catatan=:spb'; $params[':spb']=$no_spb!==''?$no_spb:null; }
+
+      $set[]='gudang_asal=:ga';
+      $set[]='unit_tujuan_id=:uid';
+      $set[]='tanggal=:tgl';
+      $set[]='jenis_pupuk=:jp';
+      $set[]='jumlah=:jml';
+
+      if ($hasNomorDOAng){ $set[]='nomor_do=:no'; $params[':no']=$nomor_do; }
+      $set[]='supir=:sp'; $params[':sp']=$supir;
+
+      $set[]='updated_at=NOW()';
+
+      $sql="UPDATE angkutan_pupuk SET ".implode(', ', $set)." WHERE id=:id";
       $st=$conn->prepare($sql); $st->execute($params);
 
     } else {
-      $kebun_id_post  = i('kebun_id');        // optional
-      $kebun_kode_post= s('kebun_kode');      // optional
-      $unit_id  = i('unit_id');
-      $blok     = s('blok');
-      $tanggal  = s('tanggal');
-      $jenis    = s('jenis_pupuk');
-      $dosis    = f('dosis');
-      $jumlah   = f('jumlah');
-      $luas     = f('luas');
-      $invt     = i('invt_pokok');
-      $catatan  = s('catatan');
-      $aplPost  = s('apl');                   // APL
-      $tahunPost= i('tahun');                 // Tahun input
+      $kebun_id_post   = i('kebun_id');
+      $kebun_kode_post = s('kebun_kode');
+      $unit_id   = i('unit_id');
+      $blok      = s('blok');
+      $tanggal   = s('tanggal');
+      $jenis     = s('jenis_pupuk');
+      $dosis     = f('dosis');
+      $jumlah    = f('jumlah');
+      $luas      = f('luas');
+      $invt      = i('invt_pokok');
+      $catatan   = s('catatan');   // legacy
+      $aplPost   = s('apl');
+      $tahunPost = i('tahun');
 
-      // Tahun Tanam (form)
+      // BARU
+      $rayon      = s('rayon');
+      $keterangan = s('keterangan');
+      $no_au58    = s('no_au_58') !== '' ? s('no_au_58') : s('no_au58');
+
       $tahunTanamId = i('tahun_tanam_id');
       $tahunTanam   = i('tahun_tanam');
 
@@ -303,37 +368,38 @@ try{
 
       [$kid,$kkod] = $kebunFromEither($conn,$kebun_id_post,$kebun_kode_post);
 
-      $sql="UPDATE menabur_pupuk SET ".
-            ($hasKidMen  ? "kebun_id=:kid, "   : "").
-            ($hasKkodMen ? "kebun_kode=:kkod, ": "").
-            "unit_id=:uid, ".
-            ($hasAfdeling?'afdeling=:afd, ':'').
-            "blok=:blk, tanggal=:tgl, ".
-            ($hasTahun ? 'tahun=:thn, ' : '').
-            "jenis_pupuk=:jp, ".
-            ($aplCol ? "$aplCol=:apl, " : '').
-            ($hasDosis?'dosis=:ds, ':'').
-            // ===== set Tahun Tanam adaptif =====
-            ($hasTTId  ? 'tahun_tanam_id=:ttid, ' : '').
-            ($hasTTVal ? 'tahun_tanam=:tt, '      : '').
-            "jumlah=:jml, luas=:luas, invt_pokok=:invt, catatan=:cat, updated_at=NOW()
-            WHERE id=:id";
+      $set=[]; $params=[':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal, ':jp'=>$jenis, ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':id'=>$id];
 
-      $params=[
-        ':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal,
-        ':jp'=>$jenis, ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0, ':cat'=>$catatan, ':id'=>$id
-      ];
-      if ($hasAfdeling) $params[':afd']=$unitName($conn,$unit_id)??'';
-      if ($hasTahun)    $params[':thn']=$tahunPost;
-      if ($aplCol)      $params[':apl']=($aplPost!=='') ? $aplPost : null;
-      if ($hasDosis)    $params[':ds']=$dosis??null;
-      if ($hasKidMen)   $params[':kid']=$kid;
-      if ($hasKkodMen)  $params[':kkod']=$kkod;
+      if ($hasKidMen){  $set[]='kebun_id=:kid';   $params[':kid']=$kid; }
+      if ($hasKkodMen){ $set[]='kebun_kode=:kkod';$params[':kkod']=$kkod; }
+      $set[]='unit_id=:uid';
+      if ($hasAfdeling){ $set[]='afdeling=:afd'; $params[':afd']=$unitName($conn,$unit_id)??''; }
+      $set[]='blok=:blk';
+      $set[]='tanggal=:tgl';
+      if ($hasTahun){ $set[]='tahun=:thn'; $params[':thn']=$tahunPost; }
+      $set[]='jenis_pupuk=:jp';
+      if ($aplCol){ $set[]="$aplCol=:apl"; $params[':apl']=($aplPost!=='') ? $aplPost : null; }
+      if ($hasDosis){ $set[]='dosis=:ds'; $params[':ds']=$dosis??null; }
 
-      // bind Tahun Tanam sesuai kolom yang ada
-      if ($hasTTId)  { $params[':ttid'] = $tahunTanamId; }
-      if ($hasTTVal) { $params[':tt']   = $tahunTanam;   }
+      // Tahun Tanam adaptif
+      if ($hasTTId){  $set[]='tahun_tanam_id=:ttid'; $params[':ttid']=$tahunTanamId; }
+      if ($hasTTVal){ $set[]='tahun_tanam=:tt';      $params[':tt']=$tahunTanam; }
 
+      // Kolom baru
+      if ($hasRayonMen){ $set[]='rayon=:ry'; $params[':ry']=$rayon!==''?$rayon:null; }
+      if ($hasKetMen){   $set[]='keterangan=:ket'; $params[':ket']=$keterangan!==''?$keterangan:null; }
+      if ($hasNoAU58Men){ $set[]="$noAU58ColMen = :au"; $params[':au']=$no_au58!==''?$no_au58:null; }
+      elseif ($hasCatMen && $no_au58!==''){ $set[]='catatan=:cat_au'; $params[':cat_au']=$no_au58; }
+
+      // legacy catatan (opsional)
+      if ($hasCatMen && $catatan!==''){ $set[]='catatan=:cat'; $params[':cat']=$catatan; }
+
+      $set[]='jumlah=:jml';
+      $set[]='luas=:luas';
+      $set[]='invt_pokok=:invt';
+      $set[]='updated_at=NOW()';
+
+      $sql="UPDATE menabur_pupuk SET ".implode(', ', $set)." WHERE id=:id";
       $st=$conn->prepare($sql); $st->execute($params);
     }
 

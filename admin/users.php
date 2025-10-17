@@ -29,7 +29,7 @@ include_once '../layouts/header.php';
     <div class="overflow-x-auto">
       <div class="max-h-[520px] overflow-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 text-gray-600 sticky top-0 z-10">
+          <thead class="bg-green-600 text-gray-100 sticky top-0 z-10">
             <tr>
               <th class="py-3 px-4 text-left font-semibold">Username</th>
               <th class="py-3 px-4 text-left font-semibold">Nama Lengkap</th>

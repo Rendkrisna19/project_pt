@@ -1,7 +1,10 @@
 <?php
 // pages/cetak/pemupukan_excel.php
-// Excel Pemupukan – hormati semua filter
-// Kolom baru (Menabur): TAHUN, APL; T.TANAM dari md_tahun_tanam
+// Excel Pemupukan – hormati semua filter (Unit, Kebun, Tanggal, Bulan, Jenis, Rayon, Keterangan)
+// Menabur & Angkutan: RAYON, NO AU-58/NO SPB, KETERANGAN
+// Kompatibel kolom:
+//   - Menabur: no_au_58 | no_au58 | catatan (dialias ke no_au_58)
+//   - Angkutan: no_spb (baru) | no_au_58 | no_au58 | catatan (semua dialias ke no_spb)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
@@ -30,15 +33,19 @@ try{
   $f_tanggal  = qstr($_GET['tanggal'] ?? '');
   $f_bulan    = qstr($_GET['bulan']   ?? '');
   $f_jenis    = qstr($_GET['jenis_pupuk'] ?? '');
+  // baru:
+  $f_rayon      = qstr($_GET['rayon'] ?? '');
+  $f_keterangan = qstr($_GET['keterangan'] ?? '');
 
   // Column detection
   $cacheCols=[]; $columnExists=function(PDO $c,$table,$col)use(&$cacheCols){
-    if(!isset($cacheCols[$table])){
+    $key=$table;
+    if(!isset($cacheCols[$key])){
       $st=$c->prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t");
       $st->execute([':t'=>$table]);
-      $cacheCols[$table]=array_map('strtolower',array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME'));
+      $cacheCols[$key]=array_map('strtolower',array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME'));
     }
-    return in_array(strtolower($col),$cacheCols[$table]??[],true);
+    return in_array(strtolower($col),$cacheCols[$key]??[],true);
   };
 
   $hasKebunMenaburId  = $columnExists($pdo,'menabur_pupuk','kebun_id');
@@ -51,6 +58,20 @@ try{
   $hasTTAngka         = $columnExists($pdo,'menabur_pupuk','tahun_tanam');
   $aplCol=null; foreach(['apl','aplikator'] as $c){ if($columnExists($pdo,'menabur_pupuk',$c)){ $aplCol=$c; break; } }
 
+  $hasRayonMenabur       = $columnExists($pdo,'menabur_pupuk','rayon');
+  $hasKeteranganMenabur  = $columnExists($pdo,'menabur_pupuk','keterangan');
+  $hasNoAU58MenaburMain  = $columnExists($pdo,'menabur_pupuk','no_au_58');
+  $hasNoAU58MenaburAlt   = $columnExists($pdo,'menabur_pupuk','no_au58');
+  $hasCatatanMenabur     = $columnExists($pdo,'menabur_pupuk','catatan');
+
+  $hasRayonAngkutan      = $columnExists($pdo,'angkutan_pupuk','rayon');
+  $hasKeteranganAngkutan = $columnExists($pdo,'angkutan_pupuk','keterangan');
+  // BARU: SPB dan fallback AU-58/catatan
+  $hasNoSPBAngkut        = $columnExists($pdo,'angkutan_pupuk','no_spb');
+  $hasNoAU58AngkutMain   = $columnExists($pdo,'angkutan_pupuk','no_au_58');
+  $hasNoAU58AngkutAlt    = $columnExists($pdo,'angkutan_pupuk','no_au58');
+  $hasCatatanAngkut      = $columnExists($pdo,'angkutan_pupuk','catatan');
+
   // Map kebun id->kode/nama
   $kebuns=$pdo->query("SELECT id,kode,nama_kebun FROM md_kebun")->fetchAll(PDO::FETCH_ASSOC);
   $idToKode=[]; $idToNama=[];
@@ -62,6 +83,13 @@ try{
     if($hasKebunAngkutId){  $selectK=", kb.nama_kebun AS kebun_nama, kb.kode AS kebun_kode"; $joinK=" LEFT JOIN md_kebun kb ON kb.id=a.kebun_id "; }
     elseif($hasKebunAngkutKod){ $selectK=", kb.nama_kebun AS kebun_nama, kb.kode AS kebun_kode"; $joinK=" LEFT JOIN md_kebun kb ON kb.kode=a.kebun_kode "; }
 
+    // Alias NO SPB (baru) – fallback kolom lama: no_au_58/no_au58/catatan
+    $selectSPB = '';
+    if ($hasNoSPBAngkut)        $selectSPB = ", a.no_spb AS no_spb";
+    elseif ($hasNoAU58AngkutMain) $selectSPB = ", a.no_au_58 AS no_spb";
+    elseif ($hasNoAU58AngkutAlt)  $selectSPB = ", a.no_au58  AS no_spb";
+    elseif ($hasCatatanAngkut)    $selectSPB = ", a.catatan  AS no_spb";
+
     $where=" WHERE 1=1"; $p=[];
     if($f_unit_id!==''){ $where.=" AND a.unit_tujuan_id=:uid"; $p[':uid']=(int)$f_unit_id; }
     if($f_kebun_id!==''){
@@ -71,8 +99,10 @@ try{
     if($f_tanggal!==''){ $where.=" AND a.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
     if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(a.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
     if($f_jenis!==''){ $where.=" AND a.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
+    if($f_rayon!=='' && $hasRayonAngkutan){ $where.=" AND a.rayon LIKE :ry"; $p[':ry']="%$f_rayon%"; }
+    if($f_keterangan!=='' && $hasKeteranganAngkutan){ $where.=" AND a.keterangan LIKE :ket"; $p[':ket']="%$f_keterangan%"; }
 
-    $sql="SELECT a.*, u.nama_unit AS unit_tujuan_nama $selectK
+    $sql="SELECT a.*, u.nama_unit AS unit_tujuan_nama $selectK $selectSPB
           FROM angkutan_pupuk a
           LEFT JOIN units u ON u.id=a.unit_tujuan_id
           $joinK
@@ -80,7 +110,9 @@ try{
           ORDER BY a.tanggal DESC, a.id DESC";
     $st=$pdo->prepare($sql); foreach($p as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); } $st->execute();
     $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-    $headers=['Kebun','Gudang Asal','Unit Tujuan','Tanggal','Jenis Pupuk','Jumlah (Kg)','Nomor DO','Supir'];
+
+    // HEADER ANGKUTAN: tanpa Nomor DO, ganti No SPB
+    $headers=['Kebun','Rayon','Gudang Asal','Unit Tujuan','Tanggal','Jenis Pupuk','Jumlah (Kg)','No SPB','Keterangan','Supir'];
 
   } else {
     $judul="Data Penaburan Pupuk Kimia";
@@ -96,6 +128,12 @@ try{
     $selectTahun = $hasTahunMenabur ? ", m.tahun AS tahun_input" : ", YEAR(m.tanggal) AS tahun_input";
     $selectAPL   = $aplCol ? ", m.`$aplCol` AS apl" : ", NULL AS apl";
 
+    // alias NO AU-58 ke no_au_58
+    $selectNoAU = '';
+    if ($hasNoAU58MenaburMain)      $selectNoAU = ", m.no_au_58";
+    elseif ($hasNoAU58MenaburAlt)   $selectNoAU = ", m.no_au58 AS no_au_58";
+    elseif ($hasCatatanMenabur)     $selectNoAU = ", m.catatan AS no_au_58";
+
     $where=" WHERE 1=1"; $p=[];
     if($f_unit_id!==''){ $where.=" AND m.unit_id=:uid"; $p[':uid']=(int)$f_unit_id; }
     if($f_kebun_id!==''){
@@ -105,12 +143,15 @@ try{
     if($f_tanggal!==''){ $where.=" AND m.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
     if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(m.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
     if($f_jenis!==''){ $where.=" AND m.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
+    if($f_rayon!=='' && $hasRayonMenabur){ $where.=" AND m.rayon LIKE :ry"; $p[':ry']="%$f_rayon%"; }
+    if($f_keterangan!=='' && $hasKeteranganMenabur){ $where.=" AND m.keterangan LIKE :ket"; $p[':ket']="%$f_keterangan%"; }
 
     $sql="SELECT m.*, u.nama_unit AS unit_nama
                  $selectK
                  $selectTT
                  $selectTahun
                  $selectAPL
+                 $selectNoAU
           FROM menabur_pupuk m
           LEFT JOIN units u ON u.id=m.unit_id
           $joinK
@@ -119,7 +160,8 @@ try{
           ORDER BY m.tanggal DESC, m.id DESC";
     $st=$pdo->prepare($sql); foreach($p as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); } $st->execute();
     $rows=$st->fetchAll(PDO::FETCH_ASSOC);
-    $headers=['Tahun','Kebun','Unit','T.TANAM','Blok','Tanggal','Jenis Pupuk','APL','Dosis (kg/ha)','Jumlah (Kg)','Luas (Ha)','Invt. Pokok','Catatan'];
+
+    $headers=['Tahun','Kebun','Unit','T.TANAM','Blok','Rayon','Tanggal','Jenis Pupuk','APL','Dosis (kg/ha)','Jumlah (Kg)','Luas (Ha)','Invt. Pokok','No AU-58','Keterangan'];
   }
 
   // ===== Spreadsheet
@@ -138,7 +180,7 @@ try{
 
   // Subjudul
   $sheet->mergeCells($C1.'2:'.$CL.'2');
-  $sheet->setCellValue($C1.'2', $tab==='angkutan'?'Data Angkutan Pupuk Kimia':'Data Penaburan Pupuk Kimia');
+  $sheet->setCellValue($C1.'2', $judul);
   $sheet->getStyle($C1.'2')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('0F7B4F');
   $sheet->getStyle($C1.'2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
@@ -150,7 +192,9 @@ try{
     ' | kebun_id='.($f_kebun_id===''?'Semua':$f_kebun_id).
     ' | tanggal='.($f_tanggal?:'Semua').
     ' | bulan='.($f_bulan?:'Semua').
-    ' | jenis='.($f_jenis?:'Semua')
+    ' | jenis='.($f_jenis?:'Semua').
+    ' | rayon='.($f_rayon?:'Semua').
+    ' | keterangan='.($f_keterangan?:'Semua')
   );
   $sheet->getStyle($C1.'3')->getFont()->setSize(10)->getColor()->setRGB('666666');
   $sheet->getStyle($C1.'3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -176,12 +220,14 @@ try{
       if ($tab==='angkutan'){
         $vals=[
           (string)($row['kebun_nama'] ?? ($row['kebun_kode'] ?? '-')),
+          (string)($row['rayon'] ?? ''),
           (string)($row['gudang_asal'] ?? ''),
           (string)($row['unit_tujuan_nama'] ?? '-'),
           (string)($row['tanggal'] ?? ''),
           (string)($row['jenis_pupuk'] ?? ''),
           (float)($row['jumlah'] ?? 0),
-          (string)($row['nomor_do'] ?? ''),
+          (string)($row['no_spb'] ?? ''),        // << No SPB (alias)
+          (string)($row['keterangan'] ?? ''),
           (string)($row['supir'] ?? ''),
         ];
         $tot_jumlah += (float)($row['jumlah'] ?? 0);
@@ -193,6 +239,7 @@ try{
           (string)($row['unit_nama'] ?? '-'),                                        // Unit
           (string)($row['t_tanam'] ?? '-'),                                          // T.TANAM
           (string)($row['blok'] ?? ''),                                              // Blok
+          (string)($row['rayon'] ?? ''),                                             // Rayon
           (string)($row['tanggal'] ?? ''),                                           // Tanggal
           (string)($row['jenis_pupuk'] ?? ''),                                       // Jenis
           (string)(($row['apl'] ?? '') === '' ? '-' : $row['apl']),                  // APL
@@ -200,7 +247,8 @@ try{
           (float)($row['jumlah'] ?? 0),                                              // Jumlah
           (float)($row['luas'] ?? 0),                                                // Luas
           (int)($row['invt_pokok'] ?? 0),                                            // Invt
-          (string)($row['catatan'] ?? ''),                                           // Catatan
+          (string)($row['no_au_58'] ?? ''),                                          // No AU-58
+          (string)($row['keterangan'] ?? ''),                                        // Keterangan
         ];
         if($dosis!==null){ $tot_dosis += $dosis; $cnt_dosis++; }
         $tot_jumlah += (float)($row['jumlah'] ?? 0);
@@ -212,9 +260,11 @@ try{
       $sheet->getStyle($C1.$r.':'.$CL.$r)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
       if ($tab==='angkutan'){
-        $sheet->getStyle($cols[5].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        // Kolom Jumlah (index 6)
+        $sheet->getStyle($cols[6].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
       } else {
-        foreach([8,9,10,11] as $idx){ $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT); }
+        // Dosis, Jumlah, Luas, Invt (index 9..12)
+        foreach([9,10,11,12] as $idx){ $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT); }
       }
       $r++;
     }
@@ -222,35 +272,38 @@ try{
 
   // TOTAL
   if ($tab==='angkutan'){
-    $sheet->mergeCells($cols[0].$r.':'.$cols[4].$r);
+    $sheet->mergeCells($cols[0].$r.':'.$cols[5].$r); // sampai 'Jenis Pupuk' sebelumnya (kolom 5 = Jenis)
     $sheet->setCellValue($cols[0].$r,'TOTAL JUMLAH (Kg)');
     $sheet->getStyle($cols[0].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
     $sheet->getStyle($cols[0].$r)->getFont()->setBold(true);
-    $sheet->setCellValue($cols[5].$r,$tot_jumlah);
-    $sheet->getStyle($cols[5].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $sheet->setCellValue($cols[6].$r,$tot_jumlah);   // kolom Jumlah
+    $sheet->getStyle($cols[6].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
   } else {
     $avg_dosis = $cnt_dosis ? ($tot_dosis/$cnt_dosis) : 0;
-    $sheet->mergeCells($cols[0].$r.':'.$cols[7].$r); // sampai kolom APL
+    $sheet->mergeCells($cols[0].$r.':'.$cols[8].$r); // sampai kolom APL
     $sheet->setCellValue($cols[0].$r,'TOTAL');
     $sheet->getStyle($cols[0].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
     $sheet->getStyle($cols[0].$r)->getFont()->setBold(true);
-    $sheet->setCellValue($cols[8].$r,$avg_dosis);     // Dosis rata2
-    $sheet->setCellValue($cols[9].$r,$tot_jumlah);    // Jumlah
-    $sheet->setCellValue($cols[10].$r,$tot_luas);     // Luas
-    $sheet->setCellValue($cols[11].$r,$tot_invt);     // Invt
-    foreach([8,9,10,11] as $idx){ $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT); }
+    $sheet->setCellValue($cols[9].$r,$avg_dosis);     // Dosis rata2
+    $sheet->setCellValue($cols[10].$r,$tot_jumlah);   // Jumlah
+    $sheet->setCellValue($cols[11].$r,$tot_luas);     // Luas
+    $sheet->setCellValue($cols[12].$r,$tot_invt);     // Invt
+    foreach([9,10,11,12] as $idx){ $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT); }
   }
   $sheet->getStyle($C1.$r.':'.$CL.$r)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
   $sheet->getStyle($C1.$r.':'.$CL.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
 
   foreach($cols as $c){ $sheet->getColumnDimension($c)->setAutoSize(true); }
 
+  // Nama file ikut filter
   $fname='Pemupukan_Kimia_'.$tab;
-  if($f_unit_id!=='')  $fname.='_UNIT-'.$f_unit_id;
-  if($f_kebun_id!=='') $fname.='_KEBUN-'.$f_kebun_id;
-  if($f_tanggal!=='')  $fname.='_TGL-'.$f_tanggal;
-  if($f_bulan!=='')    $fname.='_BLN-'.$f_bulan;
-  if($f_jenis!=='')    $fname.='_JENIS-'.preg_replace('/[^A-Za-z0-9_\-]/','',$f_jenis);
+  if($f_unit_id!=='')    $fname.='_UNIT-'.$f_unit_id;
+  if($f_kebun_id!=='')   $fname.='_KEBUN-'.$f_kebun_id;
+  if($f_tanggal!=='')    $fname.='_TGL-'.$f_tanggal;
+  if($f_bulan!=='')      $fname.='_BLN-'.$f_bulan;
+  if($f_jenis!=='')      $fname.='_JENIS-'.preg_replace('/[^A-Za-z0-9_\-]/','',$f_jenis);
+  if($f_rayon!=='')      $fname.='_RAYON-'.preg_replace('/[^A-Za-z0-9_\-]/','',$f_rayon);
+  if($f_keterangan!=='') $fname.='_KET-'.preg_replace('/[^A-Za-z0-9_\-]/','',$f_keterangan);
   $fname.='.xlsx';
 
   header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');

@@ -1,218 +1,123 @@
 <?php
+// lm76.php — MOD: Role 'staf' tidak bisa edit/hapus + tombol ikon
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
+
+// --- MODIFIKASI: Dapatkan role user ---
+$userRole = $_SESSION['user_role'] ?? 'staf';
+$isStaf = ($userRole === 'staf');
+// ------------------------------------
+
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
 
 require_once '../config/database.php';
 $db = new Database(); $conn = $db->getConnection();
 
-/* helper cek kolom ada */
-function col_exists(PDO $pdo, $table, $col){
-  $st = $pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
-  $st->execute([':t'=>$table, ':c'=>$col]);
-  return (bool)$st->fetchColumn();
-}
-
-$hasKebun = col_exists($conn, 'lm76', 'kebun_id');
-
-$units = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
-$kebun  = $hasKebun ? $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC")->fetchAll(PDO::FETCH_ASSOC) : [];
-
-/* === Tahun Tanam diambil langsung dari md_tahun_tanam === */
-$ttList = $conn->query("SELECT DISTINCT tahun FROM md_tahun_tanam WHERE tahun IS NOT NULL AND tahun<>'' ORDER BY tahun ASC")
-               ->fetchAll(PDO::FETCH_COLUMN);
-
+/* masters */
+$units  = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
+$kebun  = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
+$ttList = $conn->query("SELECT DISTINCT tahun FROM md_tahun_tanam WHERE tahun IS NOT NULL AND tahun<>'' ORDER BY tahun")->fetchAll(PDO::FETCH_COLUMN);
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $tahunNow = (int)date('Y');
 
 $currentPage = 'lm76';
-$colCount = $hasKebun ? 14 : 13; // jumlah kolom untuk colspan kosong
 include_once '../layouts/header.php';
 ?>
+<style>
+  .thead-sticky th{position:sticky;top:0;z-index:10}
+  /* --- MODIFIKASI: Style untuk tombol disabled --- */
+  button:disabled { opacity: 0.5; cursor: not-allowed !important; }
+</style>
+
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
       <h1 class="text-2xl font-bold">LM-76 — Statistik Panen Kelapa Sawit</h1>
-      <p class="text-gray-500">Input per afdeling (dipakai untuk template Excel LM-76)</p>
+      <p class="text-gray-500">Input 13 kolom sesuai kebutuhan laporan LM-76</p>
     </div>
-
-    <div class="flex items-center gap-2">
-      <!-- Export Excel -->
-      <button id="btn-export-excel" class="flex items-center gap-2 border border-gray-300 px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Export Excel">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/></svg>
-        <span>Excel</span>
-      </button>
-
-      <!-- Cetak PDF -->
-      <button id="btn-export-pdf" class="flex items-center gap-2 border border-gray-300 px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Cetak PDF">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/><path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/></svg>
-        <span>PDF</span>
-      </button>
-
+    <div class="flex gap-2">
       <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Input LM-76</button>
     </div>
   </div>
 
-  <!-- Filter singkat -->
-  <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-3 gap-3">
-    <select id="filter-unit" class="border border-gray-300 rounded px-3 py-2">
-      <option value="">Semua Unit</option>
-      <?php foreach ($units as $u): ?>
-        <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
-      <?php endforeach; ?>
-    </select>
-    <select id="filter-bulan" class="border border-gray-300 rounded px-3 py-2">
-      <option value="">Semua Bulan</option>
-      <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-    </select>
-    <select id="filter-tahun" class="border border-gray-300 rounded px-3 py-2">
-      <?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?>
-        <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-      <?php endfor; ?>
-    </select>
+  <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-5 gap-3">
+    <select id="filter-kebun" class="border rounded px-3 py-2"><option value="">Semua Kebun</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+    <select id="filter-unit" class="border rounded px-3 py-2"><option value="">Semua Unit</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+    <select id="filter-bulan" class="border rounded px-3 py-2"><option value="">Semua Bulan</option><?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?></select>
+    <select id="filter-tahun" class="border rounded px-3 py-2"><?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?><option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option><?php endfor; ?></select>
+    <select id="filter-tt" class="border rounded px-3 py-2"><option value="">Semua T. Tanam</option><?php foreach ($ttList as $tt): ?><option value="<?= htmlspecialchars($tt) ?>"><?= htmlspecialchars($tt) ?></option><?php endforeach; ?></select>
   </div>
 
-  <!-- CARD TABEL: sticky header + scroll internal + pagination -->
   <div class="bg-white rounded-xl shadow-sm">
-    <!-- Scroll horizontal (mobile) -->
     <div class="overflow-x-auto">
-      <!-- Scroll vertikal internal -->
       <div class="max-h-[520px] overflow-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 sticky top-0 z-10">
-            <tr class="text-gray-600">
-              <?php if ($hasKebun): ?><th class="py-3 px-4 text-left">Kebun</th><?php endif; ?>
-              <th class="py-3 px-4 text-left">Unit</th>
-              <th class="py-3 px-4 text-left">Periode</th>
-              <th class="py-3 px-4 text-left">Blok</th>
-              <th class="py-3 px-4 text-left">Luas (Ha)</th>
-              <th class="py-3 px-4 text-left">Jml Pohon</th>
-              <th class="py-3 px-4 text-left">Prod BI (Real/Angg)</th>
-              <th class="py-3 px-4 text-left">Prod SD (Real/Angg)</th>
-              <th class="py-3 px-4 text-left">Jml Tandan (BI)</th>
-              <th class="py-3 px-4 text-left">PSTB (BI/TL)</th>
-              <th class="py-3 px-4 text-left">Panen HK</th>
-              <th class="py-3 px-4 text-left">Panen Ha (BI/SD)</th>
-              <th class="py-3 px-4 text-left">Freq (BI/SD)</th>
-              <th class="py-3 px-4 text-left">Aksi</th>
+          <thead class="thead-sticky bg-green-700 text-white">
+            <tr>
+              <th class="py-3 px-4 text-left">Tahun</th><th class="py-3 px-4 text-left">Kebun</th>
+              <th class="py-3 px-4 text-left">Unit/Defisi</th><th class="py-3 px-4 text-left">Periode</th>
+              <th class="py-3 px-4 text-left">T. Tanam</th><th class="py-3 px-4 text-right">Luas (Ha)</th>
+              <th class="py-3 px-4 text-right">Invt Pokok</th><th class="py-3 px-4 text-right">Anggaran (Kg)</th>
+              <th class="py-3 px-4 text-right">Realisasi (Kg)</th><th class="py-3 px-4 text-right">Jumlah Tandan</th>
+              <th class="py-3 px-4 text-right">Jumlah HK</th><th class="py-3 px-4 text-right">Panen (Ha)</th>
+              <th class="py-3 px-4 text-right">Frekuensi</th><th class="py-3 px-4 text-left">Aksi</th>
             </tr>
           </thead>
-          <tbody id="tbody-data"><tr><td colspan="<?= $colCount ?>" class="text-center py-10 text-gray-500">Memuat…</td></tr></tbody>
+          <tbody id="tbody-data" class="text-gray-800">
+            <tr><td colspan="14" class="text-center py-10 text-gray-500">Memuat…</td></tr>
+          </tbody>
+          <tfoot>
+            <tr class="bg-green-50 border-t-4 border-green-700 text-gray-900">
+              <td class="py-3 px-4 font-semibold" colspan="5">TOTAL</td>
+              <td class="py-3 px-4 text-right font-semibold" id="tot-luas">0</td><td class="py-3 px-4 text-right font-semibold" id="tot-pokok">0</td>
+              <td class="py-3 px-4 text-right font-semibold" id="tot-anggaran">0</td><td class="py-3 px-4 text-right font-semibold" id="tot-realisasi">0</td>
+              <td class="py-3 px-4 text-right font-semibold" id="tot-tandan">0</td><td class="py-3 px-4 text-right font-semibold" id="tot-hk">0</td>
+              <td class="py-3 px-4 text-right font-semibold" id="tot-panenha">0</td><td class="py-3 px-4 text-right font-semibold" id="tot-freq">0</td>
+              <td></td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
-
-    <!-- Pagination Bar -->
     <div class="flex flex-wrap items-center justify-between gap-3 p-3 border-t">
       <div class="flex items-center gap-2">
-        <label for="page-size" class="text-sm text-gray-600">Tampilkan</label>
+        <label class="text-sm text-gray-600">Tampilkan</label>
         <select id="page-size" class="border rounded px-2 py-1 text-sm">
-          <option value="5">5</option>
-          <option value="10" selected>10</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
+          <option value="10" selected>10</option><option value="25">25</option><option value="50">50</option><option value="100">100</option>
         </select>
         <span class="text-sm text-gray-600">baris</span>
       </div>
-      <div class="flex items-center gap-2" id="pager"><!-- tombol pager --></div>
-      <div class="text-sm text-gray-600" id="range-info"><!-- info range --></div>
+      <div class="flex items-center gap-2" id="pager"></div><div class="text-sm text-gray-600" id="range-info"></div>
     </div>
   </div>
 </div>
 
-<!-- MODAL -->
-<div id="crud-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-5xl">
+<div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-4xl">
     <div class="flex justify-between items-center mb-4">
       <h3 id="modal-title" class="text-xl font-bold">Input LM-76</h3>
       <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800">&times;</button>
     </div>
-
     <form id="crud-form" novalidate>
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
-      <input type="hidden" name="action" id="form-action">
-      <input type="hidden" name="id" id="form-id">
-
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>"><input type="hidden" name="action" id="form-action"><input type="hidden" name="id" id="form-id">
       <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <?php if ($hasKebun): ?>
-          <div class="md:col-span-2">
-            <label class="block text-sm mb-1">Nama Kebun</label>
-            <select id="kebun_id" name="kebun_id" class="w-full border border-gray-300 rounded px-3 py-2">
-              <option value="">-- Pilih Kebun --</option>
-              <?php foreach ($kebun as $k): ?>
-                <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
-              <?php endforeach; ?>
-            </select>
-          </div>
-        <?php endif; ?>
-
-        <div class="md:col-span-2">
-          <label class="block text-sm mb-1">Unit/Afdeling</label>
-          <select id="unit_id" name="unit_id" class="w-full border border-gray-300 rounded px-3 py-2" required>
-            <option value="">-- Pilih Unit --</option>
-            <?php foreach ($units as $u): ?>
-              <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-sm mb-1">Bulan</label>
-          <select id="bulan" name="bulan" class="w-full border border-gray-300 rounded px-3 py-2" required>
-            <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm mb-1">Tahun</label>
-          <select id="tahun" name="tahun" class="w-full border border-gray-300 rounded px-3 py-2" required>
-            <?php for ($y=$tahunNow-1;$y<=$tahunNow+3;$y++): ?>
-              <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-            <?php endfor; ?>
-          </select>
-        </div>
-
-        <!-- T.T dari md_tahun_tanam -->
-        <div>
-          <label class="block text-sm mb-1">T.T (Tahun Tanam)</label>
-          <select id="tt" name="tt" class="w-full border border-gray-300 rounded px-3 py-2" required>
-            <option value="">-- Pilih Tahun Tanam --</option>
-            <?php foreach ($ttList as $tt): ?>
-              <option value="<?= htmlspecialchars($tt) ?>"><?= htmlspecialchars($tt) ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-
-        <!-- Blok sebagai input bebas -->
-        <div>
-          <label class="block text-sm mb-1">Blok</label>
-          <input type="text" id="blok" name="blok" class="w-full border border-gray-300 rounded px-3 py-2">
-        </div>
-
-        <div><label class="block text-sm mb-1">Luas (Ha)</label><input type="number" step="0.01" id="luas_ha" name="luas_ha" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Jumlah Pohon</label><input type="number" id="jumlah_pohon" name="jumlah_pohon" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-
-        <div><label class="block text-sm mb-1">Varietas</label><input type="text" id="varietas" name="varietas" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Prod BI Real</label><input type="number" step="0.01" id="prod_bi_realisasi" name="prod_bi_realisasi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Prod BI Angg</label><input type="number" step="0.01" id="prod_bi_anggaran" name="prod_bi_anggaran" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Prod SD Real</label><input type="number" step="0.01" id="prod_sd_realisasi" name="prod_sd_realisasi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-
-        <div><label class="block text-sm mb-1">Prod SD Angg</label><input type="number" step="0.01" id="prod_sd_anggaran" name="prod_sd_anggaran" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Jml Tandan BI</label><input type="number" id="jumlah_tandan_bi" name="jumlah_tandan_bi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">PSTB BI (Ton/Ha)</label><input type="number" step="0.01" id="pstb_ton_ha_bi" name="pstb_ton_ha_bi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">PSTB TL (Ton/Ha)</label><input type="number" step="0.01" id="pstb_ton_ha_tl" name="pstb_ton_ha_tl" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-
-        <div><label class="block text-sm mb-1">Panen HK Realisasi</label><input type="number" step="0.01" id="panen_hk_realisasi" name="panen_hk_realisasi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Panen Ha BI</label><input type="number" step="0.01" id="panen_ha_bi" name="panen_ha_bi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Panen Ha SD</label><input type="number" step="0.01" id="panen_ha_sd" name="panen_ha_sd" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Freq Panen BI</label><input type="number" id="frek_panen_bi" name="frek_panen_bi" class="w-full border border-gray-300 rounded px-3 py-2"></div>
-
-        <div><label class="block text-sm mb-1">Freq Panen SD</label><input type="number" id="frek_panen_sd" name="frek_panen_sd" class="w-full border border-gray-300 rounded px-3 py-2"></div>
+        <div class="md:col-span-2"><label class="block text-sm mb-1">Kebun</label><select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2"><option value="">-- Pilih Kebun --</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select></div>
+        <div class="md:col-span-2"><label class="block text-sm mb-1">Unit/Defisi</label><select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2" required><option value="">-- Pilih Unit --</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select></div>
+        <div><label class="block text-sm mb-1">Bulan</label><select id="bulan" name="bulan" class="w-full border rounded px-3 py-2" required><?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?></select></div>
+        <div><label class="block text-sm mb-1">Tahun</label><select id="tahun" name="tahun" class="w-full border rounded px-3 py-2" required><?php for ($y=$tahunNow-1;$y<=$tahunNow+3;$y++): ?><option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option><?php endfor; ?></select></div>
+        <div><label class="block text-sm mb-1">T. Tanam</label><select id="tt" name="tt" class="w-full border rounded px-3 py-2" required><option value="">-- Pilih Tahun Tanam --</option><?php foreach ($ttList as $tt): ?><option value="<?= htmlspecialchars($tt) ?>"><?= htmlspecialchars($tt) ?></option><?php endforeach; ?></select></div>
+        <div><label class="block text-sm mb-1">Luas (Ha)</label><input type="number" step="0.01" id="luas_ha" name="luas_ha" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Invt Pokok</label><input type="number" id="jumlah_pohon" name="jumlah_pohon" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Anggaran (Kg)</label><input type="number" step="0.001" id="anggaran_kg" name="anggaran_kg" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Realisasi (Kg)</label><input type="number" step="0.001" id="realisasi_kg" name="realisasi_kg" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Jumlah Tandan</label><input type="number" id="jumlah_tandan" name="jumlah_tandan" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Jumlah HK</label><input type="number" step="0.001" id="jumlah_hk" name="jumlah_hk" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Panen (Ha)</label><input type="number" step="0.001" id="panen_ha" name="panen_ha" class="w-full border rounded px-3 py-2"></div>
+        <div><label class="block text-sm mb-1">Frekuensi</label><input type="number" step="0.001" id="frekuensi" name="frekuensi" class="w-full border rounded px-3 py-2"></div>
       </div>
-
       <div class="flex justify-end gap-3 mt-6">
-        <button type="button" id="btn-cancel" class="px-4 py-2 rounded border border-gray-300 text-gray-800 hover:bg-gray-50">Batal</button>
+        <button type="button" id="btn-cancel" class="px-4 py-2 rounded border text-gray-800 hover:bg-gray-50">Batal</button>
         <button type="submit" class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">Simpan</button>
       </div>
     </form>
@@ -223,208 +128,136 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const $ = s => document.querySelector(s);
-  const tbody = $('#tbody-data');
-  const selU = $('#filter-unit'), selB = $('#filter-bulan'), selT = $('#filter-tahun');
+  // --- MODIFIKASI: Kirim role ke JavaScript ---
+  const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
 
-  // Modal helpers
-  const modal = $('#crud-modal');
-  const open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
-  const close=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
+  const $=s=>document.querySelector(s);
+  const tbody=$('#tbody-data'), fKebun=$('#filter-kebun'), fUnit=$('#filter-unit'), fBulan=$('#filter-bulan'), fTahun=$('#filter-tahun'), fTT=$('#filter-tt');
+  const pageSizeSel=$('#page-size'), pagerEl=$('#pager'), rangeInfoEl=$('#range-info');
+  const tot={luas:$('#tot-luas'), pokok:$('#tot-pokok'), anggaran:$('#tot-anggaran'), realisasi:$('#tot-realisasi'), tandan:$('#tot-tandan'), hk:$('#tot-hk'), panenha:$('#tot-panenha'), freq:$('#tot-freq')};
+  const modal=$('#crud-modal'), form=$('#crud-form'), titleEl=$('#modal-title');
+  const close=()=>{modal.classList.add('hidden');modal.classList.remove('flex')}, open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
 
   $('#btn-add').addEventListener('click',()=>{
-    const f = document.getElementById('crud-form');
-    f.reset();
-    document.getElementById('form-action').value='store';
-    document.getElementById('form-id').value='';
+    form.reset(); $('#form-action').value='store'; $('#form-id').value=''; titleEl.textContent='Input LM-76';
+    if(fKebun.value) $('#kebun_id').value=fKebun.value; if(fUnit.value) $('#unit_id').value=fUnit.value;
+    if(fBulan.value) $('#bulan').value=fBulan.value; $('#tahun').value=fTahun.value;
     open();
   });
-  $('#btn-close').addEventListener('click',close);
-  $('#btn-cancel').addEventListener('click',close);
+  $('#btn-close').addEventListener('click', close);
+  $('#btn-cancel').addEventListener('click', close);
 
-  // ===== Pagination state (client-side) =====
-  const pageSizeSel = document.getElementById('page-size');
-  const pagerEl = document.getElementById('pager');
-  const rangeInfoEl = document.getElementById('range-info');
+  let allData=[], currentPage=1;
+  const fmt=n=>Number(n||0).toLocaleString(undefined,{maximumFractionDigits:3}), sum=(arr,key)=>arr.reduce((a,r)=>a+(parseFloat(r[key])||0),0);
 
-  let allData = [];      // data dari server (sudah terfilter oleh filter atas)
-  let currentPage = 1;   // halaman aktif
-
-  function paginate(array, pageSize, pageNumber){
-    const start = (pageNumber - 1) * pageSize;
-    return array.slice(start, start + pageSize);
+  function buildRowHTML(r){
+    const periode=`${r.bulan||'-'} ${r.tahun||'-'}`;
+    // --- MODIFIKASI: Tambahkan atribut 'disabled' jika user adalah staf ---
+    const disabledAttr = IS_STAF ? 'disabled' : '';
+    return `
+      <tr class="border-b hover:bg-gray-50">
+        <td class="py-2 px-3">${r.tahun||'-'}</td><td class="py-2 px-3">${r.nama_kebun||'-'}</td>
+        <td class="py-2 px-3">${r.nama_unit||'-'}</td><td class="py-2 px-3">${periode}</td>
+        <td class="py-2 px-3">${r.tt||'-'}</td><td class="py-2 px-3 text-right">${fmt(r.luas_ha)}</td>
+        <td class="py-2 px-3 text-right">${fmt(r.jumlah_pohon)}</td><td class="py-2 px-3 text-right">${fmt(r.anggaran_kg)}</td>
+        <td class="py-2 px-3 text-right">${fmt(r.realisasi_kg)}</td><td class="py-2 px-3 text-right">${fmt(r.jumlah_tandan)}</td>
+        <td class="py-2 px-3 text-right">${fmt(r.jumlah_hk)}</td><td class="py-2 px-3 text-right">${fmt(r.panen_ha)}</td>
+        <td class="py-2 px-3 text-right">${fmt(r.frekuensi)}</td>
+        <td class="py-2 px-3">
+          <div class="flex items-center gap-3">
+            <button class="btn-edit text-blue-600" title="Edit" data-json="${encodeURIComponent(JSON.stringify(r))}" ${disabledAttr}>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 0 1 2.97 2.97l-9.9 9.9-4.2 1.23 1.23-4.2 9.9-9.9z" /></svg>
+            </button>
+            <button class="btn-del text-red-600" title="Hapus" data-id="${r.id}" ${disabledAttr}>
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3m-9 0h12" /></svg>
+            </button>
+          </div>
+        </td>
+      </tr>`;
   }
 
-  function renderPager(page, totalPages){
-    const windowSize = 5;
-    let start = Math.max(1, page - Math.floor(windowSize/2));
-    let end   = start + windowSize - 1;
-    if (end > totalPages) { end = totalPages; start = Math.max(1, end - windowSize + 1); }
-
-    const btn = (label, disabled, goPage, extra='') => `
-      <button ${disabled ? 'disabled' : ''} data-goto="${goPage}"
-        class="px-3 py-1 border rounded text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'} ${extra}">
-        ${label}
-      </button>`;
-
-    let html = '';
-    html += btn('« Prev', page <= 1, page - 1);
-    for (let p = start; p <= end; p++){
-      html += btn(p, false, p, p===page ? 'bg-gray-200 font-semibold' : '');
-    }
-    html += btn('Next »', page >= totalPages, page + 1);
-
-    pagerEl.innerHTML = html;
+  function renderTotals(){
+    tot.luas.textContent=fmt(sum(allData,'luas_ha')); tot.pokok.textContent=fmt(sum(allData,'jumlah_pohon'));
+    tot.anggaran.textContent=fmt(sum(allData,'anggaran_kg')); tot.realisasi.textContent=fmt(sum(allData,'realisasi_kg'));
+    tot.tandan.textContent=fmt(sum(allData,'jumlah_tandan')); tot.hk.textContent=fmt(sum(allData,'jumlah_hk'));
+    tot.panenha.textContent=fmt(sum(allData,'panen_ha'));
+    const luas=sum(allData,'luas_ha'), panenha=sum(allData,'panen_ha');
+    tot.freq.textContent=fmt(luas?(panenha/luas):0);
   }
 
   function renderTable(){
-    const size = parseInt(pageSizeSel.value || '10', 10);
-    const total = allData.length;
-    const totalPages = Math.max(1, Math.ceil(total / size));
-    if (currentPage > totalPages) currentPage = totalPages;
-
-    if (!total){
-      tbody.innerHTML = `<tr><td colspan="<?= $colCount ?>" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
-      renderPager(1,1);
-      rangeInfoEl.textContent = '';
-      return;
+    const size=parseInt(pageSizeSel.value||'10',10), total=allData.length, totalPages=Math.max(1, Math.ceil(total/size));
+    if(currentPage>totalPages)currentPage=totalPages;
+    if(!total){
+      tbody.innerHTML=`<tr><td colspan="14" class="text-center py-10 text-gray-500">Belum ada data.</td></tr>`;
+      $('#pager').innerHTML=''; $('#range-info').textContent='';
+      renderTotals(); return;
     }
-
-    const rows = paginate(allData, size, currentPage);
-    tbody.innerHTML = rows.map(x => `
-      <tr class="border-b border-gray-200 hover:bg-gray-50">
-        <?php if ($hasKebun): ?>
-        <td class="py-2 px-3">${x.nama_kebun ?? '-'}</td>
-        <?php endif; ?>
-        <td class="py-2 px-3">${x.nama_unit}</td>
-        <td class="py-2 px-3">${x.bulan} ${x.tahun}</td>
-        <td class="py-2 px-3">${x.blok || '-'}</td>
-        <td class="py-2 px-3">${x.luas_ha ?? '-'}</td>
-        <td class="py-2 px-3">${x.jumlah_pohon ?? '-'}</td>
-        <td class="py-2 px-3">${x.prod_bi_realisasi}/${x.prod_bi_anggaran}</td>
-        <td class="py-2 px-3">${x.prod_sd_realisasi}/${x.prod_sd_anggaran}</td>
-        <td class="py-2 px-3">${x.jumlah_tandan_bi ?? '-'}</td>
-        <td class="py-2 px-3">${x.pstb_ton_ha_bi}/${x.pstb_ton_ha_tl}</td>
-        <td class="py-2 px-3">${x.panen_hk_realisasi ?? '-'}</td>
-        <td class="py-2 px-3">${x.panen_ha_bi}/${x.panen_ha_sd}</td>
-        <td class="py-2 px-3">${x.frek_panen_bi}/${x.frek_panen_sd}</td>
-        <td class="py-2 px-3">
-          <button class="text-blue-600 underline btn-edit" data-json='${encodeURIComponent(JSON.stringify(x))}'>Edit</button>
-          <button class="text-red-600 underline btn-del" data-id="${x.id}">Hapus</button>
-        </td>
-      </tr>
-    `).join('');
-
-    const startIdx = (currentPage - 1) * size + 1;
-    const endIdx   = Math.min(currentPage * size, total);
-    rangeInfoEl.textContent = `Menampilkan ${startIdx}–${endIdx} dari ${total} data`;
-
-    renderPager(currentPage, totalPages);
+    const start=(currentPage-1)*size, end=Math.min(start+size, total);
+    tbody.innerHTML=allData.slice(start,end).map(buildRowHTML).join('');
+    rangeInfoEl.textContent=`Menampilkan ${start+1}–${end} dari ${total} data`;
+    const btn=(label,disabled,goto,active=false)=>`<button ${disabled?'disabled':''} data-goto="${goto}" class="px-3 py-1.5 border rounded text-sm ${disabled?'opacity-50 cursor-not-allowed':'hover:bg-gray-100'} ${active?'bg-gray-200 font-semibold':''}">${label}</button>`;
+    let html=btn('« Prev', currentPage<=1, currentPage-1);
+    const windowSize=5; let s=Math.max(1, currentPage-Math.floor(windowSize/2)), e=Math.min(totalPages, s+windowSize-1);
+    if(e-s+1<windowSize) s=Math.max(1, e-windowSize+1);
+    for(let p=s;p<=e;p++) html+=btn(p, false, p, p===currentPage);
+    html+=btn('Next »', currentPage>=totalPages, currentPage+1);
+    pagerEl.innerHTML=html;
+    renderTotals();
   }
 
-  // Ambil data dari server (ikut filter), lalu render halaman 1
   function refresh(){
     const fd=new FormData();
-    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-    fd.append('action','list');
-    fd.append('unit_id', selU.value);
-    fd.append('bulan', selB.value);
-    fd.append('tahun', selT.value);
-
+    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>'); fd.append('action','list');
+    fd.append('kebun_id',fKebun.value); fd.append('unit_id',fUnit.value);
+    fd.append('bulan',fBulan.value); fd.append('tahun',fTahun.value); fd.append('tt',fTT.value);
+    tbody.innerHTML=`<tr><td colspan="14" class="text-center py-10 text-gray-500">Memuat…</td></tr>`;
     fetch('lm76_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json())
-      .then(j=>{
-        if(!j.success){
-          tbody.innerHTML = `<tr><td colspan="<?= $colCount ?>" class="text-center py-8 text-red-500">${j.message||'Error'}</td></tr>`;
-          allData = [];
-          renderPager(1,1);
-          rangeInfoEl.textContent = '';
-          return;
-        }
-        allData = Array.isArray(j.data) ? j.data : [];
-        currentPage = 1;
-        renderTable();
-      })
-      .catch(()=>{
-        tbody.innerHTML = `<tr><td colspan="<?= $colCount ?>" class="text-center py-8 text-red-500">Gagal memuat data</td></tr>`;
-      });
+      .then(r=>r.json()).then(j=>{allData=j.success&&Array.isArray(j.data)?j.data:[];currentPage=1;renderTable();})
+      .catch(()=>{tbody.innerHTML=`<tr><td colspan="14" class="text-center py-10 text-red-500">Gagal memuat data</td></tr>`;});
   }
   refresh();
+  [fKebun,fUnit,fBulan,fTahun,fTT].forEach(el=>el.addEventListener('change', ()=>{currentPage=1;refresh();}));
+  pageSizeSel.addEventListener('change', ()=>{currentPage=1;renderTable();});
 
-  [selU, selB, selT].forEach(el=>el.addEventListener('change',refresh));
-  pageSizeSel.addEventListener('change', ()=>{ currentPage = 1; renderTable(); });
-
-  // Klik pager
-  document.getElementById('pager').addEventListener('click',(e)=>{
-    const btn = e.target.closest('button[data-goto]');
-    if(!btn || btn.disabled) return;
-    const goto = parseInt(btn.dataset.goto,10);
-    if(!Number.isNaN(goto)){
-      currentPage = goto;
-      renderTable();
-    }
+  pagerEl.addEventListener('click',(e)=>{
+    const b=e.target.closest('button[data-goto]'); if(!b||b.disabled) return;
+    currentPage=parseInt(b.dataset.goto,10); renderTable();
   });
 
-  // Edit/Hapus (delegasi)
-  document.body.addEventListener('click',e=>{
-    if(e.target.classList.contains('btn-edit')){
-      const d = JSON.parse(decodeURIComponent(e.target.dataset.json));
-      const f = document.getElementById('crud-form');
-      f.reset();
-      document.getElementById('form-action').value='update';
-      document.getElementById('form-id').value=d.id;
-
-      const ids = ['kebun_id','unit_id','bulan','tahun','tt','blok','luas_ha','jumlah_pohon','varietas','prod_bi_realisasi','prod_bi_anggaran','prod_sd_realisasi','prod_sd_anggaran','jumlah_tandan_bi','pstb_ton_ha_bi','pstb_ton_ha_tl','panen_hk_realisasi','panen_ha_bi','panen_ha_sd','frek_panen_bi','frek_panen_sd'];
-      ids.forEach(k=>{ const el=document.getElementById(k); if(el && d[k]!==undefined) el.value=d[k] ?? ''; });
+  document.body.addEventListener('click',(e)=>{
+    const t=e.target.closest('button'); if(!t)return;
+    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
+    if(t.classList.contains('btn-edit') && !IS_STAF){
+      const row=JSON.parse(decodeURIComponent(t.dataset.json||''));
+      form.reset(); $('#form-action').value='update'; $('#form-id').value=row.id; titleEl.textContent='Edit LM-76';
+      const ids=['kebun_id','unit_id','bulan','tahun','tt','luas_ha','jumlah_pohon','anggaran_kg','realisasi_kg','jumlah_tandan','jumlah_hk','panen_ha','frekuensi'];
+      ids.forEach(id=>{const el=$('#'+id);if(el&&row[id]!==undefined)el.value=row[id]??'';});
       open();
     }
-
-    if(e.target.classList.contains('btn-del')){
-      const id=e.target.dataset.id;
-      Swal.fire({title:'Hapus data?',icon:'warning',showCancelButton:true}).then(res=>{
-        if(res.isConfirmed){
-          const fd=new FormData();
-          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-          fd.append('action','delete');
-          fd.append('id',id);
-          fetch('lm76_crud.php',{method:'POST',body:fd}).then(r=>r.json()).then(j=>{
-            if(j.success){ Swal.fire('Terhapus','', 'success'); refresh(); } else Swal.fire('Gagal', j.message||'Error', 'error');
-          });
-        }
+    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
+    if(t.classList.contains('btn-del') && !IS_STAF){
+      const id=t.dataset.id;
+      Swal.fire({title:'Hapus data ini?',text:'Tindakan ini tidak dapat dibatalkan.',icon:'warning',showCancelButton:true,confirmButtonColor:'#d33',cancelButtonColor:'#3085d6',confirmButtonText:'Ya, hapus',cancelButtonText:'Batal'})
+      .then((res)=>{
+        if(!res.isConfirmed)return;
+        const fd=new FormData(); fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>'); fd.append('action','delete'); fd.append('id',id);
+        fetch('lm76_crud.php',{method:'POST',body:fd})
+          .then(r=>r.json()).then(j=>{if(j.success){Swal.fire('Terhapus!','Data berhasil dihapus.','success');refresh();}else Swal.fire('Gagal',j.message||'Tidak bisa menghapus','error');})
+          .catch(err=>Swal.fire('Error',err?.message||'Network error','error'));
       });
     }
   });
 
-  // Submit form
-  document.getElementById('crud-form').addEventListener('submit',e=>{
+  form.addEventListener('submit',(e)=>{
     e.preventDefault();
-    const fd=new FormData(e.target);
+    const req=['unit_id','bulan','tahun','tt'];
+    for(const id of req){const el=$('#'+id);if(!el||!el.value){Swal.fire('Validasi',`Field ${id.replace('_',' ')} wajib diisi.`,'warning');return;}}
+    const fd=new FormData(form);
     fetch('lm76_crud.php',{method:'POST',body:fd})
-      .then(r=>r.json())
-      .then(j=>{
-        if(j.success){ close(); Swal.fire('Tersimpan','', 'success'); refresh(); }
-        else Swal.fire('Gagal', j.message||'Error', 'error');
-      });
+      .then(r=>r.json()).then(j=>{if(j.success){close();Swal.fire({icon:'success',title:'Berhasil',text:j.message,timer:1400,showConfirmButton:false});refresh();}
+        else{const html=j.errors?.length?`<ul style="text-align:left">${j.errors.map(e=>`<li>• ${e}</li>`).join('')}</ul>`:(j.message||'Terjadi kesalahan');Swal.fire('Gagal',html,'error');}})
+      .catch(err=>Swal.fire('Error',err?.message||'Network error','error'));
   });
-});
-
-// Export (ikut filter)
-document.getElementById('btn-export-excel').addEventListener('click', () => {
-  const qs = new URLSearchParams({
-    csrf_token: '<?= htmlspecialchars($CSRF) ?>',
-    unit_id: document.getElementById('filter-unit').value || '',
-    bulan: document.getElementById('filter-bulan').value || '',
-    tahun: document.getElementById('filter-tahun').value || ''
-  }).toString();
-  window.open('cetak/lm76_export_excel.php?' + qs, '_blank');
-});
-document.getElementById('btn-export-pdf').addEventListener('click', () => {
-  const qs = new URLSearchParams({
-    csrf_token: '<?= htmlspecialchars($CSRF) ?>',
-    unit_id: document.getElementById('filter-unit').value || '',
-    bulan: document.getElementById('filter-bulan').value || '',
-    tahun: document.getElementById('filter-tahun').value || ''
-  }).toString();
-  window.open('cetak/lm76_export_pdf.php?' + qs, '_blank');
 });
 </script>

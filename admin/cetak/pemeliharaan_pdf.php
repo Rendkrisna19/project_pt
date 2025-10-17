@@ -1,6 +1,7 @@
 <?php
-// pages/cetak/pemeliharaan_pdf.php
-// PDF mengikuti SEMUA filter dari pages/pemeliharaan.php
+// pages/cetak/pemeliharaan_pdf.php — FINAL
+// PDF mengikuti SEMUA filter (termasuk Keterangan) & menampilkan Satuan R/E + Keterangan
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -10,7 +11,7 @@ require_once '../../vendor/autoload.php';
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-$db  = new Database(); 
+$db  = new Database();
 $pdo = $db->getConnection();
 
 /* ========= Helpers ========= */
@@ -28,16 +29,16 @@ function colExists(PDO $pdo, $table, $col){
 function pickCol(PDO $pdo, $table, array $cands){ foreach($cands as $c){ if(colExists($pdo,$table,$c)) return $c; } return null; }
 $bulanNama=[1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
 
-$allowedTab=['TU','TBM','TM','BIBIT_PN','BIBIT_MN'];
+$allowedTab=['TU','TBM','TM','TK','BIBIT_PN','BIBIT_MN'];
 $titles=[
-  'TU'=>'Pemeliharaan TU','TBM'=>'Pemeliharaan TBM','TM'=>'Pemeliharaan TM',
+  'TU'=>'Pemeliharaan TU','TBM'=>'Pemeliharaan TBM','TM'=>'Pemeliharaan TM','TK'=>'Pemeliharaan TK',
   'BIBIT_PN'=>'Pemeliharaan Bibit PN','BIBIT_MN'=>'Pemeliharaan Bibit MN'
 ];
 $tab = $_GET['tab'] ?? 'TU';
 if (!in_array($tab,$allowedTab,true)) $tab='TU';
 $isBibit = in_array($tab,['BIBIT_PN','BIBIT_MN'],true);
 
-/* ========= Filters (sinkron dengan pages/pemeliharaan.php) ========= */
+/* ========= Filters (sinkron) ========= */
 $f_unit_id   = isset($_GET['unit_id'])   && $_GET['unit_id']   !== '' ? (int)$_GET['unit_id'] : '';
 $f_bulan     = isset($_GET['bulan'])     && $_GET['bulan']     !== '' ? (string)$_GET['bulan'] : '';
 $f_tahun     = isset($_GET['tahun'])     && $_GET['tahun']     !== '' ? (int)$_GET['tahun'] : '';
@@ -46,6 +47,7 @@ $f_tenaga_id = isset($_GET['tenaga_id']) && $_GET['tenaga_id'] !== '' ? (int)$_G
 $f_kebun_id  = isset($_GET['kebun_id'])  && $_GET['kebun_id']  !== '' ? (int)$_GET['kebun_id'] : '';
 $f_rayon     = isset($_GET['rayon'])     && $_GET['rayon']     !== '' ? (string)$_GET['rayon'] : '';
 $f_bibit     = isset($_GET['bibit'])     && $_GET['bibit']     !== '' ? (string)$_GET['bibit'] : '';
+$f_ket       = isset($_GET['keterangan'])&& $_GET['keterangan']!== '' ? (string)$_GET['keterangan'] : '';
 
 /* ========= Map ID → Nama ========= */
 $jenis_nama = '';
@@ -61,6 +63,9 @@ $hasBulanCol  = colExists($pdo,'pemeliharaan','bulan');
 $hasTahunCol  = colExists($pdo,'pemeliharaan','tahun');
 $hasKebunId   = colExists($pdo,'pemeliharaan','kebun_id');
 $hasKebunKode = colExists($pdo,'pemeliharaan','kebun_kode');
+$hasKet       = colExists($pdo,'pemeliharaan','keterangan');
+$hasSatR      = colExists($pdo,'pemeliharaan','satuan_rencana');
+$hasSatE      = colExists($pdo,'pemeliharaan','satuan_realisasi');
 
 $colKebunText = pickCol($pdo,'pemeliharaan',['kebun_nama','kebun','nama_kebun','kebun_text']);
 $colRayon     = pickCol($pdo,'pemeliharaan',['rayon','rayon_nama']);
@@ -117,6 +122,8 @@ if ($isBibit){
   }
 }
 
+if ($hasKet && $f_ket!==''){ $sql.=" AND p.keterangan LIKE :ket"; $params[':ket']="%{$f_ket}%"; }
+
 $sql .= $hasTanggal ? " ORDER BY p.tanggal DESC, p.id DESC" : " ORDER BY p.tahun DESC, p.id DESC";
 $st=$pdo->prepare($sql);
 foreach($params as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
@@ -138,6 +145,7 @@ if ($f_tenaga_id!==''){ $parts[]='Tenaga '.$tenaga_nama; }
 if ($f_kebun_id!==''){ $parts[]='Kebun '.$kebun_nama; }
 if ($isBibit){ if ($f_bibit!==''){ $parts[]='Stood/Jenis '.$f_bibit; } }
 else { if ($f_rayon!==''){ $parts[]='Rayon '.$f_rayon; } }
+if ($f_ket!==''){ $parts[]='Ket. '.$f_ket; }
 $filterLine='Filter: '.implode(' | ',$parts);
 
 /* ========= HTML ========= */
@@ -184,15 +192,18 @@ ob_start();
         <th>PERIODE</th>
         <th>TENAGA</th>
         <th class="right">RENCANA</th>
+        <th>SATUAN R.</th>
         <th class="right">REALISASI</th>
+        <th>SATUAN E.</th>
         <th class="right">+/-</th>
         <th class="right">PROGRESS (%)</th>
+        <th>KETERANGAN</th>
         <th>STATUS</th>
       </tr>
     </thead>
     <tbody>
       <?php if (empty($rows)): ?>
-        <tr><td colspan="12" class="center">Tidak ada data.</td></tr>
+        <tr><td colspan="15" class="center">Tidak ada data.</td></tr>
       <?php else:
         foreach($rows as $r):
           $rencana=(float)($r['rencana']??0);
@@ -204,6 +215,9 @@ ob_start();
           $progress=$rencana>0?($realisasi/$rencana*100):0;
           $status=(string)($r['status']??'');
           $cls='b-gray'; if($status==='Selesai') $cls='b-green'; elseif($status==='Berjalan') $cls='b-blue'; elseif($status==='Tertunda') $cls='b-yellow';
+          $satR = $hasSatR ? (string)($r['satuan_rencana']??'') : '';
+          $satE = $hasSatE ? (string)($r['satuan_realisasi']??'') : '';
+          $ket  = $hasKet  ? (string)($r['keterangan']??'') : '';
       ?>
         <tr>
           <td><?= h($th) ?></td>
@@ -214,9 +228,12 @@ ob_start();
           <td class="center"><?= h($periode) ?></td>
           <td><?= h($r['tenaga']??'-') ?></td>
           <td class="right"><?= number_format($rencana,2,',','.') ?></td>
+          <td><?= h($satR) ?></td>
           <td class="right"><?= number_format($realisasi,2,',','.') ?></td>
+          <td><?= h($satE) ?></td>
           <td class="right"><?= number_format($delta,2,',','.') ?></td>
           <td class="right"><?= number_format($progress,2,',','.') ?></td>
+          <td><?= h($ket) ?></td>
           <td><span class="badge <?= $cls ?>"><?= h($status) ?></span></td>
         </tr>
       <?php endforeach; endif; ?>
@@ -226,9 +243,12 @@ ob_start();
         <tr>
           <td colspan="7" class="right">TOTAL</td>
           <td class="right"><?= number_format($tot_r,2,',','.') ?></td>
+          <td></td>
           <td class="right"><?= number_format($tot_e,2,',','.') ?></td>
+          <td></td>
           <td class="right"><?= number_format($tot_d,2,',','.') ?></td>
           <td class="right"><?= number_format($tot_p,2,',','.') ?></td>
+          <td></td>
           <td></td>
         </tr>
       </tfoot>

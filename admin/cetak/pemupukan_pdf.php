@@ -1,7 +1,11 @@
 <?php
 // pages/cetak/pemupukan_pdf.php
 // Cetak PDF Pemupukan (Menabur/Angkutan) – header hijau, hormati filter
-// Kolom baru (Menabur): TAHUN, APL; T.TANAM dari md_tahun_tanam
+// Menabur: TAHUN, APL; T.TANAM dari md_tahun_tanam
+// Tambahan kolom & filter: RAYON, NO AU-58, KETERANGAN
+// Kompatibel kolom:
+//   - Menabur: no_au_58 | no_au58 | catatan (dialias ke no_au_58)
+//   - Angkutan: no_spb (baru) | no_au_58 | no_au58 | catatan (semua dialias ke no_spb)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
@@ -27,16 +31,20 @@ try {
   $f_tanggal  = qstr($_GET['tanggal']            ?? '');
   $f_bulan    = qstr($_GET['bulan']              ?? '');
   $f_jenis    = qstr($_GET['jenis_pupuk']        ?? '');
+  // baru: ikutkan filter rayon & keterangan (kalau ada di UI)
+  $f_rayon      = qstr($_GET['rayon']       ?? '');
+  $f_keterangan = qstr($_GET['keterangan']  ?? '');
 
   // ===== Helper deteksi kolom
   $cacheCols=[];
   $columnExists=function(PDO $c,$table,$col)use(&$cacheCols){
-    if(!isset($cacheCols[$table])){
+    $k=$table;
+    if(!isset($cacheCols[$k])){
       $st=$c->prepare("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t");
       $st->execute([':t'=>$table]);
-      $cacheCols[$table]=array_map('strtolower',array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME'));
+      $cacheCols[$k]=array_map('strtolower',array_column($st->fetchAll(PDO::FETCH_ASSOC),'COLUMN_NAME'));
     }
-    return in_array(strtolower($col),$cacheCols[$table]??[],true);
+    return in_array(strtolower($col),$cacheCols[$k]??[],true);
   };
 
   // Kebun availability
@@ -51,6 +59,22 @@ try {
   $hasTTAngka         = $columnExists($pdo,'menabur_pupuk','tahun_tanam');
   $aplCol = null; foreach(['apl','aplikator'] as $c){ if($columnExists($pdo,'menabur_pupuk',$c)){ $aplCol=$c; break; } }
 
+  // Kolom Rayon/Keterangan/No AU-58 (MENABUR)
+  $hasRayonMenabur       = $columnExists($pdo,'menabur_pupuk','rayon');
+  $hasKeteranganMenabur  = $columnExists($pdo,'menabur_pupuk','keterangan');
+  $hasNoAU58MenaburMain  = $columnExists($pdo,'menabur_pupuk','no_au_58');
+  $hasNoAU58MenaburAlt   = $columnExists($pdo,'menabur_pupuk','no_au58');
+  $hasCatatanMenabur     = $columnExists($pdo,'menabur_pupuk','catatan');
+
+  // Kolom Rayon/Keterangan/No SPB (ANGKUTAN)
+  $hasRayonAngkutan      = $columnExists($pdo,'angkutan_pupuk','rayon');
+  $hasKeteranganAngkutan = $columnExists($pdo,'angkutan_pupuk','keterangan');
+  $hasNoSPBAngkut        = $columnExists($pdo,'angkutan_pupuk','no_spb');   // baru
+  $hasNoAU58AngkutMain   = $columnExists($pdo,'angkutan_pupuk','no_au_58'); // legacy
+  $hasNoAU58AngkutAlt    = $columnExists($pdo,'angkutan_pupuk','no_au58');  // legacy
+  $hasCatatanAngkut      = $columnExists($pdo,'angkutan_pupuk','catatan');  // legacy
+  $hasNomorDOAngkut      = $columnExists($pdo,'angkutan_pupuk','nomor_do'); // mungkin masih ada di skema lama/baru (tapi TIDAK ditampilkan lagi)
+
   // Map kebun id->kode untuk filter bila transaksi pakai kode
   $kebuns=$pdo->query("SELECT id,kode,nama_kebun FROM md_kebun")->fetchAll(PDO::FETCH_ASSOC);
   $idToKode=[]; foreach($kebuns as $k){ $idToKode[(int)$k['id']]=$k['kode']; }
@@ -61,6 +85,14 @@ try {
     if($hasKebunAngkutId){  $selectKebun=", kb.nama_kebun AS kebun_nama, kb.kode AS kebun_kode"; $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=a.kebun_id "; }
     elseif($hasKebunAngkutKod){ $selectKebun=", kb.nama_kebun AS kebun_nama, kb.kode AS kebun_kode"; $joinKebun=" LEFT JOIN md_kebun kb ON kb.kode=a.kebun_kode "; }
 
+    // Alias NO SPB (baru) – fallback kolom lama
+    // Urutan prioritas: no_spb -> no_au_58 -> no_au58 -> catatan
+    $selectSPB = '';
+    if ($hasNoSPBAngkut)        $selectSPB = ", a.no_spb AS no_spb";
+    elseif ($hasNoAU58AngkutMain) $selectSPB = ", a.no_au_58 AS no_spb";
+    elseif ($hasNoAU58AngkutAlt)  $selectSPB = ", a.no_au58  AS no_spb";
+    elseif ($hasCatatanAngkut)    $selectSPB = ", a.catatan  AS no_spb";
+
     $where=" WHERE 1=1"; $p=[];
     if($f_unit_id!==''){ $where.=" AND a.unit_tujuan_id=:uid"; $p[':uid']=(int)$f_unit_id; }
     if($f_kebun_id!==''){
@@ -70,8 +102,10 @@ try {
     if($f_tanggal!==''){ $where.=" AND a.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
     if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(a.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
     if($f_jenis!==''){ $where.=" AND a.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
+    if($f_rayon!=='' && $hasRayonAngkutan){ $where.=" AND a.rayon LIKE :ry"; $p[':ry']="%$f_rayon%"; }
+    if($f_keterangan!=='' && $hasKeteranganAngkutan){ $where.=" AND a.keterangan LIKE :ket"; $p[':ket']="%$f_keterangan%"; }
 
-    $sql="SELECT a.*, u.nama_unit AS unit_tujuan_nama $selectKebun
+    $sql="SELECT a.*, u.nama_unit AS unit_tujuan_nama $selectKebun $selectSPB
           FROM angkutan_pupuk a
           LEFT JOIN units u ON u.id=a.unit_tujuan_id
           $joinKebun
@@ -100,6 +134,12 @@ try {
     $selectTahun = $hasTahunMenabur ? ", m.tahun AS tahun_input" : ", YEAR(m.tanggal) AS tahun_input";
     $selectAPL   = $aplCol ? ", m.`$aplCol` AS apl" : ", NULL AS apl";
 
+    // Alias NO AU-58 (menabur)
+    $selectNoAU = '';
+    if ($hasNoAU58MenaburMain)      $selectNoAU = ", m.no_au_58";
+    elseif ($hasNoAU58MenaburAlt)   $selectNoAU = ", m.no_au58 AS no_au_58";
+    elseif ($hasCatatanMenabur)     $selectNoAU = ", m.catatan AS no_au_58";
+
     $where=" WHERE 1=1"; $p=[];
     if($f_unit_id!==''){ $where.=" AND m.unit_id=:uid"; $p[':uid']=(int)$f_unit_id; }
     if($f_kebun_id!==''){
@@ -109,12 +149,15 @@ try {
     if($f_tanggal!==''){ $where.=" AND m.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
     if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(m.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
     if($f_jenis!==''){ $where.=" AND m.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
+    if($f_rayon!=='' && $hasRayonMenabur){ $where.=" AND m.rayon LIKE :ry"; $p[':ry']="%$f_rayon%"; }
+    if($f_keterangan!=='' && $hasKeteranganMenabur){ $where.=" AND m.keterangan LIKE :ket"; $p[':ket']="%$f_keterangan%"; }
 
     $sql="SELECT m.*, u.nama_unit AS unit_nama
                  $selectKebun
                  $selectTT
                  $selectTahun
                  $selectAPL
+                 $selectNoAU
           FROM menabur_pupuk m
           LEFT JOIN units u ON u.id=m.unit_id
           $joinKebun
@@ -131,7 +174,7 @@ try {
       $tot_kg   += (float)($r['jumlah'] ?? 0);
       $tot_luas += (float)($r['luas'] ?? 0);
       $tot_invt += (float)($r['invt_pokok'] ?? 0);
-      if(isset($r['dosis']) && $r['dosis']!=='' && (float)$r['dosis']!=0){ $sum_dosis+=(float)$r['dosis']; $cnt_dosis++; }
+      if(isset($r['dosis']) && $r['dosis']!==''){ $sum_dosis+=(float)$r['dosis']; $cnt_dosis++; }
     }
     $avg_dosis = $cnt_dosis ? $sum_dosis/$cnt_dosis : 0.0;
   }
@@ -168,33 +211,36 @@ ob_start(); ?>
     <thead>
       <tr>
         <?php if($tab==='angkutan'): ?>
-          <th>Kebun</th><th>Gudang Asal</th><th>Unit Tujuan</th><th>Tanggal</th>
-          <th>Jenis Pupuk</th><th class="text-right">Jumlah (Kg)</th><th>Nomor DO</th><th>Supir</th>
+          <th>Kebun</th><th>Rayon</th><th>Gudang Asal</th><th>Unit Tujuan</th><th>Tanggal</th>
+          <th>Jenis Pupuk</th><th class="text-right">Jumlah (Kg)</th><th>No SPB</th><th>Keterangan</th><th>Supir</th>
         <?php else: ?>
-          <th>Tahun</th><th>Kebun</th><th>Unit</th><th>T.TANAM</th><th>Blok</th>
+          <th>Tahun</th><th>Kebun</th><th>Unit</th><th>T.TANAM</th><th>Blok</th><th>Rayon</th>
           <th>Tanggal</th><th>Jenis Pupuk</th><th>APL</th>
           <th class="text-right">Dosis (kg/ha)</th><th class="text-right">Jumlah (Kg)</th>
-          <th class="text-right">Luas (Ha)</th><th class="text-right">Invt. Pokok</th><th>Catatan</th>
+          <th class="text-right">Luas (Ha)</th><th class="text-right">Invt. Pokok</th><th>No AU-58</th><th>Keterangan</th>
         <?php endif; ?>
       </tr>
     </thead>
     <tbody>
       <?php if(empty($rows)): ?>
-        <tr><td colspan="<?= $tab==='angkutan'?8:13 ?>">Belum ada data.</td></tr>
+        <tr><td colspan="<?= $tab==='angkutan'?10:15 ?>">Belum ada data.</td></tr>
       <?php else: foreach($rows as $r): ?>
         <?php if($tab==='angkutan'): ?>
           <tr>
             <td><?= htmlspecialchars($r['kebun_nama'] ?? ($r['kebun_kode'] ?? '-')) ?></td>
+            <td><?= htmlspecialchars($r['rayon'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['gudang_asal'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['unit_tujuan_nama'] ?? '-') ?></td>
             <td><?= htmlspecialchars($r['tanggal'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['jenis_pupuk'] ?? '') ?></td>
             <td class="text-right"><?= number_format((float)($r['jumlah'] ?? 0),2) ?></td>
-            <td><?= htmlspecialchars($r['nomor_do'] ?? '') ?></td>
+            <td><?= htmlspecialchars($r['no_spb'] ?? '') ?></td>
+            <td><?= htmlspecialchars($r['keterangan'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['supir'] ?? '') ?></td>
           </tr>
         <?php else:
           $tahunRow = $r['tahun_input'] ?? '';
+          $dosisVal = (isset($r['dosis']) && $r['dosis']!=='') ? number_format((float)$r['dosis'],2) : '-';
         ?>
           <tr>
             <td><?= htmlspecialchars($tahunRow) ?></td>
@@ -202,29 +248,31 @@ ob_start(); ?>
             <td><?= htmlspecialchars($r['unit_nama'] ?? '-') ?></td>
             <td><?= htmlspecialchars($r['t_tanam'] ?? '-') ?></td>
             <td><?= htmlspecialchars($r['blok'] ?? '') ?></td>
+            <td><?= htmlspecialchars($r['rayon'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['tanggal'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['jenis_pupuk'] ?? '') ?></td>
             <td><?= htmlspecialchars($r['apl'] ?? '-') ?></td>
-            <td class="text-right"><?= ($r['dosis']!==null && $r['dosis']!=='')?number_format((float)$r['dosis'],2):'-' ?></td>
+            <td class="text-right"><?= $dosisVal ?></td>
             <td class="text-right"><?= number_format((float)($r['jumlah'] ?? 0),2) ?></td>
             <td class="text-right"><?= number_format((float)($r['luas'] ?? 0),2) ?></td>
             <td class="text-right"><?= number_format((float)($r['invt_pokok'] ?? 0),0) ?></td>
-            <td><?= htmlspecialchars($r['catatan'] ?? '') ?></td>
+            <td><?= htmlspecialchars($r['no_au_58'] ?? '') ?></td>
+            <td><?= htmlspecialchars($r['keterangan'] ?? '') ?></td>
           </tr>
         <?php endif; endforeach; endif; ?>
     </tbody>
     <?php if(!empty($rows)): ?>
       <tfoot>
         <?php if($tab==='angkutan'): ?>
-          <tr><td colspan="5" class="text-right">TOTAL</td><td class="text-right"><?= number_format($tot_kg,2) ?></td><td></td><td></td></tr>
+          <tr><td colspan="6" class="text-right">TOTAL</td><td class="text-right"><?= number_format($tot_kg,2) ?></td><td colspan="3"></td></tr>
         <?php else: ?>
           <tr>
-            <td colspan="8" class="text-right">TOTAL</td>
+            <td colspan="9" class="text-right">TOTAL</td>
             <td class="text-right"><?= number_format($avg_dosis ?? 0,2) ?></td>
             <td class="text-right"><?= number_format($tot_kg,2) ?></td>
             <td class="text-right"><?= number_format($tot_luas,2) ?></td>
             <td class="text-right"><?= number_format($tot_invt,0) ?></td>
-            <td></td>
+            <td colspan="2"></td>
           </tr>
         <?php endif; ?>
       </tfoot>
