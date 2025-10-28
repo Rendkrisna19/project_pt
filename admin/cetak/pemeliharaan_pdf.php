@@ -1,6 +1,7 @@
 <?php
 // pages/cetak/pemeliharaan_pdf.php — FINAL
-// PDF mengikuti SEMUA filter (termasuk Keterangan) & menampilkan Satuan R/E + Keterangan
+// PDF mengikuti SEMUA filter & menampilkan Satuan R/E + Keterangan
+// [MODIFIED] - Added table-layout:fixed, column widths, centered & styled status badges.
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
@@ -73,7 +74,7 @@ $colBibit     = pickCol($pdo,'pemeliharaan',['stood','stood_jenis','jenis_bibit'
 
 /* ========= SELECT Pieces ========= */
 $joinKebun=''; $selKebun='';
-if ($hasKebunId)      { $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=p.kebun_id ";    $selKebun=", kb.nama_kebun AS kebun_nama"; }
+if ($hasKebunId)       { $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=p.kebun_id ";    $selKebun=", kb.nama_kebun AS kebun_nama"; }
 elseif ($hasKebunKode){ $joinKebun=" LEFT JOIN md_kebun kb ON kb.kode=p.kebun_kode ";$selKebun=", kb.nama_kebun AS kebun_nama"; }
 elseif ($colKebunText){ $selKebun=", p.$colKebunText AS kebun_nama"; }
 else { $selKebun=", NULL AS kebun_nama"; }
@@ -106,7 +107,7 @@ if ($f_tenaga_id!==''){ if($tenaga_nama!==''){ $sql.=" AND p.tenaga=:tn"; $param
 
 if ($f_kebun_id!==''){
   if     ($hasKebunId)   { $sql.=" AND p.kebun_id=:kid"; $params[':kid']=$f_kebun_id; }
-  elseif ($joinKebun)    { $sql.=" AND kb.id=:kid";      $params[':kid']=$f_kebun_id; }
+  elseif ($joinKebun)    { $sql.=" AND kb.id=:kid";       $params[':kid']=$f_kebun_id; }
   elseif ($colKebunText && $kebun_nama!==''){ $sql.=" AND p.$colKebunText=:kname"; $params[':kname']=$kebun_nama; }
 }
 
@@ -158,18 +159,39 @@ ob_start();
 <title><?= h($titles[$tab]) ?></title>
 <style>
   @page { size: A4 landscape; margin: 18mm 15mm 15mm 15mm; }
-  body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 11px; color:#111; }
+  body { font-family: DejaVu Sans, Arial, Helvetica, sans-serif; font-size: 10px; color:#111; } /* Ukuran font dasar diperkecil sedikit */
   .brand { background:#0f7b4f; color:#fff; padding:14px 16px; border-radius:10px; text-align:center; margin-bottom:12px; }
   .brand h1 { margin:0; font-size:18px; letter-spacing:.5px; }
   .sub { text-align:center; color:#0f7b4f; font-weight:bold; font-size:14px; margin:6px 0 4px; }
-  .filter { text-align:center; font-size:10px; color:#555; margin-bottom:10px; }
-  table{ width:100%; border-collapse:collapse; }
-  th,td{ border:1px solid #dfe5e2; padding:6px 8px; }
-  thead th{ background:#1fab61; color:#fff; text-transform:uppercase; font-size:10px; }
+  .filter { text-align:center; font-size:9px; color:#555; margin-bottom:10px; } /* Ukuran font filter diperkecil */
+
+  table {
+    width:100%;
+    border-collapse:collapse;
+    table-layout: fixed;
+  }
+  th, td {
+    border:1px solid #dfe5e2;
+    padding: 5px 7px; /* Padding sedikit dikurangi */
+    word-wrap: break-word;
+    vertical-align: top;
+  }
+
+  thead th { background:#1fab61; color:#fff; text-transform:uppercase; font-size:9px; } /* Ukuran font header diperkecil */
   tbody tr:nth-child(even){ background:#fbfdfc; }
   tfoot td{ background:#f1faf6; font-weight:700; }
   .right{text-align:right}.center{text-align:center}
-  .badge{display:inline-block;padding:2px 6px;border-radius:10px;font-size:10px;border:1px solid transparent}
+
+  /* [MODIFIED] Badge styling */
+  .badge{
+    display: inline-block; /* Agar padding bekerja */
+    padding: 3px 8px;      /* Padding diatur ulang */
+    border-radius: 4px;    /* Sedikit lebih kotak */
+    font-size: 9px;        /* Ukuran font badge */
+    border:1px solid transparent;
+    text-align: center;    /* Teks di tengah badge */
+    min-width: 50px;       /* Lebar minimal agar tidak terlalu kecil */
+  }
   .b-green{background:#dbf5e9;color:#045e3e;border-color:#b9ead6}
   .b-blue{background:#e7f1fd;color:#0b4a88;border-color:#cfe2fb}
   .b-yellow{background:#fff7e0;color:#8a6b00;border-color:#fde8b3}
@@ -184,22 +206,20 @@ ob_start();
   <table>
     <thead>
       <tr>
-        <th>TAHUN</th>
-        <th>KEBUN</th>
-        <th><?= $isBibit ? 'STOOD / JENIS BIBIT' : 'RAYON' ?></th>
-        <th>UNIT/DEVISI</th>
-        <th>JENIS PEKERJAAN</th>
-        <th>PERIODE</th>
-        <th>TENAGA</th>
-        <th class="right">RENCANA</th>
-        <th>SATUAN R.</th>
-        <th class="right">REALISASI</th>
-        <th>SATUAN E.</th>
-        <th class="right">+/-</th>
-        <th class="right">PROGRESS (%)</th>
-        <th>KETERANGAN</th>
-        <th>STATUS</th>
-      </tr>
+        <th style="width: 5%;">TAHUN</th>
+        <th style="width: 8%;">KEBUN</th>
+        <th style="width: 8%;"><?= $isBibit ? 'STOOD / JENIS BIBIT' : 'RAYON' ?></th>
+        <th style="width: 8%;">UNIT/DEVISI</th>
+        <th style="width: 12%;">JENIS PEKERJAAN</th>
+        <th style="width: 6%;">PERIODE</th>
+        <th style="width: 6%;">TENAGA</th>
+        <th class="right" style="width: 5%;">RENCANA</th>
+        <th style="width: 4%;">SATUAN R.</th>
+        <th class="right" style="width: 5%;">REALISASI</th>
+        <th style="width: 4%;">SATUAN E.</th>
+        <th class="right" style="width: 5%;">+/-</th>
+        <th class="right" style="width: 5%;">PROGRESS (%)</th>
+        <th style="width: 13%;">KETERANGAN</th> <th class="center" style="width: 6%;">STATUS</th> </tr>
     </thead>
     <tbody>
       <?php if (empty($rows)): ?>
@@ -234,8 +254,7 @@ ob_start();
           <td class="right"><?= number_format($delta,2,',','.') ?></td>
           <td class="right"><?= number_format($progress,2,',','.') ?></td>
           <td><?= h($ket) ?></td>
-          <td><span class="badge <?= $cls ?>"><?= h($status) ?></span></td>
-        </tr>
+          <td class="center"><span class="badge <?= $cls ?>"><?= h($status) ?></span></td> </tr>
       <?php endforeach; endif; ?>
     </tbody>
     <?php if(!empty($rows)): ?>
@@ -262,9 +281,12 @@ $html=ob_get_clean();
 $options=new Options();
 $options->set('isRemoteEnabled',true);
 $options->set('isHtml5ParserEnabled',true);
+// Opsi font (jika DejaVu Sans tidak terrender baik, coba aktifkan salah satu)
+// $options->set('defaultFont', 'Arial');
+// $options->set('fontDir', '/path/to/your/fonts'); // Jika perlu font custom
 
 $dompdf=new Dompdf($options);
 $dompdf->loadHtml($html,'UTF-8');
 $dompdf->setPaper('A4','landscape');
 $dompdf->render();
-$dompdf->stream('Pemeliharaan_'.$tab.'.pdf',['Attachment'=>true]);
+$dompdf->stream('Pemeliharaan_'.$tab.'.pdf',['Attachment'=>false]); // Set true untuk download otomatis

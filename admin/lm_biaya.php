@@ -1,5 +1,5 @@
 <?php
-// lm_biaya.php — MOD: Role 'staf' tidak bisa edit/hapus + tombol ikon
+// lm_biaya.php — MOD: Role 'staf' tidak bisa edit/hapus/input + tombol ikon
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -87,23 +87,35 @@ try {
 $currentPage = 'lm_biaya';
 include_once '../layouts/header.php';
 ?>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
 <style>
   .thead-green th{background:#059669;color:#fff;position:sticky;top:0;z-index:10}
   .tfoot-green td{background:#ECFDF5;color:#065F46;font-weight:600}
   .neg{color:#dc2626} .pos{color:#059669}
-  /* --- MODIFIKASI: Style untuk tombol disabled --- */
   button:disabled { opacity: 0.5; cursor: not-allowed !important; }
+  .btn-icon { background: transparent; border: none; padding: 0.25rem; }
 </style>
 
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold text-gray-900">LM Biaya</h1>
-    <button id="btn-add" class="px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700">+ Tambah</button>
+    <?php if (!$isStaf): // MODIFIKASI: Tombol hanya untuk non-staf ?>
+      <button id="btn-add" class="px-3 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 flex items-center gap-2">
+          <i class="ti ti-plus"></i>
+          <span>Tambah</span>
+      </button>
+    <?php endif; ?>
   </div>
 
   <div class="flex gap-2">
-    <a href="cetak/lm_biaya_pdf.php?<?= http_build_query($_GET) ?>" target="_blank" class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700">Export PDF</a>
-    <a href="cetak/lm_biaya_excel.php?<?= http_build_query($_GET) ?>" class="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700">Export Excel</a>
+    <a href="cetak/lm_biaya_pdf.php?<?= http_build_query($_GET) ?>" target="_blank" class="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700 flex items-center gap-2">
+        <i class="ti ti-file-type-pdf"></i>
+        <span>Export PDF</span>
+    </a>
+    <a href="cetak/lm_biaya_excel.php?<?= http_build_query($_GET) ?>" class="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2">
+        <i class="ti ti-file-spreadsheet"></i>
+        <span>Export Excel</span>
+    </a>
   </div>
 
   <form method="get" class="bg-white p-4 rounded-xl shadow-md flex flex-wrap items-end gap-3">
@@ -115,7 +127,7 @@ include_once '../layouts/header.php';
     <div><label class="block text-xs text-gray-500 mb-1">Tahun</label><select name="tahun" class="border rounded px-3 py-2"><option value="">Semua Tahun</option><?php for($y=date('Y')-2;$y<=date('Y')+2;$y++): ?><option value="<?= $y ?>" <?= ($tahun!=='' && (int)$tahun===$y)?'selected':'' ?>><?= $y ?></option><?php endfor; ?></select></div>
     <div class="flex-1 min-w-[220px]"><label class="block text-xs text-gray-500 mb-1">Pencarian</label><input type="text" name="q" value="<?= htmlspecialchars($q) ?>" class="w-full border rounded px-3 py-2" placeholder="Cari alokasi / uraian / unit / kebun"></div>
     <div><label class="block text-xs text-gray-500 mb-1">Per Halaman</label><select name="per_page" class="border rounded px-3 py-2" onchange="this.form.submit()"><?php foreach([10,15,20,25,50,100] as $pp): ?><option value="<?= $pp ?>" <?= $per_page===$pp?'selected':'' ?>><?= $pp ?></option><?php endforeach; ?></select></div>
-    <div><button type="submit" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800">Filter</button></div>
+    <div><button type="submit" class="px-4 py-2 bg-black text-white rounded hover:bg-gray-800 flex items-center gap-2"><i class="ti ti-filter"></i><span>Filter</span></button></div>
   </form>
 
   <div class="bg-white rounded-xl shadow-md overflow-x-auto">
@@ -127,12 +139,16 @@ include_once '../layouts/header.php';
           <th class="py-2 px-3 text-left">Uraian Pekerjaan</th><th class="py-2 px-3 text-left">Bulan</th>
           <th class="py-2 px-3 text-left">Tahun</th><th class="py-2 px-3 text-right">Anggaran</th>
           <th class="py-2 px-3 text-right">Realisasi</th><th class="py-2 px-3 text-right">+/- Biaya</th>
-          <th class="py-2 px-3 text-right">%</th><th class="py-2 px-3 text-left">Aksi</th>
+          <th class="py-2 px-3 text-right">%</th>
+          <?php if (!$isStaf): // MODIFIKASI: Kolom hanya untuk non-staf ?><th class="py-2 px-3 text-center">Aksi</th><?php endif; ?>
         </tr>
       </thead>
       <tbody class="text-gray-800">
         <?php if (!$rows): ?>
-          <tr><td colspan="<?= $hasKebun?11:10 ?>" class="text-center py-6 text-gray-500">Belum ada data.</td></tr>
+          <?php // MODIFIKASI: Sesuaikan colspan
+            $colspan = ($hasKebun ? 11 : 10) - ($isStaf ? 1 : 0);
+          ?>
+          <tr><td colspan="<?= $colspan ?>" class="text-center py-6 text-gray-500">Belum ada data.</td></tr>
         <?php else: foreach ($rows as $r): ?>
           <?php
             $pct = $r['diff_pct'];
@@ -150,16 +166,18 @@ include_once '../layouts/header.php';
             <td class="py-2 px-3 text-right"><?= number_format((float)$r['realisasi_bi'],2) ?></td>
             <td class="py-2 px-3 text-right"><?= number_format((float)$r['diff_bi'],2) ?></td>
             <td class="py-2 px-3 text-right <?= $pctClass ?>"><?= $pctStr ?></td>
+            <?php if (!$isStaf): // MODIFIKASI: Aksi hanya untuk non-staf ?>
             <td class="py-2 px-3">
-              <div class="flex items-center gap-3">
-                <button class="btn-edit text-blue-600" title="Edit" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>' <?= $isStaf ? 'disabled' : '' ?>>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16.862 3.487a2.1 2.1 0 0 1 2.97 2.97l-9.9 9.9-4.2 1.23 1.23-4.2 9.9-9.9z" /></svg>
+              <div class="flex items-center justify-center gap-2">
+                <button class="btn-edit btn-icon text-blue-600 hover:text-blue-800" title="Edit" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'>
+                    <i class="ti ti-pencil text-lg"></i>
                 </button>
-                <button class="btn-delete text-red-600" title="Hapus" data-id="<?= (int)$r['id'] ?>" <?= $isStaf ? 'disabled' : '' ?>>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3m-9 0h12" /></svg>
+                <button class="btn-delete btn-icon text-red-600 hover:text-red-800" title="Hapus" data-id="<?= (int)$r['id'] ?>">
+                    <i class="ti ti-trash text-lg"></i>
                 </button>
               </div>
             </td>
+            <?php endif; ?>
           </tr>
         <?php endforeach; endif; ?>
       </tbody>
@@ -170,12 +188,14 @@ include_once '../layouts/header.php';
           <td class="py-2 px-3 text-right"><?= number_format($sumRealisasi,2) ?></td>
           <td class="py-2 px-3 text-right"><?= number_format($sumRealisasi-$sumAnggaran,2) ?></td>
           <td class="py-2 px-3 text-right"><?php if(!is_null($total_pct)){$tp=$total_pct;echo sprintf('%s%s%%',$tp>=0?'+':'',number_format($tp,2));}else{echo'-';}?></td>
-          <td></td>
+          <?php if (!$isStaf): // MODIFIKASI: Kolom kosong untuk Aksi ?>
+            <td></td>
+          <?php endif; ?>
         </tr>
       </tfoot>
     </table>
   </div>
-  <div class="flex items-center justify-between gap-3 text-sm">
+  <div class="flex items-center justify-between gap-3 text-sm p-3">
     <div class="text-gray-600">Menampilkan <b><?= number_format($fromRow) ?></b>–<b><?= number_format($toRow) ?></b> dari <b><?= number_format($total_rows) ?></b> data</div>
     <?php $win=5; $start=max(1,$page-intval($win/2)); $end=min($total_pages,$start+$win-1); $start=max(1,$end-$win+1); ?>
     <div class="flex items-center gap-1">
@@ -188,6 +208,7 @@ include_once '../layouts/header.php';
   </div>
 </div>
 
+<?php if (!$isStaf): // MODIFIKASI: Modal hanya untuk non-staf ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
   <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-3xl">
     <div class="flex justify-between items-center mb-4">
@@ -213,6 +234,7 @@ include_once '../layouts/header.php';
     </form>
   </div>
 </div>
+<?php endif; ?>
 
 <?php include_once '../layouts/footer.php'; ?>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -221,6 +243,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // --- MODIFIKASI: Kirim role ke JavaScript ---
   const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
 
+  // Jika user adalah staf, tidak perlu menjalankan script CRUD.
+  if (IS_STAF) return;
+  
   const $=s=>document.querySelector(s);
   const modal=$('#crud-modal'), open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')}, close=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
 
@@ -233,10 +258,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.body.addEventListener('click',(e)=>{
     const editBtn = e.target.closest('.btn-edit');
     const delBtn = e.target.closest('.btn-delete');
-
-    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
-    if(editBtn && !IS_STAF){
+    
+    if(editBtn){
       const r=JSON.parse(editBtn.dataset.json); const f=$('#crud-form'); f.reset();
+      $('#modal-title').textContent = 'Edit Data';
       $('#form-action').value='update'; $('#form-id').value=r.id;
       const kebunEl=$('#kebun_id'); if(kebunEl)kebunEl.value=r.kebun_id??'';
       $('#unit_id').value=r.unit_id??''; $('#alokasi').value=r.alokasi??'';
@@ -245,10 +270,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
       $('#realisasi_bi').value=r.realisasi_bi??'';
       open();
     }
-    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
-    if(delBtn && !IS_STAF){
+    
+    if(delBtn){
       const id=delBtn.dataset.id;
-      Swal.fire({title:'Hapus data?',icon:'warning',showCancelButton:true,confirmButtonColor:'#d33'})
+      Swal.fire({title:'Hapus data?',icon:'warning',showCancelButton:true,confirmButtonColor:'#d33', confirmButtonText: 'Ya, hapus!', cancelButtonText: 'Batal'})
       .then(res=>{
         if(!res.isConfirmed)return;
         const fd=new FormData(); fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');

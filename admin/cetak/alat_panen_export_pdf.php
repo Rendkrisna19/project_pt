@@ -13,7 +13,7 @@ $db = new Database(); $pdo = $db->getConnection();
 // === helper: cek kolom
 function col_exists(PDO $pdo, $table, $col){
   $st=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
-  $st->execute([':t'=>$table, ':c'=>$col]);
+  $st->execute([':t'=>$table, ':c'=>$col]); 
   return (bool)$st->fetchColumn();
 }
 
@@ -125,8 +125,8 @@ foreach($rows as $r){
     '<td>'.htmlspecialchars(($r['bulan']??'')." ".($r['tahun']??'')).'</td>'.
     '<td>'.htmlspecialchars($r['nama_kebun']??'-').'</td>'.
     '<td>'.htmlspecialchars($r['nama_unit']??'-').'</td>'.
-    '<td>'.htmlspecialchars($r['blok_nama']??'-').'</td>'.
-    '<td>'.htmlspecialchars($r['tt_nama']??'-').'</td>'.
+    // '<td>'.htmlspecialchars($r['blok_nama']??'-').'</td>'.
+    // '<td>'.htmlspecialchars($r['tt_nama']??'-').'</td>'.
     '<td>'.htmlspecialchars($r['jenis_alat']??'-').'</td>'.
     '<td class="right">'.number_format((float)($r['stok_awal']??0),2).'</td>'.
     '<td class="right">'.number_format((float)($r['mutasi_masuk']??0),2).'</td>'.
@@ -151,8 +151,8 @@ $html = <<<HTML
         <th style="width:90px">Periode</th>
         <th style="width:140px">Kebun</th>
         <th style="width:130px">Unit/Devisi</th>
-        <th style="width:70px">Blok</th>
-        <th style="width:60px">T.T</th>
+        <!-- <th style="width:70px">Blok</th> -->
+        <!-- <th style="width:60px">T.T</th> -->
         <th>Jenis Alat</th>
         <th style="width:85px">Stok Awal</th>
         <th style="width:95px">Mutasi Masuk</th>

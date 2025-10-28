@@ -72,12 +72,20 @@ function activeClass($key, $current) {
           <span class="font-medium">Alat Panen</span>
         </a>
       </li>
+      
       <li>
+        <a href="laporan_mingguan.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('laporan_mingguan',$currentPage) ?>">
+          <i data-lucide="calendar-days" class="w-5 h-5 mr-3"></i>
+          <span class="font-medium">Laporan Mingguan</span>
+        </a>
+      </li>
+      <!-- <li>
         <a href="permintaan.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('permintaan',$currentPage) ?>">
           <i data-lucide="send" class="w-5 h-5 mr-3"></i>
           <span class="font-medium">Pengajuan AU-58</span>
         </a>
-      </li>
+      </li> -->
+
       <li x-data="{ open: false }" class="relative">
         <button type="button" @click="open = !open" class="flex items-center w-full p-3 rounded-lg transition-colors duration-200 <?= activeClass('laporan',$currentPage) ?>">
           <i data-lucide="bar-chart-3" class="w-5 h-5 mr-3"></i>
@@ -88,10 +96,12 @@ function activeClass($key, $current) {
           <li><a href="lm76.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm76',$currentPage) ?>">LM76</a></li>
           <li><a href="lm77.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm77',$currentPage) ?>">LM77</a></li>
           <li><a href="lm_biaya.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm_biaya',$currentPage) ?>">LM Biaya</a></li>
+          <!-- Tambahan baru: LM per Blok -->
+          <li><a href="lm_blok.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm_blok',$currentPage) ?>">LM per Blok</a></li>
         </ul>
       </li>
 
-      <?php // --- AWAL MODIFIKASI: Tampilkan menu ini hanya jika bukan 'staf' --- ?>
+      <?php // --- Tampilkan menu ini hanya jika bukan 'staf' --- ?>
       <?php if ($userRole !== 'staf'): ?>
       <li>
         <a href="master_data.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('master_data',$currentPage) ?>">
@@ -106,8 +116,6 @@ function activeClass($key, $current) {
         </a>
       </li>
       <?php endif; ?>
-      <?php // --- AKHIR MODIFIKASI --- ?>
-
     </ul>
   </nav>
 
@@ -147,17 +155,25 @@ function activeClass($key, $current) {
       <li><a href="stok_gudang.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('stok_gudang',$currentPage) ?>" @click="sidebarOpen=false"><i data-lucide="package" class="w-5 h-5 mr-3"></i><span class="font-medium">Stok Gudang</span></a></li>
       <li><a href="pemakaian.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('pemakaian',$currentPage) ?>" @click="sidebarOpen=false"><i data-lucide="clipboard-check" class="w-5 h-5 mr-3"></i><span class="font-medium truncate">Pemakaian Bahan ...</span></a></li>
       <li><a href="alat_panen.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('alat_panen',$currentPage) ?>" @click="sidebarOpen=false"><i data-lucide="wrench" class="w-5 h-5 mr-3"></i><span class="font-medium">Alat Panen</span></a></li>
+      <li><a href="laporan_mingguan.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('laporan_mingguan',$currentPage) ?>" @click="sidebarOpen=false"><i data-lucide="calendar-days" class="w-5 h-5 mr-3"></i><span class="font-medium">Laporan Mingguan</span></a></li>
       <li><a href="permintaan.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('permintaan',$currentPage) ?>" @click="sidebarOpen=false"><i data-lucide="send" class="w-5 h-5 mr-3"></i><span class="font-medium">Pengajuan AU-58</span></a></li>
+
       <li x-data="{ open:false }">
-        <button type="button" @click="open=!open" class="flex items-center w-full p-3 rounded-lg transition-colors duration-200 <?= activeClass('laporan',$currentPage) ?>"><i data-lucide="bar-chart-3" class="w-5 h-5 mr-3"></i><span class="font-medium flex-1 text-left">Laporan Manajemen</span><i data-lucide="chevron-down" :class="{ 'rotate-180': open }" class="w-4 h-4 ml-2 transition-transform"></i></button>
+        <button type="button" @click="open=!open" class="flex items-center w-full p-3 rounded-lg transition-colors duration-200 <?= activeClass('laporan',$currentPage) ?>">
+          <i data-lucide="bar-chart-3" class="w-5 h-5 mr-3"></i>
+          <span class="font-medium flex-1 text-left">Laporan Manajemen</span>
+          <i data-lucide="chevron-down" :class="{ 'rotate-180': open }" class="w-4 h-4 ml-2 transition-transform"></i>
+        </button>
         <ul x-show="open" x-transition class="mt-1 pl-10 space-y-1 text-sm text-gray-700">
           <li><a href="lm76.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm76',$currentPage) ?>" @click="sidebarOpen=false">LM76</a></li>
           <li><a href="lm77.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm77',$currentPage) ?>" @click="sidebarOpen=false">LM77</a></li>
           <li><a href="lm_biaya.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm_biaya',$currentPage) ?>" @click="sidebarOpen=false">LM Biaya</a></li>
+          <!-- Tambahan baru: LM per Blok (mobile) -->
+          <li><a href="lm_blok.php" class="block p-2 rounded-md hover:bg-gray-100 <?= activeClass('lm_blok',$currentPage) ?>" @click="sidebarOpen=false">LM per Blok</a></li>
         </ul>
       </li>
       
-      <?php // --- AWAL MODIFIKASI (MOBILE): Tampilkan menu ini hanya jika bukan 'staf' --- ?>
+      <?php // --- Tampilkan menu ini hanya jika bukan 'staf' (MOBILE) --- ?>
       <?php if ($userRole !== 'staf'): ?>
       <li>
         <a href="master_data.php" class="flex items-center p-3 rounded-lg transition-colors duration-200 <?= activeClass('master_data',$currentPage) ?>" @click="sidebarOpen=false">
@@ -172,12 +188,16 @@ function activeClass($key, $current) {
         </a>
       </li>
       <?php endif; ?>
-      <?php // --- AKHIR MODIFIKASI (MOBILE) --- ?>
     </ul>
   </nav>
 
   <div class="p-4 border-t shrink-0">
-    <a href="../auth/logout.php" class="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200" @click="sidebarOpen=false"><i data-lucide="log-out" class="w-5 h-5 mr-3"></i><span class="font-medium">Keluar</span></a>
-    <footer class="text-center mt-4"><p class="text-xs text-gray-500">&copy; <?= date('Y'); ?> Kebun Sei Rokan</p></footer>
+    <a href="../auth/logout.php" class="flex items-center p-3 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors duration-200" @click="sidebarOpen=false">
+      <i data-lucide="log-out" class="w-5 h-5 mr-3"></i>
+      <span class="font-medium">Keluar</span>
+    </a>
+    <footer class="text-center mt-4">
+      <p class="text-xs text-gray-500">&copy; <?= date('Y'); ?> Kebun Sei Rokan</p>
+    </footer>
   </div>
 </aside>

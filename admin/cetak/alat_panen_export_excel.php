@@ -15,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 // === DB
 $db = new Database(); $pdo = $db->getConnection();
 
+// Fungsi ini tidak lagi dipakai untuk blok/tt, tapi mungkin berguna untuk hal lain
 function col_exists(PDO $pdo, $table, $col){
   $st=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
   $st->execute([':t'=>$table, ':c'=>$col]);
@@ -26,14 +27,10 @@ $kebun_id = isset($_GET['kebun_id']) && ctype_digit((string)$_GET['kebun_id']) ?
 $unit_id  = isset($_GET['unit_id'])  && ctype_digit((string)$_GET['unit_id'])  ? (int)$_GET['unit_id']  : null;
 $bulan    = trim($_GET['bulan'] ?? '');
 $tahun    = isset($_GET['tahun']) && ctype_digit((string)$_GET['tahun']) ? (int)$_GET['tahun'] : null;
-$blok_f   = trim($_GET['blok'] ?? '');
-$tt_f     = trim($_GET['tt']   ?? '');
+// Filter $blok_f dan $tt_f DIHAPUS
 
 // === deteksi kolom
-$hasBlokId = col_exists($pdo,'alat_panen','blok_id');
-$hasBlokTx = col_exists($pdo,'alat_panen','blok');
-$hasTtId   = col_exists($pdo,'alat_panen','tt_id');
-$hasTtTx   = col_exists($pdo,'alat_panen','tt');
+// Deteksi untuk blok dan tt DIHAPUS
 
 // === query dinamis
 $selectParts = [
@@ -46,13 +43,7 @@ $joins = [
   "LEFT JOIN units u ON u.id = ap.unit_id"
 ];
 
-if ($hasBlokId) { $selectParts[]="mb.kode_blok AS blok_nama"; $joins[]="LEFT JOIN md_blok mb ON mb.id = ap.blok_id"; }
-elseif ($hasBlokTx) { $selectParts[]="ap.blok AS blok_nama"; }
-else { $selectParts[]="NULL AS blok_nama"; }
-
-if ($hasTtId) { $selectParts[]="tt.tahun_tanam AS tt_nama"; $joins[]="LEFT JOIN md_tahun_tanam tt ON tt.id = ap.tt_id"; }
-elseif ($hasTtTx){ $selectParts[]="ap.tt AS tt_nama"; }
-else { $selectParts[]="NULL AS tt_nama"; }
+// Logika dinamis untuk $selectParts dan $joins terkait blok/tt DIHAPUS
 
 $where = ["1=1"];
 $params = [];
@@ -61,22 +52,7 @@ if ($unit_id)  { $where[]="ap.unit_id  = :unit_id";  $params[':unit_id']=$unit_i
 if ($bulan!==''){ $where[]="ap.bulan    = :bulan";    $params[':bulan']=$bulan; }
 if ($tahun)    { $where[]="ap.tahun    = :tahun";    $params[':tahun']=$tahun; }
 
-if ($blok_f!==''){
-  if ($hasBlokId) {
-    if (ctype_digit($blok_f)) { $where[]="ap.blok_id = :blok_id"; $params[':blok_id']=(int)$blok_f; }
-    else { $where[]="mb.kode_blok = :blok_tx"; $params[':blok_tx']=$blok_f; }
-  } elseif ($hasBlokTx) {
-    $where[]="ap.blok = :blok_tx"; $params[':blok_tx']=$blok_f;
-  }
-}
-if ($tt_f!==''){
-  if ($hasTtId) {
-    if (ctype_digit($tt_f)) { $where[]="ap.tt_id = :tt_id"; $params[':tt_id']=(int)$tt_f; }
-    else { $where[]="tt.tahun_tanam = :tt_tx"; $params[':tt_tx']=$tt_f; }
-  } elseif ($hasTtTx) {
-    $where[]="ap.tt = :tt_tx"; $params[':tt_tx']=$tt_f;
-  }
-}
+// Logika dinamis untuk $where terkait $blok_f dan $tt_f DIHAPUS
 
 $sql = "SELECT ".implode(', ',$selectParts)."
         FROM alat_panen ap
@@ -93,7 +69,7 @@ $sheet = $ss->getActiveSheet();
 $sheet->setTitle('Alat Panen');
 
 // Judul (tema hijau, tanpa tanggal/ nama)
-$sheet->mergeCells('A1:N1');
+$sheet->mergeCells('A1:L1'); // Modifikasi: N -> L
 $sheet->setCellValue('A1','PTPN 4 REGIONAL 3');
 $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('065F46');
 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
@@ -104,23 +80,23 @@ if ($kebun_id) $sub[]='KebunID: '.$kebun_id;
 if ($unit_id)  $sub[]='UnitID: '.$unit_id;
 if ($bulan!=='')$sub[]='Bulan: '.$bulan;
 if ($tahun)    $sub[]='Tahun: '.$tahun;
-if ($blok_f!=='') $sub[]='Blok: '.$blok_f;
-if ($tt_f!=='')   $sub[]='T.T: '.$tt_f;
+// Filter $blok_f dan $tt_f DIHAPUS
 
-$sheet->mergeCells('A2:N2');
+$sheet->mergeCells('A2:L2'); // Modifikasi: N -> L
 $sheet->setCellValue('A2', implode(' • ', $sub));
 $sheet->getStyle('A2')->getFont()->setSize(10)->getColor()->setRGB('059669');
 $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
 // Header
 $header = [
-  'No','Periode','Kebun','Unit/Devisi','Blok','T.T','Jenis Alat',
+  'No','Periode','Kebun','Unit/Devisi', // 'Blok','T.T' DIHAPUS
+  'Jenis Alat',
   'Stok Awal','Mutasi Masuk','Mutasi Keluar','Dipakai','Stok Akhir','Krani Afdeling','Catatan'
 ];
 $sheet->fromArray($header, null, 'A4');
-$sheet->getStyle('A4:N4')->getFont()->setBold(true);
-$sheet->getStyle('A4:N4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('DCFCE7');
-$sheet->getStyle('A4:N4')->getFont()->getColor()->setRGB('065F46');
+$sheet->getStyle('A4:L4')->getFont()->setBold(true); // Modifikasi: N -> L
+$sheet->getStyle('A4:L4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('DCFCE7'); // Modifikasi: N -> L
+$sheet->getStyle('A4:L4')->getFont()->getColor()->setRGB('065F46'); // Modifikasi: N -> L
 $sheet->getRowDimension(4)->setRowHeight(22);
 
 // Body
@@ -130,25 +106,24 @@ foreach($rows as $row){
   $sheet->setCellValue("B{$r}", trim(($row['bulan']??'').' '.($row['tahun']??'')));
   $sheet->setCellValue("C{$r}", $row['nama_kebun']??'-');
   $sheet->setCellValue("D{$r}", $row['nama_unit']??'-');
-  $sheet->setCellValue("E{$r}", $row['blok_nama']??'-');
-  $sheet->setCellValue("F{$r}", $row['tt_nama']??'-');
-  $sheet->setCellValue("G{$r}", $row['jenis_alat']??'-');
-  $sheet->setCellValueExplicit("H{$r}", (float)($row['stok_awal']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-  $sheet->setCellValueExplicit("I{$r}", (float)($row['mutasi_masuk']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-  $sheet->setCellValueExplicit("J{$r}", (float)($row['mutasi_keluar']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-  $sheet->setCellValueExplicit("K{$r}", (float)($row['dipakai']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-  $sheet->setCellValueExplicit("L{$r}", (float)($row['stok_akhir']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);
-  $sheet->setCellValue("M{$r}", $row['krani_afdeling']??'-');
-  $sheet->setCellValue("N{$r}", $row['catatan']??'-');
+  // Kolom E (blok_nama) dan F (tt_nama) DIHAPUS
+  $sheet->setCellValue("E{$r}", $row['jenis_alat']??'-'); // Modifikasi: G -> E
+  $sheet->setCellValueExplicit("F{$r}", (float)($row['stok_awal']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);     // Modifikasi: H -> F
+  $sheet->setCellValueExplicit("G{$r}", (float)($row['mutasi_masuk']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);  // Modifikasi: I -> G
+  $sheet->setCellValueExplicit("H{$r}", (float)($row['mutasi_keluar']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC); // Modifikasi: J -> H
+  $sheet->setCellValueExplicit("I{$r}", (float)($row['dipakai']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);        // Modifikasi: K -> I
+  $sheet->setCellValueExplicit("J{$r}", (float)($row['stok_akhir']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);    // Modifikasi: L -> J
+  $sheet->setCellValue("K{$r}", $row['krani_afdeling']??'-'); // Modifikasi: M -> K
+  $sheet->setCellValue("L{$r}", $row['catatan']??'-');         // Modifikasi: N -> L
   $r++;
 }
 
 // Format angka
-$sheet->getStyle("H5:L".($r-1))->getNumberFormat()->setFormatCode('#,##0.00');
+$sheet->getStyle("F5:J".($r-1))->getNumberFormat()->setFormatCode('#,##0.00'); // Modifikasi: H5:L -> F5:J
 
 // Border & autosize
-$sheet->getStyle("A4:N".($r-1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-foreach(range('A','N') as $col){ $sheet->getColumnDimension($col)->setAutoSize(true); }
+$sheet->getStyle("A4:L".($r-1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN); // Modifikasi: N -> L
+foreach(range('A','L') as $col){ $sheet->getColumnDimension($col)->setAutoSize(true); } // Modifikasi: N -> L
 
 // Output
 $filename = 'Alat_Panen_'.date('Ymd_His').'.xlsx';

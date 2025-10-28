@@ -213,7 +213,7 @@ include_once '../layouts/header.php';
   .tablink{border-bottom:2px solid transparent;padding:.5rem .75rem;border-radius:.5rem .5rem 0 0}
   .tablink.active{background:#bfdbfe;border-color:#2563eb;color:#1e3a8a}
   .tablink:hover{background:#dbeafe}
-  .thead-green{background:#009e2d !important;}
+  .thead-green{background:#007521!important;}
   .thead-green th{color:white !important;}
   .bg-blue-50{background:#eff6ff;}
 </style>
@@ -235,7 +235,7 @@ include_once '../layouts/header.php';
   </div>
 
   <!-- Filters -->
-  <div class="bg-white p-5 rounded-xl shadow-sm">
+  <div class="bg-white p-5  shadow-sm">
     <form class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end" method="GET">
       <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
       <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Tahun</label><input type="number" name="tahun" value="<?= htmlspecialchars($f_tahun) ?>" class="i-input" placeholder="YYYY" min="2000" max="2100"></div>
@@ -275,13 +275,13 @@ include_once '../layouts/header.php';
   </div>
 
   <!-- Table -->
-  <div class="bg-white p-6 rounded-xl shadow-md">
+  <div class="bg-white p-6  shadow-md">
     <h2 class="text-xl font-bold mb-4"><?= htmlspecialchars($title) ?></h2>
 
-    <div class="overflow-x-auto border rounded-xl">
+    <div class="overflow-x-auto border ">
       <div class="tbl-wrap">
         <table class="min-w-full text-sm table-fixed" id="tbl">
-          <thead class="sticky thead-green">
+          <thead class="sticky thead-green bg-green-700">
             <tr>
               <?php if ($tab==='angkutan'): ?>
                 <th class="py-3 px-4 text-left w-[6rem]">Tahun</th>
@@ -377,47 +377,48 @@ include_once '../layouts/header.php';
       </div>
 
       <!-- Summary -->
-      <div class="grid <?= $tab==='angkutan' ? 'grid-cols-1' : 'md:grid-cols-2' ?> gap-3 p-3">
-        <?php if ($tab==='angkutan'): ?>
-          <div class="rounded-xl border bg-blue-50 p-4">
-            <div class="text-sm font-semibold text-gray-700 mb-2">Ringkasan Halaman Ini</div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div class="p-3 rounded-lg bg-white border text-center">
-                <div class="text-xs text-gray-500">Kilogram</div>
-                <div class="text-lg font-bold"><?= number_format($sum_page_kg, 2) ?></div>
-              </div>
-            </div>
+      <!-- ===== TOTAL (strip minimal seperti screenshot) ===== -->
+<div class="w-full border rounded-md bg-[#F6FFF8] overflow-hidden">
+  <!-- garis hijau tipis di atas -->
+  <div class="h-1 bg-green-600"></div>
+
+  <!-- konten total -->
+  <div class="px-3 md:px-4 py-2">
+    <div class="flex items-center gap-6 text-sm font-semibold text-gray-900">
+      <span class="text-gray-700">TOTAL</span>
+
+      <div class="flex-1 overflow-x-auto">
+        <div class="flex items-center gap-10 min-w-max pr-6">
+          <!-- Jumlah (Kg) -->
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500 font-normal">Jumlah (Kg)</span>
+            <span class="font-semibold tabular-nums">
+              <?= number_format($tot_all_kg ?? 0, 2) ?>
+            </span>
           </div>
-          <div class="rounded-xl border bg-blue-50 p-4">
-            <div class="text-sm font-semibold text-gray-700 mb-2">Ringkasan Semua (sesuai filter)</div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div class="p-3 rounded-lg bg-white border text-center">
-                <div class="text-xs text-gray-500">Kilogram</div>
-                <div class="text-lg font-bold"><?= number_format($tot_all_kg, 2) ?></div>
-              </div>
-            </div>
+
+          <?php if ($tab !== 'angkutan'): ?>
+          <!-- Luas (Ha) -->
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500 font-normal">Luas (Ha)</span>
+            <span class="font-semibold tabular-nums">
+              <?= number_format($tot_all_luas ?? 0, 2) ?>
+            </span>
           </div>
-        <?php else: ?>
-          <div class="rounded-xl border bg-blue-50 p-4">
-            <div class="text-sm font-semibold text-gray-700 mb-2">Ringkasan Halaman Ini</div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Kilogram</div><div class="text-lg font-bold"><?= number_format($sum_page_kg, 2) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Luas (Ha)</div><div class="text-lg font-bold"><?= number_format($sum_page_luas, 2) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Invt. Pokok</div><div class="text-lg font-bold"><?= number_format($sum_page_invt, 0) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Rata-rata Dosis</div><div class="text-lg font-bold"><?= number_format($avg_page_dosis, 2) ?></div></div>
-            </div>
+
+          <!-- Invt. Pokok -->
+          <div class="flex items-center gap-2">
+            <span class="text-gray-500 font-normal">Invt. Pokok</span>
+            <span class="font-semibold tabular-nums">
+              <?= number_format($tot_all_invt ?? 0, 0) ?>
+            </span>
           </div>
-          <div class="rounded-xl border bg-blue-50 p-4">
-            <div class="text-sm font-semibold text-gray-700 mb-2">Ringkasan Semua (sesuai filter)</div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Kilogram</div><div class="text-lg font-bold"><?= number_format($tot_all_kg, 2) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Luas (Ha)</div><div class="text-lg font-bold"><?= number_format($tot_all_luas, 2) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Invt. Pokok</div><div class="text-lg font-bold"><?= number_format($tot_all_invt, 0) ?></div></div>
-              <div class="p-3 rounded-lg bg-white border text-center"><div class="text-xs text-gray-500">Rata-rata Dosis</div><div class="text-lg font-bold"><?= number_format($tot_all_avgd, 2) ?></div></div>
-            </div>
-          </div>
-        <?php endif; ?>
+          <?php endif; ?>
+        </div>
       </div>
+    </div>
+  </div>
+</div>
 
       <!-- Pagination -->
       <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between p-3">
@@ -450,7 +451,7 @@ include_once '../layouts/header.php';
 
 <!-- MODAL -->
 <div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-3xl">
+  <div class="bg-white p-6 md:p-8  shadow-xl w-full max-w-3xl">
     <div class="flex items-center justify-between mb-4">
       <h3 id="modal-title" class="text-xl font-bold">Tambah Data</h3>
       <button id="btn-close" class="text-3xl text-gray-500 hover:text-gray-800" aria-label="Close">&times;</button>

@@ -1,5 +1,5 @@
 <?php
-// pages/pemeliharaan.php
+// pages/pemeliharaan.php (MODIFIED: PDF Upload, Sort by Unit, Form Layout, Grand Totals Row)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -85,6 +85,7 @@ $hasKebunId    = col_exists($conn,'pemeliharaan','kebun_id');
 $hasKeterangan = col_exists($conn,'pemeliharaan','keterangan');
 $hasSatR       = col_exists($conn,'pemeliharaan','satuan_rencana');
 $hasSatE       = col_exists($conn,'pemeliharaan','satuan_realisasi');
+$hasFilePdf    = col_exists($conn,'pemeliharaan','file_pdf');
 
 /* ===== where ===== */
 $where=" WHERE p.kategori=:k"; $p=[":k"=>$tab];
@@ -109,15 +110,18 @@ $pages=max(1,(int)ceil($total/$per));
 
 /* ===== select ===== */
 $kebunSel = $hasKebunId ? "kb.nama_kebun AS kebun_nama" : "NULL AS kebun_nama";
-$sql="SELECT p.*, u.nama_unit AS unit_nama, $kebunSel
+$fileSel = $hasFilePdf ? "p.file_pdf" : "NULL AS file_pdf";
+
+$sql="SELECT p.*, u.nama_unit AS unit_nama, $kebunSel, $fileSel
       FROM pemeliharaan p
       LEFT JOIN units u ON u.id=p.unit_id
       ".($hasKebunId?"LEFT JOIN md_kebun kb ON kb.id=p.kebun_id":"")."
       $where
-      ORDER BY p.tahun DESC,
-               FIELD(p.bulan,".implode(',',array_map(fn($b)=>$conn->quote($b),$bulanList))."),
-               p.id DESC
+      ORDER BY u.nama_unit ASC, p.tahun DESC,
+             FIELD(p.bulan,".implode(',',array_map(fn($b)=>$conn->quote($b),$bulanList))."),
+             p.id DESC
       LIMIT :lim OFFSET :ofs";
+
 $st=$conn->prepare($sql);
 foreach($p as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
 $st->bindValue(':lim',$per,PDO::PARAM_INT);
@@ -125,12 +129,12 @@ $st->bindValue(':ofs',$offset,PDO::PARAM_INT);
 $st->execute();
 $rows=$st->fetchAll(PDO::FETCH_ASSOC);
 
-/* ===== totals ===== */
+/* ===== totals (Untuk Keseluruhan Data yang Difilter) ===== */
 $stt=$conn->prepare("SELECT COALESCE(SUM(p.rencana),0) tr, COALESCE(SUM(p.realisasi),0) te FROM pemeliharaan p $where");
 foreach($p as $k=>$v){ $stt->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
 $stt->execute(); $tot=$stt->fetch(PDO::FETCH_ASSOC);
-$tot_r=(float)($tot['tr']??0); $tot_e=(float)($tot['te']??0);
-$tot_d=$tot_e-$tot_r; $tot_p=$tot_r>0?($tot_e/$tot_r*100):0;
+$grand_tot_r=(float)($tot['tr']??0); // [MODIFIED] Ganti nama variabel
+$grand_tot_e=(float)($tot['te']??0); // [MODIFIED] Ganti nama variabel
 
 /* ===== qs helper ===== */
 function qs_keep(array $extra=[]){
@@ -154,7 +158,27 @@ include_once '../layouts/header.php';
   .tab-active{background:#0ea5e9;color:#fff;border-color:#0ea5e9}
   .tab-inactive{background:#eaf6ff;color:#075985;border-color:#bae6fd}
   button:disabled { opacity: 0.5; cursor: not-allowed !important; }
-  .underline:disabled { text-decoration: none; }
+  .btn-icon { padding: 0.4rem; background: transparent; border: none; }
+  #file_pdf_current_wrap { font-size: 0.875rem; margin-top: 8px; }
+  #file_pdf_current_link { color: #059669; text-decoration: underline; }
+  #file_pdf_delete_wrap { margin-left: 1rem; }
+
+  /* [MODIFIED] Styling untuk baris total */
+  .summary-totals {
+      background-color: #147a0fff; /* bg-gray-100 */
+      padding: 0.75rem 1rem; /* p-3 */
+      margin-top: 0.5rem; /* mt-2 */
+      border: 1px solid #e5e7eb; /* border border-gray-200 */
+      border-radius: 0.5rem; /* rounded-lg */
+      font-size: 0.875rem; /* text-sm */
+      color: #ffffffff; /* text-gray-800 */
+      display: flex;
+      justify-content: flex-end; /* Align to the right */
+      gap: 1.5rem; /* gap-6 */
+  }
+  .summary-totals strong {
+      font-weight: 600; /* font-semibold */
+  }
 </style>
 
 <div class="space-y-6">
@@ -173,12 +197,14 @@ include_once '../layouts/header.php';
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
       <div>
         <h2 class="text-xl font-bold text-gray-900"><?= htmlspecialchars($tabs[$tab]) ?></h2>
-        <p class="text-gray-600 mt-1">Kategori: <span class="px-2 py-0.5 rounded border"><?= htmlspecialchars($tab) ?></span></p>
+        <p class="text-gray-600 mt-1">Kategori: <span class="px-2 py-0.5  border"><?= htmlspecialchars($tab) ?></span></p>
       </div>
       <div class="flex gap-2">
         <a class="btn" href="cetak/pemeliharaan_pdf.php?<?= qs_keep() ?>"><i class="ti ti-file-type-pdf text-red-600 text-xl"></i>PDF</a>
         <a class="btn" href="cetak/pemeliharaan_excel.php?<?= qs_keep() ?>"><i class="ti ti-file-spreadsheet text-emerald-600 text-xl"></i>Excel</a>
-        <button id="btn-add" class="btn btn-dark" <?= ($tab==='TK' && !$enumTKReady)?'disabled':'' ?>><i class="ti ti-plus"></i> Input Baru</button>
+        <?php if (!$isStaf): ?>
+          <button id="btn-add" class="btn btn-dark" <?= ($tab==='TK' && !$enumTKReady)?'disabled':'' ?>><i class="ti ti-plus"></i> Input Baru</button>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -246,9 +272,8 @@ include_once '../layouts/header.php';
       </div>
     </form>
 
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-2">
-      <div class="text-sm text-gray-700">
-        <?php $from=$total?($offset+1):0; $to=min($offset+$per,$total); ?>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 ">
+      <div class="text-sm text-gray-700"> <?php $from=$total?($offset+1):0; $to=min($offset+$per,$total); ?>
         Menampilkan <strong><?= $from ?></strong>–<strong><?= $to ?></strong> dari <strong><?= number_format($total) ?></strong> data
       </div>
       <form method="GET" class="flex items-center gap-2">
@@ -256,8 +281,7 @@ include_once '../layouts/header.php';
           <input type="hidden" name="<?= htmlspecialchars($k) ?>" value="<?= htmlspecialchars((string)$v) ?>">
         <?php endforeach; ?>
         <label class="text-sm text-gray-700">Baris/hal</label>
-        <select name="per_page" class="border rounded-lg px-3 py-2" onchange="this.form.submit()">
-          <?php foreach($perOpts as $o): ?><option value="<?= $o ?>" <?= $per===$o?'selected':'' ?>><?= $o ?></option><?php endforeach; ?>
+        <select name="per_page" class="border rounded-lg px-3 py-2 text-sm" onchange="this.form.submit()"> <?php foreach($perOpts as $o): ?><option value="<?= $o ?>" <?= $per===$o?'selected':'' ?>><?= $o ?></option><?php endforeach; ?>
         </select>
       </form>
     </div>
@@ -266,13 +290,12 @@ include_once '../layouts/header.php';
       <div class="tbl-wrap">
         <table class="min-w-full table-fixed text-sm bg-white">
           <thead class="sticky top-0 z-10">
-            <tr class="bg-green-600 text-white">
+            <tr class="bg-green-700 text-white">
               <th class="py-3 px-4 text-left w-[7rem]">TAHUN</th>
               <th class="py-3 px-4 text-left w-[14rem]">KEBUN</th>
               <th class="py-3 px-4 text-left w-[12rem]"><?= $isBibit?'STOOD / JENIS':'RAYON' ?></th>
               <th class="py-3 px-4 text-left w-[12rem]">UNIT/DEVISI</th>
               <th class="py-3 px-4 text-left w-[14rem]">JENIS PEKERJAAN</th>
-              <th class="py-3 px-4 text-left w-[10rem]">PERIODE</th>
               <th class="py-3 px-4 text-left w-[10rem]">TENAGA</th>
               <th class="py-3 px-4 text-right w-[8rem]">RENCANA</th>
               <th class="py-3 px-4 text-left  w-[7rem]">SATUAN R.</th>
@@ -281,28 +304,20 @@ include_once '../layouts/header.php';
               <th class="py-3 px-4 text-right w-[7rem]">+/-</th>
               <th class="py-3 px-4 text-right w-[8rem]">PROGRESS (%)</th>
               <th class="py-3 px-4 text-left w-[16rem]">KETERANGAN</th>
-              <th class="py-3 px-4 text-left w-[8rem]">AKSI</th>
+              <th class="py-3 px-4 text-left w-[7rem]">FILE</th>
+              <?php if (!$isStaf): ?>
+                <th class="py-3 px-4 text-center w-[8rem]">AKSI</th>
+              <?php endif; ?>
             </tr>
-            <tr class="bg-green-50 text-green-900 border-b border-green-200">
-              <th class="py-2 px-4 text-xs font-bold" colspan="7">JUMLAH</th>
-              <th class="py-2 px-4 text-right text-xs font-bold"><?= number_format($tot_r,2) ?></th>
-              <th class="py-2 px-4"></th>
-              <th class="py-2 px-4 text-right text-xs font-bold"><?= number_format($tot_e,2) ?></th>
-              <th class="py-2 px-4"></th>
-              <th class="py-2 px-4 text-right text-xs font-bold"><?= number_format($tot_d,2) ?></th>
-              <th class="py-2 px-4 text-right text-xs font-bold"><?= number_format($tot_p,2) ?>%</th>
-              <th class="py-2 px-4"></th>
-              <th class="py-2 px-4"></th>
-            </tr>
-          </thead>
+            </thead>
           <tbody class="text-gray-900">
           <?php if(empty($rows)): ?>
-            <tr><td colspan="15" class="text-center py-10 text-gray-500">Belum ada data sesuai filter.</td></tr>
+            <tr><td colspan="<?= $isStaf ? 14 : 15 ?>" class="text-center py-10 text-gray-500">Belum ada data sesuai filter.</td></tr>
           <?php else: foreach($rows as $r):
             $rencana=(float)($r['rencana']??0); $realisasi=(float)($r['realisasi']??0);
             $delta=$realisasi-$rencana; $progress=$rencana>0?($realisasi/$rencana*100):0;
-            $periode=trim(($r['bulan']??'').' '.($r['tahun']??''));
             $rayOrBib = $r['rayon'] ?? '-';
+            $filePdf = $hasFilePdf ? ($r['file_pdf'] ?? null) : null;
           ?>
             <tr class="border-b hover:bg-gray-50">
               <td class="py-3 px-4"><?= (int)$r['tahun'] ?></td>
@@ -310,7 +325,6 @@ include_once '../layouts/header.php';
               <td class="py-3 px-4"><?= htmlspecialchars($rayOrBib) ?></td>
               <td class="py-3 px-4"><?= htmlspecialchars($r['unit_nama']??'-') ?></td>
               <td class="py-3 px-4"><?= htmlspecialchars($r['jenis_pekerjaan']??'-') ?></td>
-              <td class="py-3 px-4"><?= htmlspecialchars($periode) ?></td>
               <td class="py-3 px-4"><?= htmlspecialchars($r['tenaga']??'-') ?></td>
               <td class="py-3 px-4 text-right"><?= number_format($rencana,2) ?></td>
               <td class="py-3 px-4"><?= htmlspecialchars($hasSatR?$r['satuan_rencana']:'') ?></td>
@@ -319,50 +333,66 @@ include_once '../layouts/header.php';
               <td class="py-3 px-4 text-right"><?= number_format($delta,2) ?></td>
               <td class="py-3 px-4 text-right"><?= number_format($progress,2) ?>%</td>
               <td class="py-3 px-4"><?= htmlspecialchars($hasKeterangan?($r['keterangan']??''):'') ?></td>
+              <td class="py-3 px-4 text-center">
+                <?php if ($filePdf): ?>
+                  <a href="../<?= htmlspecialchars($filePdf) ?>" target="_blank" class="text-red-600 hover:text-red-800" title="Lihat PDF">
+                    <i class="ti ti-file-type-pdf text-xl"></i>
+                  </a>
+                <?php else: echo '-'; endif; ?>
+              </td>
+              <?php if (!$isStaf): ?>
               <td class="py-3 px-4">
-                <div class="flex items-center gap-3">
-                  <button class="btn-edit text-blue-700 hover:text-blue-900 underline"
+                <div class="flex items-center justify-center gap-3">
+                  <button class="btn-edit btn-icon text-blue-600 hover:text-blue-800"
+                          title="Edit"
                           data-json='<?= htmlspecialchars(json_encode($r),ENT_QUOTES,"UTF-8") ?>'
-                          <?= $isStaf ? 'disabled' : '' ?>
-                          <?= ($tab==='TK' && !$enumTKReady) ? 'disabled' : '' ?>>Edit</button>
-                  <button class="btn-delete text-red-700 hover:text-red-900 underline"
+                          <?= ($tab==='TK' && !$enumTKReady) ? 'disabled' : '' ?>>
+                    <i class="ti ti-pencil text-xl"></i>
+                  </button>
+                  <button class="btn-delete btn-icon text-red-600 hover:text-red-800"
+                          title="Hapus"
                           data-id="<?= (int)$r['id'] ?>"
-                          <?= $isStaf ? 'disabled' : '' ?>
-                          <?= ($tab==='TK' && !$enumTKReady) ? 'disabled' : '' ?>>Hapus</button>
+                          <?= ($tab==='TK' && !$enumTKReady) ? 'disabled' : '' ?>>
+                    <i class="ti ti-trash text-xl"></i>
+                  </button>
                 </div>
               </td>
+              <?php endif; ?>
             </tr>
           <?php endforeach; endif; ?>
           </tbody>
         </table>
-      </div>
-    </div>
+      </div> </div> <?php if ($total > 0): // Tampilkan hanya jika ada data ?>
+        <div class="summary-totals bg-green-500">
+            <span><strong>TOTAL RENCANA:</strong> <?= number_format($grand_tot_r, 2) ?></span>
+            <span><strong>TOTAL REALISASI:</strong> <?= number_format($grand_tot_e, 2) ?></span>
+        </div>
+    <?php endif; ?>
 
-    <div class="flex flex-col md:flex-row md:items-center md:justify-between p-3">
-      <div class="text-sm text-gray-700">Halaman <strong><?= $page ?></strong> dari <strong><?= $pages ?></strong></div>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between p-3 mt-4"> <div class="text-sm text-gray-700">Halaman <strong><?= $page ?></strong> dari <strong><?= $pages ?></strong></div>
       <?php $plink=function($p){return '?'.qs_keep(['page'=>$p]);}; ?>
       <div class="inline-flex gap-2">
         <a class="btn" href="<?= $page>1?$plink($page-1):'javascript:void(0)' ?>" style="<?= $page>1?'':'opacity:.5;pointer-events:none' ?>">Prev</a>
         <a class="btn" href="<?= $page<$pages?$plink($page+1):'javascript:void(0)' ?>" style="<?= $page<$pages?'':'opacity:.5;pointer-events:none' ?>">Next</a>
       </div>
     </div>
-  </div>
-</div>
-
+  </div> </div> <?php if (!$isStaf): ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-3xl">
+  <div class="bg-white p-6 rounded-xl shadow-lg w-full max-w-3xl">
     <div class="flex justify-between items-center mb-6">
       <h2 id="modal-title" class="text-2xl font-bold text-gray-900">Input Pekerjaan Baru</h2>
       <button id="btn-close" class="text-gray-500 hover:text-gray-800 text-3xl" aria-label="Tutup">&times;</button>
     </div>
 
-    <form id="crud-form">
+    <form id="crud-form" enctype="multipart/form-data">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
       <input type="hidden" name="action" id="form-action">
       <input type="hidden" name="id" id="form-id">
       <input type="hidden" name="kategori" value="<?= htmlspecialchars($tab) ?>">
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+
+        <div class="md:col-span-2">
           <label class="block text-sm font-semibold mb-1">Jenis Pekerjaan <span class="text-red-500">*</span></label>
           <input type="hidden" name="jenis_id" id="jenis_id">
           <input
@@ -382,6 +412,7 @@ include_once '../layouts/header.php';
           </datalist>
           <p class="text-xs text-gray-500 mt-1">Jika diketik manual, sistem akan mencocokkan otomatis.</p>
         </div>
+
         <div>
           <label class="block text-sm font-semibold mb-1">Tenaga <span class="text-red-500">*</span></label>
           <select name="tenaga_id" id="tenaga_id" required class="w-full border rounded-lg px-3 py-2">
@@ -404,6 +435,19 @@ include_once '../layouts/header.php';
           </select>
         </div>
 
+        <div class="grid grid-cols-2 gap-x-5">
+            <div>
+              <label class="block text-sm font-semibold mb-1">Bulan <span class="text-red-500">*</span></label>
+              <select name="bulan" id="bulan" required class="w-full border rounded-lg px-3 py-2">
+                <?php foreach($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold mb-1">Tahun <span class="text-red-500">*</span></label>
+              <input type="number" name="tahun" id="tahun" min="2000" max="2100" required class="w-full border rounded-lg px-3 py-2">
+            </div>
+        </div>
+
         <?php if(!$isBibit): ?>
           <div class="md:col-span-2">
             <label class="block text-sm font-semibold mb-1">Rayon (opsional / untuk bibit isi Stood/Jenis)</label>
@@ -415,36 +459,47 @@ include_once '../layouts/header.php';
             <input type="text" name="rayon" id="rayon" class="w-full border rounded-lg px-3 py-2" placeholder="cth: Jagug / PN Stood 2">
           </div>
         <?php endif; ?>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Bulan <span class="text-red-500">*</span></label>
-          <select name="bulan" id="bulan" required class="w-full border rounded-lg px-3 py-2">
-            <?php foreach($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-          </select>
+
+        <div class="grid grid-cols-5 gap-x-2">
+            <div class="col-span-3">
+                 <label class="block text-sm font-semibold mb-1">Rencana</label>
+                 <input type="number" step="0.01" min="0" name="rencana" id="rencana" class="w-full border rounded-lg px-3 py-2">
+            </div>
+            <div class="col-span-2">
+                <label class="block text-sm font-semibold mb-1">Satuan R.</label>
+                <input type="text" name="satuan_rencana" id="satuan_rencana" class="w-full border rounded-lg px-3 py-2" placeholder="Ha">
+            </div>
         </div>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Tahun <span class="text-red-500">*</span></label>
-          <input type="number" name="tahun" id="tahun" min="2000" max="2100" required class="w-full border rounded-lg px-3 py-2">
+
+        <div class="grid grid-cols-5 gap-x-2">
+            <div class="col-span-3">
+                <label class="block text-sm font-semibold mb-1">Realisasi</label>
+                <input type="number" step="0.01" min="0" name="realisasi" id="realisasi" class="w-full border rounded-lg px-3 py-2">
+            </div>
+            <div class="col-span-2">
+                 <label class="block text-sm font-semibold mb-1">Satuan E.</label>
+                <input type="text" name="satuan_realisasi" id="satuan_realisasi" class="w-full border rounded-lg px-3 py-2" placeholder="Ha">
+            </div>
         </div>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Rencana</label>
-          <input type="number" step="0.01" min="0" name="rencana" id="rencana" class="w-full border rounded-lg px-3 py-2">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Satuan Rencana</label>
-          <input type="text" name="satuan_rencana" id="satuan_rencana" class="w-full border rounded-lg px-3 py-2" placeholder="Ha / Kg / Pkk / dll">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Realisasi</label>
-          <input type="number" step="0.01" min="0" name="realisasi" id="realisasi" class="w-full border rounded-lg px-3 py-2">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold mb-1">Satuan Realisasi</label>
-          <input type="text" name="satuan_realisasi" id="satuan_realisasi" class="w-full border rounded-lg px-3 py-2" placeholder="Ha / Kg / Pkk / dll">
-        </div>
+
         <div class="md:col-span-2">
           <label class="block text-sm font-semibold mb-1">Keterangan</label>
           <textarea name="keterangan" id="keterangan" rows="3" class="w-full border rounded-lg px-3 py-2" placeholder="Catatan / detail pekerjaan"></textarea>
         </div>
+
+        <div class="md:col-span-2">
+            <label class="block text-sm font-semibold mb-1">Upload File PDF (Opsional)</label>
+            <input type="file" name="file_pdf" id="file_pdf" class="w-full border rounded-lg px-3 py-2" accept=".pdf">
+            <div id="file_pdf_current_wrap" class="hidden">
+                File saat ini: <a href="#" id="file_pdf_current_link" target="_blank" class="font-medium"></a>
+                <span id="file_pdf_delete_wrap" class="hidden">
+                    <input type="checkbox" name="_delete_pdf" id="_delete_pdf" value="1">
+                    <label for="_delete_pdf" class="text-red-600">Hapus file</label>
+                </span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">Maksimal 10 MB. Mengunggah file baru akan menggantikan file lama.</p>
+        </div>
+
       </div>
       <div class="flex justify-end gap-3 mt-6">
         <button type="button" id="btn-cancel" class="btn">Batal</button>
@@ -453,12 +508,17 @@ include_once '../layouts/header.php';
     </form>
   </div>
 </div>
+<?php endif; ?>
 
 <?php include_once '../layouts/footer.php'; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const IS_STAF = <?= $isStaf ? 'true' : 'false' ?>;
+
+  // Jika user adalah staf, tidak perlu menjalankan script CRUD.
+  if (IS_STAF) return;
+
   const modal=document.getElementById('crud-modal');
   const form =document.getElementById('crud-form');
   const open =()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
@@ -466,6 +526,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnAdd = document.getElementById('btn-add');
   const jenisId   = document.getElementById('jenis_id');
   const jenisNama = document.getElementById('jenis_nama');
+  const fileInput = document.getElementById('file_pdf');
+  const fileWrap = document.getElementById('file_pdf_current_wrap');
+  const fileLink = document.getElementById('file_pdf_current_link');
+  const fileDeleteWrap = document.getElementById('file_pdf_delete_wrap');
+  const fileDeleteBox = document.getElementById('_delete_pdf');
+
   const norm = s => (s||'').toString().trim().replace(/\s+/g, ' ').toLowerCase();
   const exactMap = <?= json_encode($jenisNameToId, JSON_UNESCAPED_UNICODE) ?>;
   const looseMap = (()=>{ const m={}; for(const [k,v] of Object.entries(exactMap)){ m[norm(k)] = String(v); } return m; })();
@@ -515,6 +581,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('form-id').value='';
     document.getElementById('modal-title').textContent='Input Pekerjaan Baru';
     window._jenisFill('', '');
+
+    fileWrap.classList.add('hidden');
+    fileDeleteWrap.classList.add('hidden');
+    fileInput.value = '';
+    fileDeleteBox.checked = false;
+
     open();
     setTimeout(()=> jenisNama?.focus(), 60);
   });
@@ -527,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tbody) tbody.addEventListener('click', (e)=>{
     const btn=e.target.closest('button'); if(!btn) return;
 
-    if (btn.classList.contains('btn-edit') && !btn.disabled && !IS_STAF) {
+    if (btn.classList.contains('btn-edit') && !btn.disabled) {
       const d=JSON.parse(btn.dataset.json||'{}');
       form.reset();
       document.getElementById('form-action').value='update';
@@ -547,14 +619,27 @@ document.addEventListener('DOMContentLoaded', () => {
       form.satuan_rencana.value    = d.satuan_rencana || '';
       form.satuan_realisasi.value  = d.satuan_realisasi || '';
       form.keterangan.value        = d.keterangan || '';
+
+      fileInput.value = '';
+      fileDeleteBox.checked = false;
+      if (d.file_pdf) {
+          fileLink.href = '../' + d.file_pdf;
+          fileLink.textContent = d.file_pdf.split('/').pop();
+          fileWrap.classList.remove('hidden');
+          fileDeleteWrap.classList.remove('hidden');
+      } else {
+          fileWrap.classList.add('hidden');
+          fileDeleteWrap.classList.add('hidden');
+      }
+
       open();
       setTimeout(()=> jenisNama?.focus(), 60);
     }
 
-    if (btn.classList.contains('btn-delete') && !btn.disabled && !IS_STAF) {
+    if (btn.classList.contains('btn-delete') && !btn.disabled) {
       const id = btn.dataset.id;
       Swal.fire({
-        title: 'Hapus data ini?', text: 'Tindakan ini tidak dapat dibatalkan.', icon: 'warning',
+        title: 'Hapus data ini?', text: 'File PDF yang terlampir juga akan dihapus. Tindakan ini tidak dapat dibatalkan.', icon: 'warning',
         showCancelButton: true, confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal',
         confirmButtonColor: '#dc2626'
       }).then(res=>{
@@ -594,6 +679,14 @@ document.addEventListener('DOMContentLoaded', () => {
       Swal.fire('Validasi','Field <b>Jenis Pekerjaan</b> wajib dipilih dari daftar master.', 'warning');
       jenisNama?.focus();
       return;
+    }
+
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        if (file.size > 10 * 1024 * 1024) { // 10 MB
+            Swal.fire('Validasi', 'Ukuran file PDF tidak boleh melebihi 10 MB.', 'warning');
+            return;
+        }
     }
 
     const bl=<?= json_encode($bulanList) ?>;

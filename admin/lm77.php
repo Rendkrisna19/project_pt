@@ -1,5 +1,6 @@
 <?php
 // lm77.php — Rekap LM-77 (turunan dari LM-76 13 kolom)
+// Versi modifikasi: Group by Unit, style dari LM-76
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -19,28 +20,31 @@ $tahunNow = (int)date('Y');
 $currentPage = 'lm77';
 include_once '../layouts/header.php';
 ?>
-<style>.thead-sticky th{position:sticky;top:0;z-index:10}</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<style>
+  .thead-sticky th{position:sticky;top:0;z-index:10}
+  /* Style grouping dari lm76 */
+  .unit-head { background:#d1fae5; color:#065f46; font-weight:700; }
+  .unit-sub { background:#ecfdf5; font-weight:700; }
+</style>
 
 <div class="space-y-6">
   <div class="flex justify-between items-center">
     <div>
       <h1 class="text-2xl font-bold">LM-77 — Statistik Panen (Rekap)</h1>
-      <p class="text-gray-500">Rekap turunan dari LM-76. Kolom 8–13 dihitung otomatis.</p>
+      <p class="text-gray-500">Rekap turunan dari LM-76. Dikelompokkan per Unit/AFD. Kolom 8–13 dihitung otomatis.</p>
     </div>
 
     <div class="flex items-center gap-2">
-      <button id="btn-export-excel" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Export Excel">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.3 1.7L7 12l-1.7 2.3h1.5l1-1.5 1 1.5h1.5L8.6 12l1.7-2.3H8.8L7.8 11 6.8 9.7H5.3z"/></svg>
-        <span>Excel</span>
+      <button id="btn-export-excel" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+          <i class="ti ti-file-spreadsheet"></i><span>Excel</span>
       </button>
-      <button id="btn-export-pdf" class="flex items-center gap-2 border px-3 py-2 rounded-lg bg-white hover:bg-gray-50" title="Cetak PDF">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/><path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/></svg>
-        <span>PDF</span>
+      <button id="btn-export-pdf" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2">
+          <i class="ti ti-file-type-pdf"></i><span>PDF</span>
       </button>
     </div>
   </div>
 
-  <!-- FILTER -->
   <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3">
     <select id="filter-unit" class="border rounded px-3 py-2">
       <option value="">Semua Unit</option>
@@ -63,10 +67,9 @@ include_once '../layouts/header.php';
     </select>
   </div>
 
-  <!-- TABEL -->
   <div class="bg-white rounded-xl shadow-sm">
     <div class="overflow-x-auto">
-      <div class="max-h-[520px] overflow-auto">
+      <div class="max-h-[70vh] overflow-auto">
         <table class="min-w-full text-sm">
           <thead class="thead-sticky bg-green-700 text-white">
             <tr>
@@ -88,7 +91,7 @@ include_once '../layouts/header.php';
           <tbody id="tbody-data">
             <tr><td colspan="13" class="text-center py-10 text-gray-500">Memuat…</td></tr>
           </tbody>
-          <tfoot>
+          <tfoot class="bg-green-50 border-t-4 border-green-700 text-gray-900">
             <tr class="bg-green-50 border-t-4 border-green-700 text-gray-900">
               <td class="py-3 px-4 font-semibold" colspan="5">TOTAL</td>
               <td class="py-3 px-4 text-right font-semibold" id="tot-luas">0</td>
@@ -104,23 +107,7 @@ include_once '../layouts/header.php';
         </table>
       </div>
     </div>
-
-    <!-- Pagination -->
-    <div class="flex flex-wrap items-center justify-between gap-3 p-3 border-t">
-      <div class="flex items-center gap-2">
-        <label for="page-size" class="text-sm text-gray-600">Tampilkan</label>
-        <select id="page-size" class="border rounded px-2 py-1 text-sm">
-          <option value="10" selected>10</option>
-          <option value="25">25</option>
-          <option value="50">50</option>
-          <option value="100">100</option>
-        </select>
-        <span class="text-sm text-gray-600">baris</span>
-      </div>
-      <div class="flex items-center gap-2" id="pager"></div>
-      <div class="text-sm text-gray-600" id="range-info"></div>
     </div>
-  </div>
 </div>
 
 <?php include_once '../layouts/footer.php'; ?>
@@ -134,9 +121,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const fTahun = $('#filter-tahun');
   const fKebun = $('#filter-kebun');
 
-  const pageSizeSel = $('#page-size');
-  const pagerEl     = $('#pager');
-  const rangeInfoEl = $('#range-info');
+  // Hapus DOM Pager
+  // const pageSizeSel = $('#page-size');
+  // const pagerEl     = $('#pager');
+  // const rangeInfoEl = $('#range-info');
 
   const T = {
     luas: $('#tot-luas'), pokok: $('#tot-pokok'),
@@ -145,13 +133,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
 
   let allData = [];
-  let currentPage = 1;
+  // Hapus state Pager
+  // let currentPage = 1; 
+  
+  const bulanOrder = {
+    'Januari':1,'Februari':2,'Maret':3,'April':4,'Mei':5,'Juni':6,
+    'Juli':7,'Agustus':8,'September':9,'Oktober':10,'November':11,'Desember':12
+  };
 
   const fmt = (n, d=2) => Number(n ?? 0).toLocaleString(undefined,{maximumFractionDigits:d});
   const sum = (arr, getter) => arr.reduce((a,r)=> a + (getter(r)||0), 0);
 
   /* ====== RUMUS (ambil dari LM-76 v13 kolom) ====== */
-  // r.realisasi_kg, r.anggaran_kg, r.jumlah_tandan, r.jumlah_pohon, r.luas_ha, r.jumlah_hk
   const toNum = v => { const x = parseFloat(v); return Number.isNaN(x) ? 0 : x; };
 
   function variancePct(r){
@@ -212,7 +205,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
     `;
   }
 
-  function renderTotals(){
+  // Fungsi ini menghitung Grand Total (Footer)
+  function renderGrandTotals(){
     const totalLuas  = sum(allData, r => toNum(r.luas_ha));
     const totalPokok = sum(allData, r => toNum(r.jumlah_pohon));
     const totalReal  = sum(allData, r => toNum(r.realisasi_kg));
@@ -220,12 +214,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const totalTdn   = sum(allData, r => toNum(r.jumlah_tandan));
     const totalHK    = sum(allData, r => toNum(r.jumlah_hk));
 
-    const Vtot  = totalAngg>0 ? ((totalReal/totalAngg)*100 - 100) : null;
-    const TPP   = totalPokok>0 ? (totalTdn/totalPokok) : null;
-    const PROT  = totalLuas>0  ? ((totalReal/totalLuas)/1000) : null;
-    const BTR   = totalTdn>0   ? (totalReal/totalTdn) : null;
-    const KG_HK = totalHK>0    ? (totalReal/totalHK) : null;
-    const TDN_HK= totalHK>0    ? (totalTdn/totalHK) : null;
+    const Vtot   = totalAngg>0 ? ((totalReal/totalAngg)*100 - 100) : null;
+    const TPP    = totalPokok>0 ? (totalTdn/totalPokok) : null;
+    const PROT   = totalLuas>0  ? ((totalReal/totalLuas)/1000) : null;
+    const BTR    = totalTdn>0   ? (totalReal/totalTdn) : null;
+    const KG_HK  = totalHK>0    ? (totalReal/totalHK) : null;
+    const TDN_HK = totalHK>0    ? (totalTdn/totalHK) : null;
 
     T.luas.textContent  = fmt(totalLuas);
     T.pokok.textContent = fmt(totalPokok,0);
@@ -237,46 +231,78 @@ document.addEventListener('DOMContentLoaded', ()=>{
     T.tdnhk.textContent = TDN_HK!==null?fmt(TDN_HK,3):'-';
   }
 
-  function renderPager(page, totalPages){
-    const windowSize = 5;
-    let start = Math.max(1, page - Math.floor(windowSize/2));
-    let end   = start + windowSize - 1;
-    if (end > totalPages) { end = totalPages; start = Math.max(1, end - windowSize + 1); }
+  // Hapus fungsi renderPager()
+  
+  // Ganti renderTable() menjadi groupAndRender() (dari lm76)
+  function groupAndRender(){
+    if (!allData.length){
+      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-10 text-gray-500">Belum ada data.</td></tr>`;
+      renderGrandTotals();
+      return;
+    }
 
-    const btn = (label, disabled, goPage, extra='') => `
-      <button ${disabled ? 'disabled' : ''} data-goto="${goPage}"
-        class="px-3 py-1 border rounded text-sm ${disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-100'} ${extra}">
-        ${label}
-      </button>`;
+    // Group by Unit
+    const unitBuckets = new Map();
+    allData.forEach(r=>{
+      const uKey = (r.nama_unit || '').trim() || '(Unit Tidak Diketahui)';
+      if (!unitBuckets.has(uKey)) unitBuckets.set(uKey, []);
+      unitBuckets.get(uKey).push(r);
+    });
+
+    // Sort unit keys alphabetically
+    const unitKeys = Array.from(unitBuckets.keys()).sort((a,b)=>a.localeCompare(b));
 
     let html = '';
-    html += btn('« Prev', page <= 1, page - 1);
-    for (let p = start; p <= end; p++){
-      html += btn(p, false, p, p===page ? 'bg-gray-200 font-semibold' : '');
-    }
-    html += btn('Next »', page >= totalPages, page + 1);
-    pagerEl.innerHTML = html;
-  }
 
-  function renderTable(){
-    const size = parseInt(pageSizeSel.value || '10', 10);
-    const total = allData.length;
-    const totalPages = Math.max(1, Math.ceil(total / size));
-    if (currentPage > totalPages) currentPage = totalPages;
+    unitKeys.forEach(uKey=>{
+      const rowsU = unitBuckets.get(uKey) || [];
 
-    if (!total){
-      tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-gray-500">Belum ada data.</td></tr>';
-      pagerEl.innerHTML = ''; rangeInfoEl.textContent = '';
-      renderTotals(); return;
-    }
+      // Urutkan baris dalam Unit: Tahun ASC → Bulan ASC → TT ASC
+      rowsU.sort((a,b)=>{
+        const ty = (parseInt(a.tahun)||0) - (parseInt(b.tahun)||0);
+        if (ty!==0) return ty;
+        const ba = bulanOrder[a.bulan] || 0, bb = bulanOrder[b.bulan] || 0;
+        if (ba!==bb) return ba - bb;
+        return (a.tt||'').localeCompare(b.tt||'');
+      });
 
-    const start = (currentPage - 1) * size;
-    const end   = Math.min(start + size, total);
-    tbody.innerHTML = allData.slice(start, end).map(buildRowHTML).join('');
-    rangeInfoEl.textContent = `Menampilkan ${start+1}–${end} dari ${total} data`;
+      // Unit header
+      html += `<tr class="unit-head"><td class="py-2 px-3" colspan="13">Unit/AFD: ${uKey}</td></tr>`;
 
-    renderPager(currentPage, totalPages);
-    renderTotals();
+      // Rows
+      html += rowsU.map(buildRowHTML).join('');
+
+      // Subtotal Unit (logika kalkulasi sama seperti renderGrandTotals)
+      const uLuas   = sum(rowsU, r => toNum(r.luas_ha));
+      const uPokok  = sum(rowsU, r => toNum(r.jumlah_pohon));
+      const uReal   = sum(rowsU, r => toNum(r.realisasi_kg));
+      const uAngg   = sum(rowsU, r => toNum(r.anggaran_kg));
+      const uTdn    = sum(rowsU, r => toNum(r.jumlah_tandan));
+      const uHK     = sum(rowsU, r => toNum(r.jumlah_hk));
+
+      const uVtot   = uAngg>0 ? ((uReal/uAngg)*100 - 100) : null;
+      const uTPP    = uPokok>0 ? (uTdn/uPokok) : null;
+      const uPROT   = uLuas>0  ? ((uReal/uLuas)/1000) : null;
+      const uBTR    = uTdn>0   ? (uReal/uTdn) : null;
+      const uKG_HK  = uHK>0    ? (uReal/uHK) : null;
+      const uTDN_HK = uHK>0    ? (uTdn/uHK) : null;
+
+      html += `
+        <tr class="unit-sub">
+          <td class="py-2 px-3" colspan="5">Jumlah (${uKey})</td>
+          <td class="py-2 px-3 text-right">${fmt(uLuas)}</td>
+          <td class="py-2 px-3 text-right">${fmt(uPokok,0)}</td>
+          <td class="py-2 px-3 text-right">${uVtot!==null?fmt(uVtot):'-'}</td>
+          <td class="py-2 px-3 text-right">${uTPP!==null?fmt(uTPP,4):'-'}</td>
+          <td class="py-2 px-3 text-right">${uPROT!==null?fmt(uPROT,3):'-'}</td>
+          <td class="py-2 px-3 text-right">${uBTR!==null?fmt(uBTR,3):'-'}</td>
+          <td class="py-2 px-3 text-right">${uKG_HK!==null?fmt(uKG_HK,3):'-'}</td>
+          <td class="py-2 px-3 text-right">${uTDN_HK!==null?fmt(uTDN_HK,3):'-'}</td>
+        </tr>`;
+    });
+
+    tbody.innerHTML = html;
+    renderGrandTotals(); // Render Grand Total di footer
   }
 
   function refresh(){
@@ -288,25 +314,30 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('unit_id',  fUnit.value);
     fd.append('bulan',    fBulan.value);
     fd.append('tahun',    fTahun.value);
+    // Kita tidak filter 'tt' di LM-77, jadi tidak perlu dikirim
+    // fd.append('tt', fTT.value); 
 
     tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-gray-500">Memuat…</td></tr>';
     fetch('lm76_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
-      .then(j=>{ allData = (j && j.success && Array.isArray(j.data)) ? j.data : []; currentPage = 1; renderTable(); })
+      // Modifikasi .then() untuk memanggil groupAndRender
+      .then(j=>{ 
+        allData = (j && j.success && Array.isArray(j.data)) ? j.data : []; 
+        groupAndRender(); 
+      })
       .catch(()=>{ tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-red-500">Gagal memuat data</td></tr>'; });
   }
 
   refresh();
-  [fUnit,fBulan,fTahun,fKebun].forEach(el=>el.addEventListener('change', ()=>{ currentPage=1; refresh(); }));
-  pageSizeSel.addEventListener('change', ()=>{ currentPage=1; renderTable(); });
+  
+  // Modifikasi listener, hapus currentPage=1
+  [fUnit,fBulan,fTahun,fKebun].forEach(el=>el.addEventListener('change', refresh));
+  
+  // Hapus listener Pager
+  // pageSizeSel.addEventListener('change', ...);
+  // pagerEl.addEventListener('click', ...);p
 
-  // Pager click
-  pagerEl.addEventListener('click',(e)=>{
-    const b = e.target.closest('button[data-goto]'); if(!b||b.disabled) return;
-    currentPage = parseInt(b.dataset.goto,10); renderTable();
-  });
-
-  // Export ikut filter + CSRF
+  // Export ikut filter + CSRF (Sudah benar, tidak perlu diubah)
   function filtersQS(){
     return new URLSearchParams({
       csrf_token: '<?= htmlspecialchars($CSRF) ?>',
