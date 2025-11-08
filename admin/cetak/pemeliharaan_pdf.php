@@ -2,6 +2,7 @@
 // pages/cetak/pemeliharaan_pdf.php — FINAL
 // PDF mengikuti SEMUA filter & menampilkan Satuan R/E + Keterangan
 // [MODIFIED] - Added table-layout:fixed, column widths, centered & styled status badges.
+// [MODIFIED] - Sort order changed to Unit (ASC) -> Bulan (ASC)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
@@ -74,7 +75,7 @@ $colBibit     = pickCol($pdo,'pemeliharaan',['stood','stood_jenis','jenis_bibit'
 
 /* ========= SELECT Pieces ========= */
 $joinKebun=''; $selKebun='';
-if ($hasKebunId)       { $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=p.kebun_id ";    $selKebun=", kb.nama_kebun AS kebun_nama"; }
+if ($hasKebunId)       { $joinKebun=" LEFT JOIN md_kebun kb ON kb.id=p.kebun_id ";   $selKebun=", kb.nama_kebun AS kebun_nama"; }
 elseif ($hasKebunKode){ $joinKebun=" LEFT JOIN md_kebun kb ON kb.kode=p.kebun_kode ";$selKebun=", kb.nama_kebun AS kebun_nama"; }
 elseif ($colKebunText){ $selKebun=", p.$colKebunText AS kebun_nama"; }
 else { $selKebun=", NULL AS kebun_nama"; }
@@ -125,7 +126,30 @@ if ($isBibit){
 
 if ($hasKet && $f_ket!==''){ $sql.=" AND p.keterangan LIKE :ket"; $params[':ket']="%{$f_ket}%"; }
 
-$sql .= $hasTanggal ? " ORDER BY p.tanggal DESC, p.id DESC" : " ORDER BY p.tahun DESC, p.id DESC";
+
+// [MODIFIKASI] Mengubah urutan berdasarkan Unit (ASC) dan Bulan (Kalender ASC)
+$orderBy = " ORDER BY u.nama_unit ASC"; // 1. Urutkan berdasarkan nama unit (A-Z)
+
+if ($hasTanggal) {
+    // 2. Jika ada kolom 'tanggal', ini cara terbaik untuk mengurutkan bulan (Jan -> Des)
+    $orderBy .= ", p.tanggal ASC";
+} else {
+    // 2. Jika tidak ada 'tanggal', gunakan 'tahun' dan 'bulan' (jika ada)
+    if ($hasTahunCol) {
+        $orderBy .= ", p.tahun ASC"; // Urutkan tahun dulu
+    }
+    if ($hasBulanCol && !empty($bulanNama)) {
+        // Urutkan nama bulan secara kalender (Jan=1, Feb=2, ...), bukan alfabetis (Agustus, April, ...)
+        // $bulanNama adalah [1=>'Januari', 2=>'Februari', ...]
+        $bulanList = implode("', '", array_values($bulanNama));
+        $orderBy .= ", FIELD(p.bulan, '$bulanList')";
+    }
+}
+
+$orderBy .= ", p.id ASC"; // 3. Sortir sekunder untuk stabilitas data
+$sql .= $orderBy;
+
+
 $st=$pdo->prepare($sql);
 foreach($params as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }
 $st->execute();

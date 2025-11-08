@@ -1,5 +1,5 @@
 <?php
-// admin/pemupukan_organik.php — FINAL: role 'staf' TIDAK bisa Edit/Hapus (ikon), tapi MASIH bisa Tambah/Input
+// admin/pemupukan_organik.php — MODIFIKASI: +Rayon, +Gudang(select), +Keterangan(select)
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -10,7 +10,7 @@ $userRole = $_SESSION['user_role'] ?? 'staf';
 $isStaf   = ($userRole === 'staf');
 
 require_once '../config/database.php';
-$db  = new Database();
+$db   = new Database();
 $pdo = $db->getConnection();
 
 /* ====== AJAX options (GET) ====== */
@@ -46,22 +46,31 @@ if (($_GET['ajax'] ?? '') === 'options') {
 }
 
 /* ====== Masters ====== */
-$units  = $pdo->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
-$kebun  = $pdo->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
-$pupuk  = $pdo->query("SELECT nama FROM md_pupuk WHERE nama<>'' ORDER BY nama")->fetchAll(PDO::FETCH_COLUMN);
+$units       = $pdo->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
+$kebun       = $pdo->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
+$pupuk       = $pdo->query("SELECT nama FROM md_pupuk WHERE nama<>'' ORDER BY nama")->fetchAll(PDO::FETCH_COLUMN);
+// BARU: Master untuk Angkutan
+$rayons      = $pdo->query("SELECT id, nama FROM md_rayon ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
+$gudangs     = $pdo->query("SELECT id, nama FROM md_asal_gudang ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
+$keterangans = $pdo->query("SELECT id, keterangan FROM md_keterangan ORDER BY keterangan")->fetchAll(PDO::FETCH_ASSOC);
+
 
 /* ====== Tabs & Filters ====== */
 $tab = $_GET['tab'] ?? 'menabur';
 if (!in_array($tab, ['menabur','angkutan'], true)) $tab = 'menabur';
 
 /* ====== Filter ====== */
-$f_tahun       = ($_GET['tahun'] ?? '') === '' ? '' : (int)$_GET['tahun'];
-$f_kebun_id    = ($_GET['kebun_id'] ?? '') === '' ? '' : (int)$_GET['kebun_id'];
-$f_tanggal     = trim((string)($_GET['tanggal'] ?? ''));
-$f_periode     = trim((string)($_GET['periode'] ?? ''));
-$f_unit_id     = ($_GET['unit_id'] ?? '') === '' ? '' : (int)$_GET['unit_id'];
-$f_keterangan  = trim((string)($_GET['keterangan'] ?? '')); // khusus angkutan
-$f_jenis_pupuk = trim((string)($_GET['jenis_pupuk'] ?? ''));
+$f_tahun          = ($_GET['tahun'] ?? '') === '' ? '' : (int)$_GET['tahun'];
+$f_kebun_id       = ($_GET['kebun_id'] ?? '') === '' ? '' : (int)$_GET['kebun_id'];
+$f_tanggal        = trim((string)($_GET['tanggal'] ?? ''));
+$f_periode        = trim((string)($_GET['periode'] ?? ''));
+$f_unit_id        = ($_GET['unit_id'] ?? '') === '' ? '' : (int)$_GET['unit_id'];
+// $f_keterangan  = trim((string)($_GET['keterangan'] ?? '')); // LAMA
+$f_jenis_pupuk    = trim((string)($_GET['jenis_pupuk'] ?? ''));
+// BARU: Filter Angkutan
+$f_rayon_id       = ($_GET['rayon_id'] ?? '') === '' ? '' : (int)$_GET['rayon_id'];
+$f_asal_gudang_id = ($_GET['asal_gudang_id'] ?? '') === '' ? '' : (int)$_GET['asal_gudang_id'];
+$f_keterangan_id  = ($_GET['keterangan_id'] ?? '') === '' ? '' : (int)$_GET['keterangan_id'];
 
 /* ====== Pagination ====== */
 $page     = max(1, (int)($_GET['page'] ?? 1));
@@ -77,13 +86,18 @@ if ($tab === 'angkutan') {
   $title = "Data Angkutan Pupuk Organik";
 
   $where = " WHERE 1=1"; $p = [];
-  if ($f_tahun !== '')                         { $where .= " AND YEAR(a.tanggal) = :thn";   $p[':thn'] = (int)$f_tahun; }
-  if ($f_kebun_id !== '')                      { $where .= " AND a.kebun_id = :kid";        $p[':kid'] = (int)$f_kebun_id; }
-  if ($f_tanggal !== '')                       { $where .= " AND a.tanggal = :tgl";         $p[':tgl'] = $f_tanggal; }
+  if ($f_tahun !== '')          { $where .= " AND YEAR(a.tanggal) = :thn";   $p[':thn'] = (int)$f_tahun; }
+  if ($f_kebun_id !== '')        { $where .= " AND a.kebun_id = :kid_kebun";  $p[':kid_kebun'] = (int)$f_kebun_id; } // ganti nama param
+  if ($f_tanggal !== '')         { $where .= " AND a.tanggal = :tgl";         $p[':tgl'] = $f_tanggal; }
   if ($f_periode !== '' && ctype_digit($f_periode)) { $where .= " AND MONTH(a.tanggal) = :bln"; $p[':bln'] = (int)$f_periode; }
-  if ($f_unit_id !== '')                       { $where .= " AND a.unit_tujuan_id = :uid";  $p[':uid'] = (int)$f_unit_id; }
-  if ($f_keterangan !== '')                    { $where .= " AND a.keterangan LIKE :ket";   $p[':ket'] = "%$f_keterangan%"; }
-  if ($f_jenis_pupuk !== '')                   { $where .= " AND a.jenis_pupuk = :jp";      $p[':jp']  = $f_jenis_pupuk; }
+  if ($f_unit_id !== '')         { $where .= " AND a.unit_tujuan_id = :uid";  $p[':uid'] = (int)$f_unit_id; }
+  // if ($f_keterangan !== '')   { $where .= " AND a.keterangan LIKE :ket";   $p[':ket'] = "%$f_keterangan%"; } // LAMA
+  if ($f_jenis_pupuk !== '')   { $where .= " AND a.jenis_pupuk = :jp";      $p[':jp']  = $f_jenis_pupuk; }
+  // BARU
+  if ($f_rayon_id !== '')        { $where .= " AND a.rayon_id = :rid";        $p[':rid'] = (int)$f_rayon_id; }
+  if ($f_asal_gudang_id !== '')  { $where .= " AND a.asal_gudang_id = :gid";  $p[':gid'] = (int)$f_asal_gudang_id; }
+  if ($f_keterangan_id !== '')   { $where .= " AND a.keterangan_id = :kid";   $p[':kid'] = (int)$f_keterangan_id; }
+
 
   // count
   $sql_count = "SELECT COUNT(*) FROM angkutan_pupuk_organik a LEFT JOIN md_kebun k ON k.id = a.kebun_id $where";
@@ -92,10 +106,18 @@ if ($tab === 'angkutan') {
   $total_pages = max(1, (int)ceil($total_rows / $per_page));
 
   // data
-  $sql = "SELECT a.*, u.nama_unit AS unit_tujuan_nama, k.nama_kebun AS kebun_nama
+  $sql = "SELECT a.*, 
+            u.nama_unit AS unit_tujuan_nama, 
+            k.nama_kebun AS kebun_nama,
+            r.nama AS nama_rayon,
+            g.nama AS nama_gudang,
+            ket.keterangan AS nama_keterangan
           FROM angkutan_pupuk_organik a
           LEFT JOIN units u ON u.id = a.unit_tujuan_id
           LEFT JOIN md_kebun k ON k.id = a.kebun_id
+          LEFT JOIN md_rayon r ON r.id = a.rayon_id
+          LEFT JOIN md_asal_gudang g ON g.id = a.asal_gudang_id
+          LEFT JOIN md_keterangan ket ON ket.id = a.keterangan_id
           $where
           ORDER BY a.tanggal DESC, a.id DESC
           LIMIT :limit OFFSET :offset";
@@ -111,7 +133,7 @@ if ($tab === 'angkutan') {
   $stt=$pdo->prepare($sql_tot);
   foreach ($p as $k=>$v) $stt->bindValue($k, $v, is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR);
   $stt->execute();
-  $tot_all   = $stt->fetch(PDO::FETCH_ASSOC);
+  $tot_all    = $stt->fetch(PDO::FETCH_ASSOC);
   $tot_all_kg = (float)($tot_all['tot_kg'] ?? 0);
 
   $sum_page_kg = 0.0; foreach ($rows as $r) $sum_page_kg += (float)($r['jumlah'] ?? 0);
@@ -120,13 +142,13 @@ if ($tab === 'angkutan') {
   $title = "Data Penaburan Pupuk Organik";
 
   $where = " WHERE 1=1"; $p = [];
-  if ($f_tahun !== '')                         { $where .= " AND YEAR(m.tanggal) = :thn";   $p[':thn'] = (int)$f_tahun; }
-  if ($f_kebun_id !== '')                      { $where .= " AND m.kebun_id = :kid";        $p[':kid'] = (int)$f_kebun_id; }
-  if ($f_tanggal !== '')                       { $where .= " AND m.tanggal = :tgl";         $p[':tgl'] = $f_tanggal; }
+  if ($f_tahun !== '')       { $where .= " AND YEAR(m.tanggal) = :thn"; $p[':thn'] = (int)$f_tahun; }
+  if ($f_kebun_id !== '')    { $where .= " AND m.kebun_id = :kid";    $p[':kid'] = (int)$f_kebun_id; }
+  if ($f_tanggal !== '')      { $where .= " AND m.tanggal = :tgl";     $p[':tgl'] = $f_tanggal; }
   if ($f_periode !== '' && ctype_digit($f_periode)) { $where .= " AND MONTH(m.tanggal) = :bln"; $p[':bln'] = (int)$f_periode; }
-  if ($f_unit_id !== '')                       { $where .= " AND m.unit_id = :uid";         $p[':uid'] = (int)$f_unit_id; }
-  if ($f_jenis_pupuk !== '')                   { $where .= " AND m.jenis_pupuk = :jp";      $p[':jp']  = $f_jenis_pupuk; }
-  // keterangan tidak diterapkan di menabur (sesuai instruksi)
+  if ($f_unit_id !== '')      { $where .= " AND m.unit_id = :uid";     $p[':uid'] = (int)$f_unit_id; }
+  if ($f_jenis_pupuk !== '')  { $where .= " AND m.jenis_pupuk = :jp";  $p[':jp']  = $f_jenis_pupuk; }
+  // filter angkutan (rayon, gudang, ket) tidak berlaku di sini
 
   // count
   $sql_count = "SELECT COUNT(*) FROM menabur_pupuk_organik m LEFT JOIN md_kebun k ON k.id = m.kebun_id $where";
@@ -151,13 +173,13 @@ if ($tab === 'angkutan') {
 
   // totals
   $sql_tot = "SELECT
-                COALESCE(SUM(m.jumlah),0)     AS tot_kg,
-                COALESCE(SUM(m.luas),0)       AS tot_luas,
-                COALESCE(SUM(m.invt_pokok),0) AS tot_invt,
-                AVG(NULLIF(m.dosis,0))        AS avg_dosis
-              FROM menabur_pupuk_organik m
-              LEFT JOIN md_kebun k ON k.id = m.kebun_id
-              $where";
+            COALESCE(SUM(m.jumlah),0)     AS tot_kg,
+            COALESCE(SUM(m.luas),0)       AS tot_luas,
+            COALESCE(SUM(m.invt_pokok),0) AS tot_invt,
+            AVG(NULLIF(m.dosis,0))        AS avg_dosis
+          FROM menabur_pupuk_organik m
+          LEFT JOIN md_kebun k ON k.id = m.kebun_id
+          $where";
   $stt=$pdo->prepare($sql_tot);
   foreach ($p as $k=>$v) $stt->bindValue($k, $v, is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR);
   $stt->execute();
@@ -186,8 +208,12 @@ function qs_no_page(array $extra = []) {
     'tanggal'     => $_GET['tanggal']     ?? '',
     'periode'     => $_GET['periode']     ?? '',
     'unit_id'     => $_GET['unit_id']     ?? '',
-    'keterangan'  => $_GET['keterangan']  ?? '',
+    // 'keterangan'  => $_GET['keterangan']  ?? '', // LAMA
     'jenis_pupuk' => $_GET['jenis_pupuk'] ?? '',
+    // BARU
+    'rayon_id'       => $_GET['rayon_id']       ?? '',
+    'asal_gudang_id' => $_GET['asal_gudang_id'] ?? '',
+    'keterangan_id'  => $_GET['keterangan_id']  ?? '',
   ];
   return http_build_query(array_merge($base, $extra));
 }
@@ -224,17 +250,20 @@ include_once '../layouts/header.php';
   <?php
     $qsPersist = [
       'tahun'=>$f_tahun,'kebun_id'=>$f_kebun_id,'tanggal'=>$f_tanggal,'periode'=>$f_periode,
-      'unit_id'=>$f_unit_id,'keterangan'=>$f_keterangan,'jenis_pupuk'=>$f_jenis_pupuk
+      'unit_id'=>$f_unit_id,
+      // 'keterangan'=>$f_keterangan, // LAMA
+      'jenis_pupuk'=>$f_jenis_pupuk,
+      // BARU
+      'rayon_id'=>$f_rayon_id, 'asal_gudang_id'=>$f_asal_gudang_id, 'keterangan_id'=>$f_keterangan_id
     ];
-    $qsTabMen = http_build_query(array_merge(['tab'=>'menabur'],  $qsPersist));
+    $qsTabMen = http_build_query(array_merge(['tab'=>'menabur'],   $qsPersist));
     $qsTabAng = http_build_query(array_merge(['tab'=>'angkutan'], $qsPersist));
   ?>
   <div class="flex flex-wrap gap-2 md:gap-4 p-2">
-    <a href="?<?= $qsTabMen ?>"  class="tablink <?= $tab==='menabur'  ? 'active' : '' ?>">Menabur Pupuk</a>
+    <a href="?<?= $qsTabMen ?>"   class="tablink <?= $tab==='menabur'  ? 'active' : '' ?>">Menabur Pupuk</a>
     <a href="?<?= $qsTabAng ?>" class="tablink <?= $tab==='angkutan' ? 'active' : '' ?>">Angkutan Pupuk</a>
   </div>
 
-  <!-- Filters -->
   <div class="bg-white p-5  shadow-sm">
     <form class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end" method="GET">
       <input type="hidden" name="tab" value="<?= htmlspecialchars($tab) ?>">
@@ -243,7 +272,11 @@ include_once '../layouts/header.php';
       <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Tanggal</label><input type="date" name="tanggal" value="<?= htmlspecialchars($f_tanggal) ?>" class="i-input"></div>
       <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Periode (Bulan)</label><select name="periode" class="i-select"><option value="">— Semua Bulan —</option><?php foreach ($bulanList as $num=>$name): ?><option value="<?= $num ?>" <?= ($f_periode!=='' && (int)$f_periode===$num)?'selected':'' ?>><?= $name ?></option><?php endforeach; ?></select></div>
       <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Unit / Defisi</label><select name="unit_id" class="i-select"><option value="">— Semua Unit —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>" <?= ($f_unit_id!=='' && (int)$f_unit_id===(int)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select></div>
-      <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Keterangan</label><input type="text" name="keterangan" value="<?= htmlspecialchars($f_keterangan) ?>" class="i-input" placeholder="(khusus Angkutan)"></div>
+      
+      <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Rayon (Angkutan)</label><select name="rayon_id" class="i-select"><option value="">— Semua Rayon —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>" <?= ($f_rayon_id!=='' && (int)$f_rayon_id===(int)$r['id'])?'selected':'' ?>><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select></div>
+      <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Gudang Asal (Angkutan)</label><select name="asal_gudang_id" class="i-select"><option value="">— Semua Gudang —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>" <?= ($f_asal_gudang_id!=='' && (int)$f_asal_gudang_id===(int)$g['id'])?'selected':'' ?>><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select></div>
+      <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Keterangan (Angkutan)</label><select name="keterangan_id" class="i-select"><option value="">— Semua Keterangan —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>" <?= ($f_keterangan_id!=='' && (int)$f_keterangan_id===(int)$k['id'])?'selected':'' ?>><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select></div>
+      
       <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Jenis Pupuk</label><select name="jenis_pupuk" class="i-select"><option value="">— Semua Jenis —</option><?php foreach ($pupuk as $jp): ?><option value="<?= htmlspecialchars($jp) ?>" <?= ($f_jenis_pupuk===$jp?'selected':'') ?>><?= htmlspecialchars($jp) ?></option><?php endforeach; ?></select></div>
 
       <div class="md:col-span-12 flex gap-2 justify-between mt-2">
@@ -262,7 +295,6 @@ include_once '../layouts/header.php';
           <?php $qs = qs_no_page(); ?>
           <a href="cetak/pemupukan_organik_excel.php?<?= $qs ?>" class="btn"><i class="ti ti-file-spreadsheet text-emerald-600"></i> Export Excel</a>
           <a href="cetak/pemupukan_organik_pdf.php?<?= $qs ?>" class="btn" target="_blank" rel="noopener"><i class="ti ti-file-type-pdf text-red-600"></i> Cetak PDF</a>
-          <!-- Staf tetap boleh tambah -->
           <button id="btn-add" type="button" class="btn btn-dark"><i class="ti ti-plus"></i> Tambah Data</button>
         </div>
       </div>
@@ -274,7 +306,6 @@ include_once '../layouts/header.php';
     </form>
   </div>
 
-  <!-- Table -->
   <div class="bg-white p-6  shadow-md">
     <h2 class="text-xl font-bold mb-4"><?= htmlspecialchars($title) ?></h2>
 
@@ -288,11 +319,11 @@ include_once '../layouts/header.php';
                 <th class="py-3 px-4 text-left w-[14rem]">Kebun</th>
                 <th class="py-3 px-4 text-left w-[10rem]">Tanggal</th>
                 <th class="py-3 px-4 text-left w-[10rem]">Periode</th>
-                <th class="py-3 px-4 text-left w-[12rem]">Unit Tujuan</th>
+                <th class="py-3 px-4 text-left w-[12rem]">Rayon</th> <th class="py-3 px-4 text-left w-[12rem]">Unit Tujuan</th>
                 <th class="py-3 px-4 text-left w-[12rem]">Gudang Asal</th>
                 <th class="py-3 px-4 text-left w-[12rem]">Jenis Pupuk</th>
                 <th class="py-3 px-4 text-right w-[10rem]">Kilogram</th>
-                <th class="py-3 px-4 text-left w-[12rem]">Nomor DO</th>
+                <!-- <th class="py-3 px-4 text-left w-[12rem]">Nomor DO</th> -->
                 <th class="py-3 px-4 text-left w-[10rem]">Supir</th>
                 <th class="py-3 px-4 text-left w-[14rem]">Keterangan</th>
                 <th class="py-3 px-4 text-left w-[8rem]">Aksi</th>
@@ -314,7 +345,7 @@ include_once '../layouts/header.php';
           </thead>
           <tbody class="text-gray-800" id="table-body">
             <?php if (!$rows): ?>
-              <tr><td colspan="<?= $tab==='angkutan' ? 12 : 12 ?>" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
+              <tr><td colspan="<?= $tab==='angkutan' ? 13 : 12 ?>" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>
             <?php else: foreach ($rows as $r): ?>
               <tr class="border-b hover:bg-blue-50/30">
                 <?php if ($tab==='angkutan'): ?>
@@ -322,16 +353,12 @@ include_once '../layouts/header.php';
                   <td class="py-3 px-4"><?= htmlspecialchars($r['kebun_nama'] ?? '-') ?></td>
                   <td class="py-3 px-4"><?= htmlspecialchars($r['tanggal']) ?></td>
                   <td class="py-3 px-4"><?php $m=(int)date('n', strtotime($r['tanggal'])); echo $bulanList[$m] ?? $m; ?></td>
-                  <td class="py-3 px-4"><?= htmlspecialchars($r['unit_tujuan_nama'] ?? '-') ?></td>
-                  <td class="py-3 px-4"><?= htmlspecialchars($r['gudang_asal']) ?></td>
-                  <td class="py-3 px-4"><?= htmlspecialchars($r['jenis_pupuk']) ?></td>
+                  <td class="py-3 px-4"><?= htmlspecialchars($r['nama_rayon'] ?? '-') ?></td> <td class="py-3 px-4"><?= htmlspecialchars($r['unit_tujuan_nama'] ?? '-') ?></td>
+                  <td class="py-3 px-4"><?= htmlspecialchars($r['nama_gudang'] ?? '-') ?></td> <td class="py-3 px-4"><?= htmlspecialchars($r['jenis_pupuk']) ?></td>
                   <td class="py-3 px-4 text-right"><?= number_format((float)$r['jumlah'],2) ?></td>
-                  <td class="py-3 px-4"><?= htmlspecialchars($r['nomor_do']) ?></td>
                   <td class="py-3 px-4"><?= htmlspecialchars($r['supir']) ?></td>
-                  <td class="py-3 px-4"><?= htmlspecialchars($r['keterangan'] ?? '') ?></td>
-                  <td class="py-3 px-4">
+                  <td class="py-3 px-4"><?= htmlspecialchars($r['nama_keterangan'] ?? '-') ?></td> <td class="py-3 px-4">
                     <div class="flex items-center gap-2">
-                      <!-- IKON + DISABLED untuk staf -->
                       <button class="btn-icon btn-edit" title="Edit" data-tab="angkutan"
                         data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'
                         <?= $isStaf ? 'disabled' : '' ?>>
@@ -357,7 +384,6 @@ include_once '../layouts/header.php';
                   <td class="py-3 px-4 text-right"><?= number_format((float)$r['jumlah'],2) ?></td>
                   <td class="py-3 px-4">
                     <div class="flex items-center gap-2">
-                      <!-- IKON + DISABLED untuk staf -->
                       <button class="btn-icon btn-edit" title="Edit" data-tab="menabur"
                         data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'
                         <?= $isStaf ? 'disabled' : '' ?>>
@@ -376,20 +402,15 @@ include_once '../layouts/header.php';
         </table>
       </div>
 
-      <!-- Summary -->
-      <!-- ===== TOTAL (strip minimal seperti screenshot) ===== -->
-<div class="w-full border rounded-md bg-[#F6FFF8] overflow-hidden">
-  <!-- garis hijau tipis di atas -->
+      <div class="w-full border rounded-md bg-[#F6FFF8] overflow-hidden">
   <div class="h-1 bg-green-600"></div>
 
-  <!-- konten total -->
   <div class="px-3 md:px-4 py-2">
     <div class="flex items-center gap-6 text-sm font-semibold text-gray-900">
       <span class="text-gray-700">TOTAL</span>
 
       <div class="flex-1 overflow-x-auto">
         <div class="flex items-center gap-10 min-w-max pr-6">
-          <!-- Jumlah (Kg) -->
           <div class="flex items-center gap-2">
             <span class="text-gray-500 font-normal">Jumlah (Kg)</span>
             <span class="font-semibold tabular-nums">
@@ -398,7 +419,6 @@ include_once '../layouts/header.php';
           </div>
 
           <?php if ($tab !== 'angkutan'): ?>
-          <!-- Luas (Ha) -->
           <div class="flex items-center gap-2">
             <span class="text-gray-500 font-normal">Luas (Ha)</span>
             <span class="font-semibold tabular-nums">
@@ -406,7 +426,6 @@ include_once '../layouts/header.php';
             </span>
           </div>
 
-          <!-- Invt. Pokok -->
           <div class="flex items-center gap-2">
             <span class="text-gray-500 font-normal">Invt. Pokok</span>
             <span class="font-semibold tabular-nums">
@@ -420,7 +439,6 @@ include_once '../layouts/header.php';
   </div>
 </div>
 
-      <!-- Pagination -->
       <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between p-3">
         <div class="text-sm text-gray-700">Halaman <span class="font-semibold"><?= $page ?></span> dari <span class="font-semibold"><?= $total_pages ?></span></div>
         <?php
@@ -432,8 +450,13 @@ include_once '../layouts/header.php';
               'tanggal'     => $_GET['tanggal']     ?? '',
               'periode'     => $_GET['periode']     ?? '',
               'unit_id'     => $_GET['unit_id']     ?? '',
-              'keterangan'  => $_GET['keterangan']  ?? '',
+              // 'keterangan'  => $_GET['keterangan']  ?? '', // LAMA
               'jenis_pupuk' => $_GET['jenis_pupuk'] ?? '',
+              // BARU
+              'rayon_id'       => $_GET['rayon_id']       ?? '',
+              'asal_gudang_id' => $_GET['asal_gudang_id'] ?? '',
+              'keterangan_id'  => $_GET['keterangan_id']  ?? '',
+              //---
               'per_page'    => $_GET['per_page']    ?? '',
               'page'        => $p,
             ];
@@ -449,7 +472,6 @@ include_once '../layouts/header.php';
   </div>
 </div>
 
-<!-- MODAL -->
 <div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
   <div class="bg-white p-6 md:p-8  shadow-xl w-full max-w-3xl">
     <div class="flex items-center justify-between mb-4">
@@ -463,22 +485,25 @@ include_once '../layouts/header.php';
       <input type="hidden" name="tab" id="form-tab" value="<?= htmlspecialchars($tab) ?>">
       <input type="hidden" name="id" id="form-id">
 
-      <!-- ANGKUTAN -->
       <div id="group-angkutan" class="<?= $tab==='angkutan' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><label class="block text-sm text-gray-600 mb-1">Kebun</label><select name="kebun_id" id="kebun_id_angkutan" class="i-select"><option value="">— Pilih Kebun —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select></div>
+          
+          <div><label class="block text-sm text-gray-600 mb-1">Rayon</label><select name="rayon_id" id="rayon_id" class="i-select"><option value="">— Pilih Rayon —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select></div>
+          
           <div><label class="block text-sm text-gray-600 mb-1">Unit Tujuan</label><select name="unit_tujuan_id" id="unit_tujuan_id" class="i-select"><option value="">— Pilih Unit —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select></div>
-          <div><label class="block text-sm text-gray-600 mb-1">Gudang Asal</label><input type="text" name="gudang_asal" id="gudang_asal" class="i-input"></div>
+          
+          <div><label class="block text-sm text-gray-600 mb-1">Gudang Asal</label><select name="asal_gudang_id" id="asal_gudang_id" class="i-select"><option value="">— Pilih Gudang Asal —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select></div>
           <div><label class="block text-sm text-gray-600 mb-1">Tanggal</label><input type="date" name="tanggal" id="tanggal_angkutan" class="i-input"></div>
           <div><label class="block text-sm text-gray-600 mb-1">Jenis Pupuk</label><select name="jenis_pupuk" id="jenis_pupuk_angkutan" class="i-select"><option value="">— Pilih Jenis Pupuk —</option></select></div>
           <div><label class="block text-sm text-gray-600 mb-1">Kilogram</label><input type="number" step="0.01" name="jumlah" id="jumlah_angkutan" class="i-input" min="0"></div>
-          <div><label class="block text-sm text-gray-600 mb-1">Nomor DO</label><input type="text" name="nomor_do" id="nomor_do" class="i-input"></div>
+          <!-- <div><label class="block text-sm text-gray-600 mb-1">Nomor DO</label><input type="text" name="nomor_do" id="nomor_do" class="i-input"></div> -->
           <div><label class="block text-sm text-gray-600 mb-1">Supir</label><input type="text" name="supir" id="supir" class="i-input"></div>
-          <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Keterangan</label><textarea name="keterangan" id="keterangan_angkutan" class="i-textarea" rows="2"></textarea></div>
-        </div>
+          
+          <div class="md:col-span-2"><label class="block text-sm text-gray-600 mb-1">Keterangan</label><select name="keterangan_id" id="keterangan_id" class="i-select"><option value="">— Pilih Keterangan (Opsional) —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select></div>
+          </div>
       </div>
 
-      <!-- MENABUR -->
       <div id="group-menabur" class="<?= $tab==='menabur' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div><label class="block text-sm text-gray-600 mb-1">Kebun</label><select name="kebun_id" id="kebun_id_menabur" class="i-select"><option value="">— Pilih Kebun —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select></div>
@@ -549,9 +574,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   $('#unit_id')?.addEventListener('change', refreshBlok);
 
-  const modal = $('#crud-modal'), form  = $('#crud-form'), title = $('#modal-title');
-  const open  = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
-  const close = ()=>{ modal.classList.add('hidden');  modal.classList.remove('flex'); };
+  const modal = $('#crud-modal'), form   = $('#crud-form'), title = $('#modal-title');
+  const open   = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
+  const close = ()=>{ modal.classList.add('hidden');   modal.classList.remove('flex'); };
 
   // Tambah (staf boleh)
   $('#btn-add').addEventListener('click', ()=>{
@@ -559,7 +584,7 @@ document.addEventListener('DOMContentLoaded', () => {
     title.textContent='Tambah Data';
     const tab = $('#form-tab').value = '<?= htmlspecialchars($tab) ?>';
     document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
-    document.getElementById('group-menabur').classList.toggle('hidden',  tab!=='menabur');
+    document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
     if (tab==='menabur') refreshBlok();
     open();
   });
@@ -577,18 +602,21 @@ document.addEventListener('DOMContentLoaded', () => {
       form.reset(); $('#form-action').value='update'; $('#form-id').value=row.id; $('#form-tab').value = tab;
       title.textContent='Edit Data';
       document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
-      document.getElementById('group-menabur').classList.toggle('hidden',  tab!=='menabur');
+      document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
 
       if (tab==='angkutan'){
         $('#kebun_id_angkutan').value = row.kebun_id ?? '';
+        $('#rayon_id').value          = row.rayon_id ?? ''; // BARU
         $('#unit_tujuan_id').value    = row.unit_tujuan_id ?? '';
-        $('#gudang_asal').value       = row.gudang_asal ?? '';
+        // $('#gudang_asal').value       = row.gudang_asal ?? ''; // LAMA
+        $('#asal_gudang_id').value    = row.asal_gudang_id ?? ''; // BARU
         $('#tanggal_angkutan').value  = row.tanggal ?? '';
         $('#jenis_pupuk_angkutan').value = row.jenis_pupuk ?? '';
         $('#jumlah_angkutan').value   = row.jumlah ?? '';
-        $('#nomor_do').value          = row.nomor_do ?? '';
+        // $('#nomor_do').value          = row.nomor_do ?? '';
         $('#supir').value             = row.supir ?? '';
-        $('#keterangan_angkutan').value = row.keterangan ?? '';
+        // $('#keterangan_angkutan').value = row.keterangan ?? ''; // LAMA
+        $('#keterangan_id').value     = row.keterangan_id ?? ''; // BARU
       } else {
         $('#kebun_id_menabur').value    = row.kebun_id ?? '';
         $('#unit_id').value             = row.unit_id ?? '';
@@ -627,21 +655,36 @@ document.addEventListener('DOMContentLoaded', () => {
   form.addEventListener('submit',(e)=>{
     e.preventDefault();
     const tab = $('#form-tab').value;
-    const fd  = new FormData(form);
+    const fd   = new FormData(form);
     fd.set('action', $('#form-action').value);
     fd.set('tab', tab);
 
     if (tab==='angkutan'){
-      const need = ['kebun_id_angkutan','unit_tujuan_id','gudang_asal','tanggal_angkutan','jenis_pupuk_angkutan'];
-      for (const id of need){
+      // Validasi BARU
+      const need = {
+        'kebun_id_angkutan': 'Kebun',
+        'rayon_id': 'Rayon',
+        'unit_tujuan_id': 'Unit Tujuan',
+        'asal_gudang_id': 'Gudang Asal',
+        'tanggal_angkutan': 'Tanggal',
+        'jenis_pupuk_angkutan': 'Jenis Pupuk'
+      };
+      for (const id in need){
         const el=document.getElementById(id);
-        if(!el || !el.value){ Swal.fire('Validasi',`${id.replaceAll('_',' ')} wajib diisi.`,'warning'); return; }
+        if(!el || !el.value){ Swal.fire('Validasi',`${need[id]} wajib diisi.`,'warning'); return; }
       }
+      
+      // Set FormData BARU
       fd.set('kebun_id', $('#kebun_id_angkutan').value);
+      fd.set('rayon_id', $('#rayon_id').value);
+      fd.set('unit_tujuan_id', $('#unit_tujuan_id').value);
+      fd.set('asal_gudang_id', $('#asal_gudang_id').value);
       fd.set('tanggal', $('#tanggal_angkutan').value);
       fd.set('jenis_pupuk', $('#jenis_pupuk_angkutan').value);
       fd.set('jumlah', $('#jumlah_angkutan').value || '');
-      fd.set('keterangan', $('#keterangan_angkutan').value || '');
+      fd.set('keterangan_id', $('#keterangan_id').value || ''); // kirim ID
+      // Data lama (gudang_asal, keterangan) tidak dikirim lagi
+      
     } else {
       const need = ['kebun_id_menabur','unit_id','blok','tanggal_menabur','jenis_pupuk_menabur'];
       for (const id of need){

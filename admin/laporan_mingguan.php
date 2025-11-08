@@ -1,675 +1,478 @@
 <?php
-// laporan_mingguan.php (server-safe, role-aware, clean-empty rendering)
 session_start();
-
-/* ====== PRODUCTION-SAFE ERROR HANDLING ====== */
-ini_set('display_errors','0');
-ini_set('log_errors','1');
-error_reporting(E_ALL);
-set_error_handler(function($sev,$msg,$file,$line){
-  throw new ErrorException($msg, 0, $sev, $file, $line);
-});
-set_exception_handler(function($e){
-  http_response_code(500);
-  error_log("[LM] ".$e->getMessage()." @ ".$e->getFile().":".$e->getLine());
-  echo "<h2 style='font-family:system-ui; padding:16px;'>Terjadi kesalahan pada server.</h2>";
-  exit;
-});
-
-/* ====== SESSION & CSRF ====== */
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
   header("Location: ../auth/login.php"); exit;
 }
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf   = ($userRole === 'staf');
-$userId   = (int)($_SESSION['user_id'] ?? 0);
-
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
 
-/* ====== DB CONNECT ====== */
+// Role
+$userRole = $_SESSION['user_role'] ?? 'staf';
+$isStaf   = ($userRole === 'staf');
+
 require_once '../config/database.php';
 $db   = new Database();
 $conn = $db->getConnection();
-if (!($conn instanceof PDO)) {
-  throw new Exception('DB connection failed: PDO tidak tersedia atau kredensial salah.');
-}
-$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-/* ====== UTIL ====== */
-function norm_bulan($b){
-  $map = [
-    'january'=>'Januari','february'=>'Februari','march'=>'Maret','april'=>'April',
-    'may'=>'Mei','june'=>'Juni','july'=>'Juli','august'=>'Agustus','september'=>'September',
-    'october'=>'Oktober','november'=>'November','december'=>'Desember',
-    'januari'=>'Januari','februari'=>'Februari','maret'=>'Maret','mei'=>'Mei',
-    'juni'=>'Juni','juli'=>'Juli','agustus'=>'Agustus','oktober'=>'Oktober','november'=>'November','desember'=>'Desember'
-  ];
-  $k = strtolower(trim((string)$b));
-  return $map[$k] ?? 'Januari';
-}
+$tahunNow   = (int)date('Y');
 
-$bulanListID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-$tahunNow    = (int)date('Y');
+// NOTE: List ini tetap diperlukan untuk Form Modal (Tambah/Edit)
+$kebunList = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")
+                  ->fetchAll(PDO::FETCH_ASSOC);
 
-/* ====== MASTER LISTS (dengan pengaman) ====== */
-try {
-  $kebunList = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) { error_log("[LM] md_kebun: ".$e->getMessage()); $kebunList = []; }
-
-try {
-  $unitList  = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) { error_log("[LM] units: ".$e->getMessage()); $unitList = []; }
-
-try {
-  // gunakan master mingguan
-  $jenisPekerjaanList = $conn->query("SELECT id, nama FROM md_jenis_pekerjaan_mingguan ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
-} catch (Throwable $e) { error_log("[LM] md_jenis_pekerjaan_mingguan: ".$e->getMessage()); $jenisPekerjaanList = []; }
-
-/* ====== FILTERS ====== */
-$f_kebun_id           = $_GET['kebun_id']           ?? ($kebunList[0]['id'] ?? '');
-$f_unit_id            = $_GET['unit_id']            ?? ($unitList[0]['id'] ?? '');
-$f_jenis_pekerjaan_id = $_GET['jenis_pekerjaan_id'] ?? ($jenisPekerjaanList[0]['id'] ?? '');
-$f_bulan_raw          = $_GET['bulan']              ?? date('F');
-$f_bulan              = norm_bulan($f_bulan_raw);
-$f_tahun              = (int)($_GET['tahun']        ?? $tahunNow);
-$f_minggu             = (int)($_GET['minggu']       ?? 1);
-if ($f_minggu < 1 || $f_minggu > 5) $f_minggu = 1;
-
-/* ====== LOAD META & DATA (minggu aktif) ====== */
-$data = [];
-$meta = [
-  'judul_laporan' => 'LAPORAN PEMELIHARAAN KEBUN',
-  'catatan'       => 'BATAS AKHIR PENGISIAN SETIAP HARI SABTU JAM 9 PAGI',
-  'judul_minggu_1'=> 'MINGGU I','judul_minggu_2'=> 'MINGGU II','judul_minggu_3'=> 'MINGGU III',
-  'judul_minggu_4'=> 'MINGGU IV','judul_minggu_5'=> 'MINGGU V'
-];
-
-if ($f_kebun_id !== '' && $f_unit_id !== '' && $f_jenis_pekerjaan_id !== '') {
-  try {
-    $stmtMeta = $conn->prepare("
-      SELECT judul_laporan, catatan,
-             COALESCE(judul_minggu_1,'MINGGU I') jm1, COALESCE(judul_minggu_2,'MINGGU II') jm2,
-             COALESCE(judul_minggu_3,'MINGGU III') jm3, COALESCE(judul_minggu_4,'MINGGU IV') jm4,
-             COALESCE(judul_minggu_5,'MINGGU V') jm5
-      FROM laporan_mingguan_meta
-      WHERE kebun_id=:k AND jenis_pekerjaan_id=:jp AND tahun=:t AND bulan=:b
-      LIMIT 1
-    ");
-    $stmtMeta->execute([':k'=>$f_kebun_id, ':jp'=>$f_jenis_pekerjaan_id, ':t'=>$f_tahun, ':b'=>$f_bulan]);
-    if ($m = $stmtMeta->fetch(PDO::FETCH_ASSOC)) {
-      $meta['judul_laporan'] = $m['judul_laporan'] ?: $meta['judul_laporan'];
-      $meta['catatan']       = $m['catatan']       ?: $meta['catatan'];
-      $meta['judul_minggu_1']= $m['jm1']; $meta['judul_minggu_2']= $m['jm2'];
-      $meta['judul_minggu_3']= $m['jm3']; $meta['judul_minggu_4']= $m['jm4']; $meta['judul_minggu_5']= $m['jm5'];
-    }
-  } catch (Throwable $e) { error_log("[LM] laporan_mingguan_meta: ".$e->getMessage()); }
-
-  try {
-    $stmtData = $conn->prepare("
-      SELECT blok, ts, pkwt, kng, tp FROM laporan_mingguan
-      WHERE kebun_id=:k AND jenis_pekerjaan_id=:jp AND tahun=:t AND bulan=:b AND minggu=:m AND afdeling=:afd
-      ORDER BY blok
-    ");
-    $stmtData->execute([':k'=>$f_kebun_id, ':jp'=>$f_jenis_pekerjaan_id, ':t'=>$f_tahun, ':b'=>$f_bulan, ':m'=>$f_minggu, ':afd'=>$f_unit_id]);
-    foreach ($stmtData->fetchAll(PDO::FETCH_ASSOC) as $row) {
-      // simpan persis apa adanya dari DB
-      $data[$row['blok']] = [
-        'blok' => (string)$row['blok'],
-        'ts'   => $row['ts'],
-        'pkwt' => $row['pkwt'],
-        'kng'  => $row['kng'],
-        'tp'   => $row['tp'],
-      ];
-    }
-  } catch (Throwable $e) { error_log("[LM] laporan_mingguan: ".$e->getMessage()); }
-}
-
-/* ====== DISPLAY NAMES ====== */
-$namaKebun = ''; foreach ($kebunList as $k) if ((string)$k['id']===(string)$f_kebun_id) { $namaKebun = strtoupper($k['nama_kebun']); break; }
-$namaUnit  = ''; foreach ($unitList as $u)  if ((string)$u['id']===(string)$f_unit_id)  { $namaUnit  = $u['nama_unit']; break; }
-$namaJenisPekerjaan = ''; foreach ($jenisPekerjaanList as $jp) if ((string)$jp['id']===(string)$f_jenis_pekerjaan_id) { $namaJenisPekerjaan = strtoupper($jp['nama']); break; }
-
-/* ====== HEADER ====== */
 $currentPage = 'laporan_mingguan';
 include_once '../layouts/header.php';
 ?>
+
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <style>
-.report-table input{border:1px solid transparent;background:transparent;width:100%;padding:4px;border-radius:4px}
-.report-table input.num-input{text-align:right}
-.report-table.edit-mode input{border-color:#cbd5e1;background:#f8fafc}
-.report-table input:focus{outline:2px solid #2563eb}
-.header-input{font-weight:bold;text-align:center;border:1px solid transparent;background:transparent;width:100%;padding:2px}
-.edit-mode .header-input{border-color:#cbd5e1;background:#f8fafc}
-.afd-cell{position:relative; min-width:160px; vertical-align:top;}
-.afd-input{font-weight:bold; text-align:center; width:100%; margin:6px 0;}
-@media print{
-  body{background:#fff}
-  .no-print, .no-print *{ display:none !important; }
-  .report-table{width:100%; border-collapse:collapse}
-  .report-table td, .report-table th{ border:1px solid #000 !important; padding:6px !important; }
-  .edit-mode .header-input,.report-table input{ border:0 !important; background:transparent !important; outline:none !important;}
-}
+  .table-sticky thead th { position: sticky; top: 0; z-index: 10; }
+  .btn-icon { background: transparent; border: none; padding: .25rem; }
+  button:disabled { opacity: .5; cursor: not-allowed !important; }
 </style>
 
 <div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-bold">Laporan Mingguan</h1>
-    <p class="text-gray-500">Input data pemeliharaan mingguan per Afdeling.</p>
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-800">📄 Laporan ARSIP</h1>
+      <p class="text-gray-500 mt-1">Kelola data laporan Arsip</p>
+    </div>
+
+    <div class="flex gap-3">
+      <?php if (!$isStaf): ?>
+      <button id="btn-add" class="bg-emerald-700 text-white px-4 py-2 rounded-lg hover:bg-emerald-800 flex items-center gap-2">
+        <i class="ti ti-plus"></i>
+        <span>Input Laporan</span>
+      </button>
+      <?php endif; ?>
+    </div>
   </div>
 
-  <form class="no-print bg-white/90 backdrop-blur p-5 md:p-6 rounded-2xl shadow-lg border border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-4 items-end"
-        method="GET" autocomplete="off">
-    <div class="col-span-1">
-      <label class="block text-sm font-semibold text-gray-700 mb-1">Kebun</label>
-      <select name="kebun_id"
-              class="block w-full rounded-xl border-gray-300 bg-white/60 shadow-sm text-sm
-                     focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition">
-        <?php foreach ($kebunList as $k): ?>
-          <option value="<?= $k['id'] ?>" <?= (string)$f_kebun_id===(string)$k['id']?'selected':'' ?>>
-            <?= htmlspecialchars($k['nama_kebun']) ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
+  <!-- =================== FILTER GABUNG (Tahun + Search) =================== -->
+  <div class="bg-white p-4 rounded-xl shadow-sm border">
+    <div class="flex items-center gap-2 text-gray-700 mb-3">
+      <span>🧭</span><span class="font-semibold">Filter & Pencarian</span>
     </div>
-
-    <div class="col-span-1">
-      <label class="block text-sm font-semibold text-gray-700 mb-1">Afdeling (AFD)</label>
-      <select name="unit_id"
-              class="block w-full rounded-xl border-gray-300 bg-white/60 shadow-sm text-sm
-                     focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition">
-        <?php foreach ($unitList as $u): ?>
-          <option value="<?= $u['id'] ?>" <?= (string)$f_unit_id===(string)$u['id']?'selected':'' ?>>
-            <?= htmlspecialchars($u['nama_unit']) ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- KIRI: Tahun -->
+      <div>
+        <label for="filter-year" class="block text-sm text-gray-600 mb-1">Tahun</label>
+        <select id="filter-year" class="w-full border rounded-lg px-3 py-2 text-gray-800">
+          <option value="all" selected>Semua Tahun</option>
+          <?php for ($y = $tahunNow + 3; $y >= $tahunNow - 5; $y--): ?>
+            <option value="<?= $y ?>"><?= $y ?></option>
+          <?php endfor; ?>
+        </select>
+      </div>
+      <!-- KANAN: Pencarian -->
+      <div>
+        <label for="filter-q" class="block text-sm text-gray-600 mb-1">Pencarian (uraian, link, kebun)</label>
+        <input id="filter-q" type="text" class="w-full border rounded-lg px-3 py-2 text-gray-800" placeholder="Ketik untuk mencari...">
+      </div>
     </div>
+  </div>
+  <!-- ================= END FILTER GABUNG ================= -->
 
-    <div class="col-span-1">
-      <label class="block text-sm font-semibold text-gray-700 mb-1">Jenis Pekerjaan (Mingguan)</label>
-      <select name="jenis_pekerjaan_id"
-              class="block w-full rounded-xl border-gray-300 bg-white/60 shadow-sm text-sm
-                     focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition">
-        <?php foreach ($jenisPekerjaanList as $j): ?>
-          <option value="<?= $j['id'] ?>" <?= (string)$f_jenis_pekerjaan_id===(string)$j['id']?'selected':'' ?>>
-            <?= htmlspecialchars($j['nama']) ?>
-          </option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-
-    <div class="col-span-1 flex md:justify-end">
-      <button type="submit"
-              class="w-full md:w-auto inline-flex items-center justify-center gap-2
-                     bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
-                     text-white font-semibold px-4 py-2.5 rounded-xl shadow
-                     transition focus:outline-none focus:ring-2 focus:ring-emerald-500">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M11 3a1 1 0 0 1 1 1v7h7a1 1 0 1 1 0 2h-7v7a1 1 0 1 1-2 0v-7H3a1 1 0 1 1 0-2h7V4a1 1 0 0 1 1-1z"/>
-        </svg>
-        Tampilkan
-      </button>
-    </div>
-  </form>
-
-  <div id="report-container" class="bg-white p-4 rounded-xl shadow-md">
-    <div class="text-center space-y-1 mb-4">
-      <input type="text" id="meta-judul_laporan" class="header-input text-lg" value="<?= htmlspecialchars($meta['judul_laporan']) ?> <?= $namaKebun ?>" readonly>
-      <input type="text" id="meta-jenis_pekerjaan" class="header-input text-lg" value="<?= htmlspecialchars($namaJenisPekerjaan) ?>" readonly>
-      <input type="text" id="meta-periode" class="header-input text-lg" value="BULAN <?= strtoupper($f_bulan) ?> <?= $f_tahun ?>" readonly>
-      <input type="text" id="meta-judul_minggu" class="header-input text-lg" value="<?= htmlspecialchars($meta['judul_minggu_'.$f_minggu]) ?>" readonly>
-      <div class="pt-2">
-        <input type="text" id="meta-catatan" class="w-full text-center text-red-600 font-semibold border-2 border-transparent bg-transparent" value="<?= htmlspecialchars($meta['catatan']) ?>" readonly>
+  <div class="bg-white rounded-xl shadow-sm border">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 p-3">
+      <div class="text-sm text-gray-700">
+        Menampilkan <span id="info-from" class="font-semibold">0</span>–<span id="info-to" class="font-semibold">0</span>
+        dari <span id="info-total" class="font-semibold">0</span> data
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-gray-700">Baris per halaman</label>
+        <select id="per-page" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-gray-800">
+          <option value="10" selected>10</option>
+          <option value="25">25</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+        </select>
       </div>
     </div>
 
-    <div class="flex flex-wrap justify-end gap-2 mb-2 no-print">
-      <?php if (!$isStaf): ?>
-        <button id="btn-edit"   class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"><i class="ti ti-pencil"></i><span>Edit</span></button>
-        <button id="btn-save"   class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 hidden items-center gap-2"><i class="ti ti-device-floppy"></i><span>Simpan Minggu Ini</span></button>
-        <button id="btn-cancel" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 hidden">Batal</button>
-        <button id="btn-clear-draft" type="button" class="bg-orange-100 text-orange-800 px-4 py-2 rounded-lg hover:bg-orange-200">Hapus Draft</button>
-        <button id="btn-reset" type="button" class="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg hover:bg-yellow-200">Reset Nilai</button>
-      <?php endif; ?>
-      
-      <button id="btn-print" type="button" class="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 flex items-center gap-2">
-          <i class="ti ti-printer"></i><span>Cetak</span>
-      </button>
+    <div class="overflow-x-auto">
+      <div class="max-h-[60vh] overflow-y-auto">
+        <table class="min-w-full text-sm table-sticky">
+          <thead class="bg-emerald-600 text-white">
+            <tr>
+              <th class="py-3 px-4 text-left">Tahun</th>
+              <th class="py-3 px-4 text-left">Kebun</th>
+              <th class="py-3 px-4 text-left">Uraian</th>
+              <th class="py-3 px-4 text-left">Link Dokumen</th>
+              <th class="py-3 px-4 text-left">File Upload</th>
+              <?php if (!$isStaf): ?>
+                <th class="py-3 px-4 text-center">Aksi</th>
+              <?php endif; ?>
+            </tr>
+          </thead>
+          <tbody id="tbody-data" class="text-gray-800">
+            <tr><td colspan="<?= $isStaf ? 5 : 6 ?>" class="text-center py-8 text-gray-500">Memuat data…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <div id="week-tabs" class="mb-4 flex border-b border-gray-200 no-print">
-      <?php for ($m = 1; $m <= 5; $m++): ?>
-        <button data-week="<?= $m ?>" class="week-tab -mb-px border-b-2 py-2 px-4 text-sm font-medium transition-colors duration-200 <?= $f_minggu == $m ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700' ?>">
-          <?= htmlspecialchars($meta['judul_minggu_'.$m]) ?>
-        </button>
-      <?php endfor; ?>
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 p-3">
+      <div class="text-sm text-gray-700">Halaman <span id="page-now" class="font-semibold">1</span> dari <span id="page-total" class="font-semibold">1</span></div>
+      <div class="inline-flex gap-2">
+        <button id="btn-prev" class="px-3 py-2 rounded-lg border hover:bg-gray-50 text-gray-800" disabled>Prev</button>
+        <button id="btn-next" class="px-3 py-2 rounded-lg border hover:bg-gray-50 text-gray-800" disabled>Next</button>
+      </div>
     </div>
-
-    <table class="report-table min-w-full border-collapse border border-gray-400">
-      <thead class="bg-gray-200">
-      <tr class="text-center font-bold">
-        <td class="border border-gray-400 p-2">AFD</td>
-        <td class="border border-gray-400 p-2">Blok</td>
-        <td class="border border-gray-400 p-2">TS</td>
-        <td class="border border-gray-400 p-2">PKWT</td>
-        <td class="border border-gray-400 p-2">KNG</td>
-        <td class="border border-gray-400 p-2">TP</td>
-        <td class="border border-gray-400 p-2">JUMLAH</td>
-      </tr>
-      </thead>
-      <tbody>
-      <?php $rowCount = 21; $dataKeys = array_keys($data); ?>
-      <tr>
-        <td class="border border-gray-400 p-2 text-center font-bold afd-cell" rowspan="<?= $rowCount + 1 ?>">
-          <input type="text" id="afd-nama" class="afd-input header-input" value="<?= htmlspecialchars($namaUnit) ?>" readonly>
-        </td>
-        <?php for($i=0;$i<$rowCount;$i++):
-          $blok_name = $dataKeys[$i] ?? '';
-          // >>> default kosong supaya UI tidak terlihat terisi jika DB tidak ada data
-          $rowData   = $data[$blok_name] ?? ['blok'=>'','ts'=>'','pkwt'=>'','kng'=>'','tp'=>''];
-        ?>
-        <?= $i>0 ? '<tr>' : '' ?>
-          <td class="border border-gray-400 p-1">
-            <input type="text" class="data-input blok-input" value="<?= htmlspecialchars((string)$rowData['blok']) ?>" placeholder="Nama Blok..." readonly>
-          </td>
-          <td class="border border-gray-400 p-1">
-            <input type="number" step="0.01" class="data-input num-input" data-field="ts"   value="<?= $rowData['ts'] === '' ? '' : (float)$rowData['ts'] ?>" readonly>
-          </td>
-          <td class="border border-gray-400 p-1">
-            <input type="number" step="0.01" class="data-input num-input" data-field="pkwt" value="<?= $rowData['pkwt'] === '' ? '' : (float)$rowData['pkwt'] ?>" readonly>
-          </td>
-          <td class="border border-gray-400 p-1">
-            <input type="number" step="0.01" class="data-input num-input" data-field="kng"  value="<?= $rowData['kng'] === '' ? '' : (float)$rowData['kng'] ?>" readonly>
-          </td>
-          <td class="border border-gray-400 p-1">
-            <input type="number" step="0.01" class="data-input num-input" data-field="tp"   value="<?= $rowData['tp'] === '' ? '' : (float)$rowData['tp'] ?>" readonly>
-          </td>
-          <td class="border border-gray-400 p-1 text-right font-semibold row-total">0.00</td>
-        <?= $i>0 ? '</tr>' : '' ?>
-        <?php endfor; ?>
-      </tr>
-      <tr class="bg-yellow-100 font-bold">
-        <td class="border border-gray-400 p-2 text-center">JUMLAH</td>
-        <td class="border border-gray-400 p-2 text-right afd-total" data-field="ts">0.00</td>
-        <td class="border border-gray-400 p-2 text-right afd-total" data-field="pkwt">0.00</td>
-        <td class="border border-gray-400 p-2 text-right afd-total" data-field="kng">0.00</td>
-        <td class="border border-gray-400 p-2 text-right afd-total" data-field="tp">0.00</td>
-        <td class="border border-gray-400 p-2 text-right afd-total-grand">0.00</td>
-      </tr>
-      </tbody>
-    </table>
   </div>
 </div>
 
+<?php if (!$isStaf): ?>
+<div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+  <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-2xl">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="modal-title" class="text-xl font-bold text-gray-900">Input Laporan Baru</h3>
+      <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800" aria-label="Tutup">&times;</button>
+    </div>
+    <form id="crud-form" novalidate enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
+      <input type="hidden" name="action" id="form-action">
+      <input type="hidden" name="id" id="form-id">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm mb-1">1. Tahun</label>
+          <select id="tahun" name="tahun" class="w-full border rounded px-3 py-2 text-gray-800">
+            <?php for ($y = $tahunNow - 1; $y <= $tahunNow + 3; $y++): ?>
+              <option value="<?= $y ?>" <?= $y === $tahunNow ? 'selected' : '' ?>><?= $y ?></option>
+            <?php endfor; ?>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Kebun</label>
+          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2 text-gray-800">
+            <option value="">-- Pilih Kebun --</option>
+            <?php foreach ($kebunList as $k): ?>
+              <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm mb-1">2. Uraian</label>
+        <input type="text" id="uraian" name="uraian" class="w-full border rounded px-3 py-2 text-gray-800" placeholder="Tuliskan uraian pekerjaan / ringkasan laporan" maxlength="255">
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm mb-1">3. Upload Dokumen (Opsional)</label>
+        <input type="file" id="upload_dokumen" name="upload_dokumen" class="w-full border rounded px-3 py-2 text-gray-800" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+        <div id="file-link-current" class="text-sm mt-2"></div>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm mb-1">4. Link Dokumen (Opsional)</label>
+        <input type="url" id="link_dokumen" name="link_dokumen" class="w-full border rounded px-3 py-2 text-gray-800" placeholder="https://docs.google.com/...">
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">Batal</button>
+        <button type="submit" class="px-5 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
+
 <?php include_once '../layouts/footer.php'; ?>
-
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-  const container = document.getElementById('report-container');
-  const table = container.querySelector('.report-table');
-  const btnEdit = document.getElementById('btn-edit');
-  const btnSave = document.getElementById('btn-save');
-  const btnCancel = document.getElementById('btn-cancel');
-  const btnClear = document.getElementById('btn-clear-draft');
-  const btnReset = document.getElementById('btn-reset');
-  // [SINKRONISASI] Dinonaktifkan agar sesuai HTML
-  // const btnExcel = document.getElementById('btn-excel');
-  // const btnExcelAll = document.getElementById('btn-excel-all');
-  const btnPrint = document.getElementById('btn-print');
-  const afdInput = document.getElementById('afd-nama');
+  document.addEventListener('DOMContentLoaded', () => {
+    const IS_STAF    = <?= $isStaf ? 'true' : 'false'; ?>;
+    const COLSPAN    = IS_STAF ? 5 : 6;
+    const CSRF_TOKEN = '<?= htmlspecialchars($CSRF) ?>';
 
-  // ==== Role flag dari PHP ====
-  const IS_STAF = <?= $isStaf ? 'true' : 'false' ?>;
+    const $ = s => document.querySelector(s);
+    const tbody = $('#tbody-data');
+    const q = $('#filter-q');
+    const yearEl = $('#filter-year');
 
-  // ===== STATE =====
-  let activeWeek = <?= (int)$f_minggu ?>;
-  // [MODIFIED] Hapus reportCache, ganti initialMeta menjadi let
-  let currentMeta = <?= json_encode($meta) ?>;
-  // [MODIFIED] Data awal dari PHP (sudah tidak dimasukkan cache)
-  const initialDetails = <?= json_encode(array_values($data)) ?>;
+    const perPageEl = $('#per-page');
+    const btnPrev = $('#btn-prev');
+    const btnNext = $('#btn-next');
+    const infoFrom = $('#info-from');
+    const infoTo   = $('#info-to');
+    const infoTotal= $('#info-total');
+    const pageNow  = $('#page-now');
+    const pageTotal= $('#page-total');
 
-  // ===== UTIL =====
-  const getDraftKey = (week) => [
-    'lm', 'u<?= (int)$userId ?>', 'p' + location.pathname.replace(/\\/g, '/'),
-    'k<?= (string)$f_kebun_id ?>', 'a<?= (string)$f_unit_id ?>', 'jp<?= (string)$f_jenis_pekerjaan_id ?>',
-    'y<?= (int)$f_tahun ?>', 'b<?= (string)$f_bulan ?>', 'm' + week
-  ].join(':');
+    let ALL_ROWS = [];
+    let CURRENT_PAGE = 1;
+    let PER_PAGE = parseInt(perPageEl.value, 10) || 10;
 
-  const setReadOnlyForAll = (isReadonly) => {
-    container.querySelectorAll('.data-input, .header-input, #meta-catatan, #afd-nama')
-      .forEach(el => el.readOnly = isReadonly);
-  };
+    const API_URL = 'laporan_mingguan_crud.php';
 
-  const toggleEditMode = (on) => {
-    // jika staf, tidak boleh edit
-    if (IS_STAF) return;
-    container.classList.toggle('edit-mode', on);
-    setReadOnlyForAll(!on);
-    if (btnEdit)   btnEdit.classList.toggle('hidden', on);
-    if (btnSave)   btnSave.classList.toggle('hidden', !on);
-    if (btnCancel) btnCancel.classList.toggle('hidden', !on);
-  };
+    /* =============================================================
+     * ROOT DETECTOR (stabil)
+     * ============================================================= */
+    const APP_ROOT = (() => {
+      const path = location.pathname;
+      const adminIndex = path.indexOf('/admin/');
+      if (adminIndex > -1) return path.substring(0, adminIndex);
+      if (adminIndex === 0) return "";
+      const segs = path.split('/').filter(Boolean);
+      segs.pop();
+      if (segs.length > 0 && segs[segs.length - 1] === 'admin') segs.pop();
+      return segs.length > 0 ? '/' + segs.join('/') : '';
+    })();
 
-  const asNum = v => {
-    const n = parseFloat(v);
-    return isNaN(n) ? 0 : n;
-  };
-
-  const calcTotals = () => {
-    // total per-baris
-    table.querySelectorAll('tbody tr:not(.bg-yellow-100)').forEach(row => {
-      const nums = row.querySelectorAll('.num-input');
-      if (!nums.length) return;
-      let sum = 0;
-      nums.forEach(i => sum += asNum(i.value));
-      const cell = row.querySelector('.row-total');
-      if (cell) cell.textContent = sum.toFixed(2);
-    });
-    // total kolom
-    const fields = ['ts','pkwt','kng','tp']; let grand = 0;
-    fields.forEach(f => {
-      let tot = 0;
-      table.querySelectorAll(`.num-input[data-field='${f}']`).forEach(i => tot += asNum(i.value));
-      const cell = table.querySelector(`.afd-total[data-field='${f}']`);
-      if (cell) cell.textContent = tot.toFixed(2);
-      grand += tot;
-    });
-    const gcell = table.querySelector('.afd-total-grand'); if (gcell) gcell.textContent = grand.toFixed(2);
-  };
-
-  // ===== RENDER =====
-  /** [MODIFIED] Fungsi ini hanya merender baris-baris tabel */
-  const renderTable = (details) => {
-    // kosongkan semua dulu
-    table.querySelectorAll('.blok-input').forEach(el => el.value = '');
-    table.querySelectorAll('.num-input').forEach(el => el.value = '');
-
-    const rows = Array.from(table.querySelectorAll('tbody tr:not(.bg-yellow-100)'));
-    const detailsData = Array.isArray(details) ? details : [];
-    
-    for (let i = 0; i < rows.length; i++) {
-      const d = detailsData[i] || { blok:'', ts:'', pkwt:'', kng:'', tp:'' };
-      const row = rows[i];
-      row.querySelector('.blok-input').value = d.blok || '';
-      row.querySelectorAll('.num-input').forEach(inp => {
-        const v = d[inp.dataset.field];
-        inp.value = (v === null || v === undefined || v === '') ? '' : v;
-      });
+    function encodeLastSegment(path) {
+      try {
+        const parts = path.split('/');
+        const file = parts.pop();
+        parts.push(encodeURIComponent(file));
+        return parts.join('/');
+      } catch { return path; }
     }
-    calcTotals();
-  };
 
-  /** [BARU] Fungsi untuk update semua UI (meta, tab, dan tabel) */
-  const updateDisplay = (data) => {
-    const details = data.details || [];
-    // Jika data.meta ada (dari fetch), update meta global
-    if (data.meta) {
-        currentMeta = data.meta;
+    function normalizeUploadPath(p) {
+      if (!p) return '';
+      if (/^https?:\/\//i.test(p)) return p;
+      p = p.replace(/^(\.\.\/)+/, '').replace(/^\.?\//, '').replace(/^admin\//, '');
+      if (!p.startsWith('uploads/')) p = 'uploads/' + p;
+      p = encodeLastSegment(p);
+      const root = APP_ROOT ? APP_ROOT : '';
+      return root + '/' + p.replace(/^\/+/, '');
     }
-    
-    // 1. Update Headers
-    // Nama Kebun, Jenis Pek, Periode tidak berubah (dari filter PHP)
-    document.getElementById('meta-judul_laporan').value = (currentMeta.judul_laporan || '') + ' <?= $namaKebun ?>';
-    document.getElementById('meta-catatan').value = currentMeta.catatan || '';
-    document.getElementById('meta-judul_minggu').value = currentMeta[`judul_minggu_${activeWeek}`] || `MINGGU ${activeWeek}`;
 
-    // 2. Update Label Tab Mingguan
-    for (let m = 1; m <= 5; m++) {
-        const tab = document.querySelector(`.week-tab[data-week="${m}"]`);
-        if (tab) {
-            tab.textContent = currentMeta[`judul_minggu_${m}`] || `MINGGU ${m}`;
-        }
-    }
-    
-    // 3. Render baris-baris tabel
-    renderTable(details);
-  };
+    function buildRowHTML(row) {
+      const externalLink = row.link_dokumen
+        ? `<a href="${row.link_dokumen}" target="_blank" rel="noopener noreferrer" class="underline text-blue-600 hover:text-blue-800 flex items-center gap-1"><i class="ti ti-link"></i> Link</a>`
+        : 'N/A';
 
+      const fileHref = row.upload_dokumen ? normalizeUploadPath(String(row.upload_dokumen)) : '';
+      const fileLink = row.upload_dokumen
+        ? `<a href="${fileHref}" download target="_blank" class="underline text-emerald-600 hover:text-emerald-800 flex items-center gap-1"><i class="ti ti-download"></i> Download</a>`
+        : 'N/A';
 
-  const collectDraft = () => {
-    const draft = { ts: Date.now(), details: [] };
-    const rows = Array.from(table.querySelectorAll('tbody tr:not(.bg-yellow-100)'));
-    rows.forEach(row => {
-      const blok = row.querySelector('.blok-input')?.value.trim() || '';
-      const obj = { blok, ts:'', pkwt:'', kng:'', tp:'' };
-      row.querySelectorAll('.num-input').forEach(i => {
-        obj[i.dataset.field] = (i.value === '' ? '' : asNum(i.value));
-      });
-      const hasVal = blok || obj.ts !== '' || obj.pkwt !== '' || obj.kng !== '' || obj.tp !== '';
-      if (hasVal) draft.details.push(obj);
-    });
-    return draft;
-  };
-
-  let saveTimeout = null;
-  const scheduleSave = () => {
-    if (IS_STAF) return;
-    if (!container.classList.contains('edit-mode')) return;
-    clearTimeout(saveTimeout);
-    saveTimeout = setTimeout(() => {
-      try { localStorage.setItem(getDraftKey(activeWeek), JSON.stringify(collectDraft())); } catch (e) {}
-    }, 300);
-  };
-
-  // ===== FETCH & WEEK SWITCH =====
-  const fetchReportData = async (week) => {
-    const params = new URLSearchParams({
-      action: 'fetch_report', minggu: week,
-      kebun_id: '<?= $f_kebun_id ?>', unit_id: '<?= $f_unit_id ?>',
-      jenis_pekerjaan_id: '<?= $f_jenis_pekerjaan_id ?>',
-      tahun: '<?= $f_tahun ?>', bulan: '<?= $f_bulan ?>',
-    });
-    try {
-      const res = await fetch(`laporan_mingguan_crud.php?${params.toString()}`);
-      if (!res.ok) throw new Error('Network response was not ok.');
-      const json = await res.json();
-      if (json.success) {
-        return json.data; // [MODIFIED] akan berisi { details: [...], meta: {...} }
+      let actionCell = '';
+      if (!IS_STAF) {
+        const payload = encodeURIComponent(JSON.stringify(row || {}));
+        actionCell = `
+          <td class="py-3 px-4">
+            <div class="flex items-center justify-center gap-2">
+              <button class="btn-edit btn-icon text-blue-600 hover:text-blue-800" data-json="${payload}" title="Edit">
+                <i class="ti ti-pencil text-lg"></i>
+              </button>
+              <button class="btn-delete btn-icon text-red-600 hover:text-red-800" data-id="${row.id}" title="Hapus">
+                <i class="ti ti-trash text-lg"></i>
+              </button>
+            </div>
+          </td>`;
       }
-      throw new Error(json.message || 'Gagal mengambil data dari server.');
-    } catch (error) {
-      console.error("Fetch error:", error);
-      Swal.fire('Error', `Tidak dapat mengambil data untuk Minggu ${week}.`, 'error');
-      return null;
-    }
-  };
 
-  /** [MODIFIED] Alur ganti minggu dirombak total */
-  const switchWeek = async (targetWeek) => {
-    if (targetWeek === activeWeek) return;
-
-    // Jika sedang edit, simpan draft minggu *sebelumnya*
-    if (container.classList.contains('edit-mode')) {
-        scheduleSave();
+      return `
+        <tr class="border-b hover:bg-gray-50">
+          <td class="py-3 px-4">${row.tahun || '-'}</td>
+          <td class="py-3 px-4">${row.kebun_nama || '-'}</td>
+          <td class="py-3 px-4">${row.uraian ? String(row.uraian).replaceAll('<','&lt;').replaceAll('>','&gt;') : '-'}</td>
+          <td class="py-3 px-4">${externalLink}</td>
+          <td class="py-3 px-4">${fileLink}</td>
+          ${actionCell}
+        </tr>`;
     }
 
-    activeWeek = targetWeek;
+    function renderPage() {
+      const total = ALL_ROWS.length;
+      const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+      if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
+      if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
 
-    // Update visual tab
-    document.querySelectorAll('.week-tab').forEach(tab => {
-      const isSelected = tab.dataset.week == activeWeek;
-      tab.classList.toggle('border-blue-600', isSelected);
-      tab.classList.toggle('text-blue-600', isSelected);
-      tab.classList.toggle('border-transparent', !isSelected);
-      tab.classList.toggle('text-gray-500', !isSelected);
+      const startIdx = (CURRENT_PAGE - 1) * PER_PAGE;
+      const endIdx   = Math.min(startIdx + PER_PAGE, total);
+
+      infoTotal.textContent = total.toLocaleString();
+      infoFrom.textContent  = total ? (startIdx + 1).toLocaleString() : 0;
+      infoTo.textContent    = endIdx.toLocaleString();
+      pageNow.textContent   = String(CURRENT_PAGE);
+      pageTotal.textContent = String(totalPages);
+
+      btnPrev.disabled = CURRENT_PAGE <= 1;
+      btnNext.disabled = CURRENT_PAGE >= totalPages;
+
+      const emptyRow = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+      if (!total) { tbody.innerHTML = emptyRow; return; }
+
+      const rows = ALL_ROWS.slice(startIdx, endIdx).map(buildRowHTML).join('');
+      tbody.innerHTML = rows || emptyRow;
+    }
+
+    // Fallback filter sisi-klien untuk tahun & pencarian
+    function applyClientFilter(rows, tahunVal, qVal) {
+      let filtered = Array.isArray(rows) ? rows : [];
+      if (tahunVal && tahunVal !== 'all') {
+        filtered = filtered.filter(it => String(it.tahun || '') === String(tahunVal));
+      }
+      if (qVal) {
+        const s = qVal.trim().toLowerCase();
+        if (s.length) {
+          filtered = filtered.filter(it => {
+            const uraian = (it.uraian || '').toString().toLowerCase();
+            const kebun  = (it.kebun_nama || '').toString().toLowerCase();
+            const link   = (it.link_dokumen || '').toString().toLowerCase();
+            const tahun  = (it.tahun || '').toString().toLowerCase();
+            return uraian.includes(s) || kebun.includes(s) || link.includes(s) || tahun.includes(s);
+          });
+        }
+      }
+      return filtered;
+    }
+
+    function refreshList() {
+      const fd = new FormData();
+      fd.append('csrf_token', CSRF_TOKEN);
+      fd.append('action', 'list');
+
+      const tahunVal = yearEl ? yearEl.value : 'all';
+      const qVal = q ? q.value : '';
+
+      if (qVal) fd.append('q', qVal);
+      if (tahunVal && tahunVal !== 'all') fd.append('tahun', tahunVal);
+
+      tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
+
+      fetch(API_URL, { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(j => {
+          if (!j.success) {
+            tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-red-500">${j.message || 'Gagal memuat data'}</td></tr>`;
+            ALL_ROWS = []; renderPage(); return;
+          }
+
+          // Data dasar dari server
+          let rows = Array.isArray(j.data) ? j.data : [];
+
+          // Fallback filter tahun + q di klien (jaga-jaga server belum support)
+          rows = applyClientFilter(rows, tahunVal, qVal);
+
+          ALL_ROWS = rows;
+          CURRENT_PAGE = 1;
+          renderPage();
+        })
+        .catch(err => {
+          tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-red-500">${(err && err.message) || 'Network error'}</td></tr>`;
+          ALL_ROWS = []; renderPage();
+        });
+    }
+
+    // Debounce untuk input pencarian supaya ringan
+    function debounce(fn, ms) {
+      let t; 
+      return (...args) => { clearTimeout(t); t = setTimeout(() => fn.apply(this, args), ms); };
+    }
+    const refreshListDebounced = debounce(refreshList, 250);
+
+    // Init
+    refreshList();
+    if (q) q.addEventListener('input', refreshListDebounced);
+    if (yearEl) yearEl.addEventListener('change', refreshList);
+
+    perPageEl.addEventListener('change', () => {
+      PER_PAGE = parseInt(perPageEl.value, 10) || 10;
+      CURRENT_PAGE = 1;
+      renderPage();
     });
 
-    // Cek draft (HANYA UNTUK ADMIN)
-    let draft = null;
+    btnPrev.addEventListener('click', () => { if (CURRENT_PAGE > 1) { CURRENT_PAGE -= 1; renderPage(); } });
+    btnNext.addEventListener('click', () => { CURRENT_PAGE += 1; renderPage(); });
+
     if (!IS_STAF) {
-      draft = JSON.parse(localStorage.getItem(getDraftKey(activeWeek)) || 'null');
-    }
+      const modal = $('#crud-modal');
+      const btnClose = $('#btn-close');
+      const btnCancel = $('#btn-cancel');
+      const form = $('#crud-form');
+      const formAction = $('#form-action');
+      const formId = $('#form-id');
+      const title = $('#modal-title');
+      const fileLinkCurrent = $('#file-link-current');
 
-    if (draft && draft.details) {
-      // ADMIN: Muat data draft dari localStorage
-      // Gunakan meta yang ada saat ini (currentMeta)
-      updateDisplay({ details: draft.details, meta: currentMeta });
-      // updateDisplay tidak tahu minggu aktif, jadi set judul minggu aktif manual
-      document.getElementById('meta-judul_minggu').value = currentMeta[`judul_minggu_${activeWeek}`] || `MINGGU ${activeWeek}`;
-    } else {
-      // STAF: Selalu fetch data baru
-      // ADMIN: Fetch data baru jika tidak ada draft
-      const serverData = await fetchReportData(activeWeek);
-      if (serverData) {
-        // serverData berisi {details, meta}, updateDisplay akan mengurus sisanya
-        updateDisplay(serverData);
-      } else {
-        // Gagal fetch, bersihkan tabel tapi pertahankan meta
-        updateDisplay({ details: [], meta: currentMeta });
-      }
-    }
-  };
+      const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); };
+      const close= () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
 
-  // ===== EVENTS =====
-  if (btnEdit)   btnEdit.addEventListener('click', () => toggleEditMode(true));
-  // Tombol Batal me-reload halaman. Ini adalah cara teraman untuk membatalkan
-  // dan membuang semua state (termasuk draft yang mungkin baru diketik).
-  if (btnCancel) btnCancel.addEventListener('click', () => location.reload());
+      $('#btn-add').addEventListener('click', () => {
+        form.reset();
+        formId.value = '';
+        formAction.value = 'store';
+        title.textContent = 'Input Laporan Baru';
+        fileLinkCurrent.innerHTML = '';
+        $('#tahun').value = '<?= $tahunNow ?>';
+        open();
+      });
+      btnClose.addEventListener('click', close);
+      btnCancel.addEventListener('click', close);
 
-  document.getElementById('week-tabs').addEventListener('click', (e) => {
-    const tab = e.target.closest('.week-tab');
-    if (tab && tab.dataset.week) switchWeek(parseInt(tab.dataset.week, 10));
-  });
+      document.body.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
 
-  container.addEventListener('input', e => {
-    if (e.target.classList.contains('data-input') || e.target.classList.contains('header-input')) {
-      calcTotals();
-      scheduleSave();
-    }
-  });
-
-  if (btnClear) btnClear.addEventListener('click', () => {
-    if (IS_STAF) return;
-    localStorage.removeItem(getDraftKey(activeWeek));
-    Swal.fire({icon:'info', title:'Draft Minggu Ini Dihapus', text: 'Muat ulang halaman untuk melihat data tersimpan.', timer:2000, showConfirmButton:false});
-    // delete reportCache[activeWeek]; // [MODIFIED] cache dihapus
-    location.reload(); // [MODIFIED] Reload agar data server terbaru dimuat
-  });
-
-  if (btnReset) btnReset.addEventListener('click', () => {
-    if (IS_STAF || !container.classList.contains('edit-mode')) {
-      return Swal.fire('Info','Aktifkan mode Edit dulu (khusus admin).','info');
-    }
-    // [MODIFIED] Gunakan updateDisplay untuk membersihkan
-    updateDisplay({ details: [], meta: currentMeta }); 
-    scheduleSave();
-  });
-
-  const saveToServer = async () => {
-    if (IS_STAF) return;
-    
-    // Ambil judul laporan tanpa nama kebun
-    const judulLaporanFull = document.getElementById('meta-judul_laporan').value;
-    const namaKebunSuffix = ' <?= $namaKebun ?>';
-    let judulLaporanBase = judulLaporanFull;
-    if (judulLaporanFull.endsWith(namaKebunSuffix)) {
-        judulLaporanBase = judulLaporanFull.substring(0, judulLaporanFull.length - namaKebunSuffix.length);
-    }
-    
-    const payload = {
-      meta: {
-        kebun_id: '<?= $f_kebun_id ?>', unit_id: '<?= $f_unit_id ?>',
-        unit_nama: afdInput?.value || '', jenis_pekerjaan_id: '<?= $f_jenis_pekerjaan_id ?>',
-        tahun: '<?= $f_tahun ?>', bulan: '<?= $f_bulan ?>',
-        judul_laporan: judulLaporanBase.trim(),
-        [`judul_minggu_${activeWeek}`]: document.getElementById('meta-judul_minggu').value,
-        catatan: document.getElementById('meta-catatan').value
-      },
-      details: collectDraft().details
-    };
-
-    const fd = new FormData();
-    fd.append('csrf_token','<?= $CSRF ?>');
-    fd.append('action','save_report');
-    fd.append('minggu', activeWeek);
-    fd.append('payload', JSON.stringify(payload));
-
-    try {
-      const res = await fetch('laporan_mingguan_crud.php', { method:'POST', body: fd });
-      const out = await res.json();
-      if (out.success) {
-        Swal.fire({icon:'success', title:'Tersimpan', timer:1200, showConfirmButton:false});
-        localStorage.removeItem(getDraftKey(activeWeek)); // [MODIFIED] Hapus draft
-        toggleEditMode(false);
-        
-        // [MODIFIED] Setelah simpan, fetch ulang data yang bersih dari server
-        const serverData = await fetchReportData(activeWeek);
-        if (serverData) {
-            updateDisplay(serverData);
+        if (btn.classList.contains('btn-edit')) {
+          const row = JSON.parse(decodeURIComponent(btn.dataset.json));
+          form.reset();
+          formAction.value = 'update';
+          formId.value = row.id;
+          title.textContent = 'Edit Laporan';
+          $('#tahun').value = row.tahun || '';
+          $('#kebun_id').value = row.kebun_id || '';
+          $('#uraian').value = row.uraian || '';
+          $('#link_dokumen').value = row.link_dokumen || '';
+          if (row.upload_dokumen) {
+            const href = normalizeUploadPath(String(row.upload_dokumen));
+            fileLinkCurrent.innerHTML =
+              `<a href="${href}" download target="_blank" class="underline text-emerald-600">
+                  Lihat / unduh file saat ini
+                </a> <span class="text-gray-500">Kosongkan input file jika tidak ingin mengubah.</span>`;
+          } else {
+            fileLinkCurrent.innerHTML = '';
+          }
+          open();
         }
-        
-      } else {
-        Swal.fire('Gagal', out.message || 'Terjadi kesalahan.', 'error');
-      }
-    } catch(e) {
-      Swal.fire('Error','Tidak dapat terhubung ke server.','error');
+
+        if (btn.classList.contains('btn-delete')) {
+          const id = btn.dataset.id;
+          Swal.fire({
+            title: 'Hapus data ini?', text: 'Tindakan ini tidak dapat dibatalkan.', icon: 'warning',
+            showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal'
+          }).then((res) => {
+            if (!res.isConfirmed) return;
+            const fd = new FormData();
+            fd.append('csrf_token', CSRF_TOKEN);
+            fd.append('action', 'delete');
+            fd.append('id', id);
+            fetch(API_URL, { method: 'POST', body: fd })
+              .then(r => r.json()).then(j => {
+                if (j.success) { Swal.fire('Terhapus!', 'Data berhasil dihapus.', 'success'); refreshList(); }
+                else Swal.fire('Gagal', j.message || 'Tidak bisa menghapus', 'error');
+              }).catch(err => Swal.fire('Error', (err && err.message) || 'Network error', 'error'));
+          });
+        }
+      });
+
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const req = ['tahun', 'kebun_id', 'uraian'];
+        for (const id of req) {
+          const el = document.querySelector('#' + id);
+          if (!el || !el.value) {
+            const label = el ? el.previousElementSibling.textContent : id;
+            Swal.fire('Validasi', `Field "${label}" wajib diisi.`, 'warning');
+            return;
+          }
+        }
+        const fd = new FormData(form);
+        fetch(API_URL, { method: 'POST', body: fd })
+          .then(r => r.json()).then(j => {
+            if (j.success) { close(); Swal.fire({ icon: 'success', title: 'Berhasil', text: j.message, timer: 1400, showConfirmButton: false }); refreshList(); }
+            else { Swal.fire('Gagal', j.message || 'Terjadi kesalahan.', 'error'); }
+          })
+          .catch(err => Swal.fire('Error', (err && err.message) || 'Network error', 'error'));
+      });
     }
-  };
-  if (btnSave) btnSave.addEventListener('click', saveToServer);
 
-  // ===== PRINT =====
-  if (btnPrint) {
-    btnPrint.addEventListener('click', () => {
-      window.print();
-    });
-  }
-
-  // ===== EXCEL EXPORT =====
-  const baseParams = () => new URLSearchParams({
-    kebun_id: '<?= $f_kebun_id ?>',
-    unit_id: '<?= $f_unit_id ?>',
-    jenis_pekerjaan_id: '<?= $f_jenis_pekerjaan_id ?>',
-    tahun: '<?= $f_tahun ?>',
-    bulan: '<?= $f_bulan ?>'
   });
-
-  // [SINKRONISASI] Event listener dinonaktifkan agar sesuai HTML
-  /* btnExcel?.addEventListener('click', () => {
-    const p = baseParams();
-    p.set('mode','single');
-    p.set('minggu', String(activeWeek));
-    window.location.href = 'laporan_mingguan_export_excel.php?' + p.toString();
-  });
-
-  btnExcelAll?.addEventListener('click', () => {
-    const p = baseParams();
-    p.set('mode','all');
-    window.location.href = 'laporan_mingguan_export_excel.php?' + p.toString();
-  });
-  */
-
-  // ===== INIT =====
-  // Staf: paksa readonly, sembunyikan tombol edit
-  if (IS_STAF) {
-    setReadOnlyForAll(true);
-    container.classList.remove('edit-mode');
-    if (btnEdit)   btnEdit.style.display = 'none';
-    if (btnSave)   btnSave.style.display = 'none';
-    if (btnCancel) btnCancel.style.display = 'none';
-    if (btnClear)  btnClear.style.display = 'none';
-    if (btnReset)  btnReset.style.display  = 'none';
-  }
-
-  // [MODIFIED] Logika Inisialisasi
-  // Cek draft awal (hanya admin)
-  if (!IS_STAF) {
-    const initialDraft = JSON.parse(localStorage.getItem(getDraftKey(activeWeek)) || 'null');
-    if (initialDraft && initialDraft.details) {
-      // Admin: Muat draft saat load halaman
-      updateDisplay({ details: initialDraft.details, meta: currentMeta });
-      document.getElementById('meta-judul_minggu').value = currentMeta[`judul_minggu_${activeWeek}`] || `MINGGU ${activeWeek}`;
-      // Jangan return, biarkan kode berlanjut (meskipun tidak akan melakukan apa-apa lagi)
-    } else {
-      // Admin tanpa draft: Render data awal dari server
-      updateDisplay({ details: initialDetails, meta: currentMeta });
-    }
-  } else {
-     // Staf: Render data awal dari server
-     updateDisplay({ details: initialDetails, meta: currentMeta });
-  }
-
-});
 </script>

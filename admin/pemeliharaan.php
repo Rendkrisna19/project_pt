@@ -295,8 +295,8 @@ include_once '../layouts/header.php';
               <th class="py-3 px-4 text-left w-[14rem]">KEBUN</th>
               <th class="py-3 px-4 text-left w-[12rem]"><?= $isBibit?'STOOD / JENIS':'RAYON' ?></th>
               <th class="py-3 px-4 text-left w-[12rem]">UNIT/DEVISI</th>
-              <th class="py-3 px-4 text-left w-[14rem]">JENIS PEKERJAAN</th>
-              <th class="py-3 px-4 text-left w-[10rem]">TENAGA</th>
+<th class="py-3 px-4 text-left w-full">JENIS PEKERJAAN</th>              
+<th class="py-3 px-4 text-left w-[10rem]">TENAGA</th>
               <th class="py-3 px-4 text-right w-[8rem]">RENCANA</th>
               <th class="py-3 px-4 text-left  w-[7rem]">SATUAN R.</th>
               <th class="py-3 px-4 text-right w-[8rem]">REALISASI</th>

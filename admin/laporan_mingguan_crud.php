@@ -1,294 +1,178 @@
 <?php
-/**
- * laporan_mingguan_crud.php (rev: fix stale data & meta sync)
- * - CSRF + role check
- * - Delete-orphan (stale) rows
- * - Normalisasi bulan & blok
- * - [MODIFIED] fetch_report kini mengirimkan 'meta' dan 'details'
- */
 session_start();
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
-/* ====== PERMISSIONS & SECURITY ====== */
-if (empty($_SESSION['loggedin'])) {
-  http_response_code(403);
-  echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit;
-}
-
-$action = $_POST['action'] ?? ($_GET['action'] ?? '');
-if ($action === 'save_report' && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-  http_response_code(405);
-  echo json_encode(['success'=>false,'message'=>'Metode tidak diizinkan.']); exit;
-}
-if ($action === 'save_report') {
-  if (empty($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'])) {
-    http_response_code(403);
-    echo json_encode(['success'=>false,'message'=>'Token CSRF tidak valid.']); exit;
-  }
-  $userRole = $_SESSION['user_role'] ?? 'staf';
-  if ($userRole === 'staf') {
-    http_response_code(403);
-    echo json_encode(['success'=>false,'message'=>'Anda tidak memiliki izin untuk menyimpan data.']); exit;
-  }
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
+  echo json_encode(['success' => false, 'message' => 'Akses ditolak. Silakan login.']);
+  exit;
 }
 
 require_once '../config/database.php';
+$db   = new Database();
+$conn = $db->getConnection();
 
-/* ====== UTIL ====== */
-function norm_bulan($b){
-  $map = [
-    'january'=>'Januari','february'=>'Februari','march'=>'Maret','april'=>'April',
-    'may'=>'Mei','june'=>'Juni','july'=>'Juli','august'=>'Agustus','september'=>'September',
-    'october'=>'Oktober','november'=>'November','december'=>'Desember',
-    'januari'=>'Januari','februari'=>'Februari','maret'=>'Maret','mei'=>'Mei',
-    'juni'=>'Juni','juli'=>'Juli','agustus'=>'Agustus','oktober'=>'Oktober','november'=>'November','desember'=>'Desember'
-  ];
-  $k = strtolower(trim((string)$b));
-  return $map[$k] ?? 'Januari';
+$userRole = $_SESSION['user_role'] ?? 'staf';
+$isStaf   = ($userRole === 'staf');
+$action   = $_POST['action'] ?? '';
+
+if (empty($_POST['csrf_token']) || !hash_equals($_SESSION['csrf_token'] ?? '', $_POST['csrf_token'])) {
+  echo json_encode(['success' => false, 'message' => 'Token keamanan tidak valid.']);
+  exit;
 }
 
-/** Normalisasi kode/nama blok: trim spasi, rapikan spasi tengah, uppercase */
-function norm_blok($s){
-  $s = preg_replace('/\s+/',' ', (string)$s);
-  $s = trim($s);
-  return strtoupper($s);
+// Path absolut di server untuk menyimpan file
+$uploadDirAbs = realpath(__DIR__ . '/../uploads') ?: (__DIR__ . '/../uploads');
+$subDir       = 'laporan_mingguan';
+$targetDir    = $uploadDirAbs . '/' . $subDir . '/';
+if (!is_dir($targetDir) && !mkdir($targetDir, 0777, true)) {
+  echo json_encode(['success' => false, 'message' => 'Gagal membuat direktori upload.']);
+  exit;
 }
 
-/** pastikan master ada */
-function ensure_exists(PDO $conn, string $sql, array $params, string $err){
-  $st = $conn->prepare($sql); $st->execute($params);
-  if (!$st->fetchColumn()) { echo json_encode(['success'=>false,'message'=>$err]); exit; }
+// Helper: validasi file
+function allowExt($name) {
+  $allowed = ['pdf','jpg','jpeg','png','doc','docx','xls','xlsx'];
+  $ext = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+  return in_array($ext, $allowed, true);
 }
 
-/* ====== ROUTING ====== */
-if ($action === 'save_report') {
-  $payload = json_decode($_POST['payload'] ?? '{}', true);
-  $minggu  = (int)($_POST['minggu'] ?? 0);
-  if (!$payload || empty($payload['meta']) || $minggu < 1 || $minggu > 5) {
-    echo json_encode(['success'=>false,'message'=>'Data payload tidak lengkap.']); exit;
-  }
+try {
+  switch ($action) {
+    case 'list': {
+      $params = [];
+      // HILANGKAN join ke md_jenis_pekerjaan; gunakan kolom teks l.uraian
+      $sql = "SELECT l.*, k.nama_kebun AS kebun_nama
+              FROM laporan_mingguan l
+              LEFT JOIN md_kebun k ON l.kebun_id = k.id
+              WHERE 1=1";
 
-  $meta    = $payload['meta'];
-  $details = $payload['details'] ?? [];
-
-  foreach (['kebun_id','unit_id','jenis_pekerjaan_id','tahun','bulan'] as $key) {
-    if (!isset($meta[$key]) || $meta[$key]==='') {
-      echo json_encode(['success'=>false,'message'=>"Meta '$key' kosong."]); exit;
-    }
-  }
-  $meta['bulan'] = norm_bulan($meta['bulan']);
-  $meta['kebun_id'] = (string)$meta['kebun_id'];
-  $meta['unit_id']  = (string)$meta['unit_id'];
-  $meta['jenis_pekerjaan_id'] = (string)$meta['jenis_pekerjaan_id'];
-  $meta['tahun'] = (int)$meta['tahun'];
-
-  $db   = new Database();
-  $conn = $db->getConnection();
-  $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-  // ====== VALIDASI MASTER (PAKAI TABEL MINGGUAN) ======
-  ensure_exists($conn, "SELECT 1 FROM md_kebun WHERE id = :id LIMIT 1", [':id'=>$meta['kebun_id']], 'Kebun tidak ditemukan.');
-  ensure_exists($conn, "SELECT 1 FROM units WHERE id = :id LIMIT 1",     [':id'=>$meta['unit_id']],  'Unit/AFD tidak ditemukan.');
-  ensure_exists(
-    $conn,
-    "SELECT 1 FROM md_jenis_pekerjaan_mingguan WHERE id = :id LIMIT 1",
-    [':id'=>$meta['jenis_pekerjaan_id']],
-    'Jenis Pekerjaan (Mingguan) tidak ditemukan.'
-  );
-
-  $conn->beginTransaction();
-  try {
-    // optional: update nama unit dari header jika diedit
-    if (isset($meta['unit_nama']) && trim($meta['unit_nama']) !== '') {
-      $conn->prepare("UPDATE units SET nama_unit=:n WHERE id=:id")->execute([
-        ':n'=>trim($meta['unit_nama']), ':id'=>$meta['unit_id']
-      ]);
-    }
-
-    // upsert meta
-    $judulMingguKey = "judul_minggu_{$minggu}";
-    $sqlMeta = "
-      INSERT INTO laporan_mingguan_meta (kebun_id, jenis_pekerjaan_id, tahun, bulan, judul_laporan, {$judulMingguKey}, catatan)
-      VALUES (:k, :jp, :t, :b, :jl, :jm, :c)
-      ON DUPLICATE KEY UPDATE
-        judul_laporan = VALUES(judul_laporan),
-        {$judulMingguKey} = VALUES({$judulMingguKey}),
-        catatan = VALUES(catatan)";
-    $conn->prepare($sqlMeta)->execute([
-      ':k' =>$meta['kebun_id'],
-      ':jp'=>$meta['jenis_pekerjaan_id'],
-      ':t' => $meta['tahun'],
-      ':b' =>$meta['bulan'],
-      ':jl'=> trim($meta['judul_laporan'] ?? ''),
-      ':jm'=> trim($meta[$judulMingguKey] ?? ''),
-      ':c' => trim($meta['catatan'] ?? '')
-    ]);
-
-    // --- Ambil blok yang sudah ada di DB untuk kombinasi filter ini
-    $stExist = $conn->prepare("
-      SELECT blok FROM laporan_mingguan
-      WHERE kebun_id=:k AND jenis_pekerjaan_id=:jp AND tahun=:t AND bulan=:b AND minggu=:m AND afdeling=:afd
-    ");
-    $stExist->execute([
-      ':k'=>$meta['kebun_id'], ':jp'=>$meta['jenis_pekerjaan_id'],
-      ':t'=>$meta['tahun'], ':b'=>$meta['bulan'], ':m'=>$minggu,
-      ':afd'=>$meta['unit_id']
-    ]);
-    $existingBlocks = array_map(function($r){ return (string)$r['blok']; }, $stExist->fetchAll(PDO::FETCH_ASSOC));
-    $existingSet = array_fill_keys($existingBlocks, true);
-
-    // --- Normalisasi payload + daftar blok baru
-    $incomingRows  = [];
-    $incomingSet   = [];
-    foreach ($details as $r) {
-      $blok = norm_blok($r['blok'] ?? '');
-      if ($blok === '') {
-        // baris tanpa blok → tidak disimpan (dan kalau sebelumnya ada, akan terhapus via delete-orphan)
-        continue;
+      if (!empty($_POST['q'])) {
+        $search = '%' . $_POST['q'] . '%';
+        $sql   .= " AND (k.nama_kebun LIKE ? OR l.uraian LIKE ? OR l.link_dokumen LIKE ?)";
+        array_push($params, $search, $search, $search);
       }
-      $ts   = isset($r['ts'])   && $r['ts']   !== '' ? (float)$r['ts']   : 0.0;
-      $pkwt = isset($r['pkwt']) && $r['pkwt'] !== '' ? (float)$r['pkwt'] : 0.0;
-      $kng  = isset($r['kng'])  && $r['kng']  !== '' ? (float)$r['kng']  : 0.0;
-      $tp   = isset($r['tp'])   && $r['tp']   !== '' ? (float)$r['tp']   : 0.0;
 
-      $incomingRows[] = [
-        'blok'=>$blok, 'ts'=>$ts, 'pkwt'=>$pkwt, 'kng'=>$kng, 'tp'=>$tp
-      ];
-      $incomingSet[$blok] = true;
-    }
+      $sql .= " ORDER BY l.tahun DESC, l.id DESC";
+      $stmt = $conn->prepare($sql);
+      $stmt->execute($params);
+      $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // --- HAPUS ORPHAN/STale rows: semua blok yang ada di DB tapi tidak ada di payload
-    if (!empty($existingSet)) {
-      $toDelete = array_diff(array_keys($existingSet), array_keys($incomingSet));
-      if (!empty($toDelete)) {
-        // delete per batch
-        $placeholders = rtrim(str_repeat('?,', count($toDelete)), ',');
-        $sqlDel = "
-          DELETE FROM laporan_mingguan
-          WHERE kebun_id=? AND jenis_pekerjaan_id=? AND tahun=? AND bulan=? AND minggu=? AND afdeling=? AND blok IN ($placeholders)
-        ";
-        $params = [
-          $meta['kebun_id'], $meta['jenis_pekerjaan_id'], $meta['tahun'],
-          $meta['bulan'], $minggu, $meta['unit_id']
-        ];
-        $params = array_merge($params, array_values($toDelete));
-        $conn->prepare($sqlDel)->execute($params);
-      }
-    }
-
-    // --- UPSERT untuk semua row incoming
-    if (!empty($incomingRows)) {
-      $sqlUpsert = "
-        INSERT INTO laporan_mingguan (kebun_id, jenis_pekerjaan_id, tahun, bulan, minggu, afdeling, blok, ts, pkwt, kng, tp)
-        VALUES (:k, :jp, :t, :b, :m, :afd, :blok, :ts, :pkwt, :kng, :tp)
-        ON DUPLICATE KEY UPDATE
-          ts = VALUES(ts), pkwt = VALUES(pkwt), kng = VALUES(kng), tp = VALUES(tp)";
-      $st = $conn->prepare($sqlUpsert);
-      foreach ($incomingRows as $row) {
-        $st->execute([
-          ':k'   => $meta['kebun_id'],
-          ':jp'  => $meta['jenis_pekerjaan_id'],
-          ':t'   => $meta['tahun'],
-          ':b'   => $meta['bulan'],
-          ':m'   => $minggu,
-          ':afd' => $meta['unit_id'],
-          ':blok'=> $row['blok'],
-          ':ts'  => $row['ts'],
-          ':pkwt'=> $row['pkwt'],
-          ':kng' => $row['kng'],
-          ':tp'  => $row['tp'],
-        ]);
-      }
-    }
-
-    $conn->commit();
-    echo json_encode(['success'=>true,'message'=>'Laporan berhasil disimpan!']);
-  } catch (Exception $e) {
-    $conn->rollBack();
-    error_log("[LM_CRUD_SAVE] ".$e->getMessage());
-    echo json_encode(['success'=>false,'message'=>'Database error: Terjadi kesalahan saat menyimpan.']);
-  }
-
-} else if ($action === 'fetch_report') {
-  try {
-    $minggu   = (int)($_GET['minggu'] ?? 0);
-    $kebun_id = $_GET['kebun_id'] ?? '';
-    $unit_id  = $_GET['unit_id'] ?? '';
-    $jp_id    = $_GET['jenis_pekerjaan_id'] ?? '';
-    $tahun    = (int)($_GET['tahun'] ?? 0);
-    $bulan    = norm_bulan($_GET['bulan'] ?? '');
-
-    if ($minggu < 1 || $minggu > 5 || empty($kebun_id) || empty($unit_id) || empty($jp_id) || empty($tahun)) {
-      echo json_encode(['success' => false, 'message' => 'Filter tidak lengkap untuk fetch.']); exit;
-    }
-
-    $db = new Database();
-    $conn = $db->getConnection();
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-    // VALIDASI MASTER
-    ensure_exists($conn, "SELECT 1 FROM md_kebun WHERE id = :id LIMIT 1", [':id'=>$kebun_id], 'Kebun tidak ditemukan.');
-    ensure_exists($conn, "SELECT 1 FROM units    WHERE id = :id LIMIT 1",  [':id'=>$unit_id],  'Unit/AFD tidak ditemukan.');
-    ensure_exists(
-      $conn,
-      "SELECT 1 FROM md_jenis_pekerjaan_mingguan WHERE id = :id LIMIT 1",
-      [':id'=>$jp_id],
-      'Jenis Pekerjaan (Mingguan) tidak ditemukan.'
-    );
-
-    // [MODIFIED] Ambil data Meta terbaru
-    $meta = [
-        'judul_laporan' => 'LAPORAN PEMELIHARAAN KEBUN',
-        'catatan'       => 'BATAS AKHIR PENGISIAN SETIAP HARI SABTU JAM 9 PAGI',
-        'judul_minggu_1'=> 'MINGGU I','judul_minggu_2'=> 'MINGGU II','judul_minggu_3'=> 'MINGGU III',
-        'judul_minggu_4'=> 'MINGGU IV','judul_minggu_5'=> 'MINGGU V'
-    ];
-    try {
-        $stmtMeta = $conn->prepare("
-          SELECT judul_laporan, catatan,
-                 COALESCE(judul_minggu_1,'MINGGU I') jm1, COALESCE(judul_minggu_2,'MINGGU II') jm2,
-                 COALESCE(judul_minggu_3,'MINGGU III') jm3, COALESCE(judul_minggu_4,'MINGGU IV') jm4,
-                 COALESCE(judul_minggu_5,'MINGGU V') jm5
-          FROM laporan_mingguan_meta
-          WHERE kebun_id=:k AND jenis_pekerjaan_id=:jp AND tahun=:t AND bulan=:b
-          LIMIT 1
-        ");
-        $stmtMeta->execute([':k'=>$kebun_id, ':jp'=>$jp_id, ':t'=>$tahun, ':b'=>$bulan]);
-        if ($m = $stmtMeta->fetch(PDO::FETCH_ASSOC)) {
-          $meta['judul_laporan'] = $m['judul_laporan'] ?: $meta['judul_laporan'];
-          $meta['catatan']       = $m['catatan']       ?: $meta['catatan'];
-          $meta['judul_minggu_1']= $m['jm1']; $meta['judul_minggu_2']= $m['jm2'];
-          $meta['judul_minggu_3']= $m['jm3']; $meta['judul_minggu_4']= $m['jm4']; $meta['judul_minggu_5']= $m['jm5'];
+      // Normalisasi path file ke URL publik
+      foreach ($data as &$row) {
+        if (!empty($row['upload_dokumen'])) {
+          $row['upload_dokumen'] = 'uploads/' . ltrim(str_replace('\\', '/', $row['upload_dokumen']), '/');
         }
-    } catch (Throwable $e) { /* biarkan meta default jika query gagal */ }
+      }
+      echo json_encode(['success' => true, 'data' => $data]);
+      break;
+    }
 
+    case 'store': {
+      if ($isStaf) throw new Exception('Akses ditolak.');
+      // Wajib: tahun, kebun_id, uraian
+      if (empty($_POST['tahun']) || empty($_POST['kebun_id']) || empty($_POST['uraian'])) {
+        throw new Exception('Tahun, Kebun, dan Uraian wajib diisi.');
+      }
 
-    // Data detail (urut blok)
-    $stmtData = $conn->prepare("
-      SELECT blok, ts, pkwt, kng, tp
-      FROM laporan_mingguan 
-      WHERE kebun_id=:k AND jenis_pekerjaan_id=:jp AND tahun=:t AND bulan=:b AND minggu=:m AND afdeling=:afd
-      ORDER BY blok
-    ");
-    $stmtData->execute([
-      ':k' => $kebun_id,
-      ':jp'=> $jp_id,
-      ':t' => $tahun,
-      ':b' => $bulan,
-      ':m' => $minggu,
-      ':afd'=> $unit_id
-    ]);
-    $details = $stmtData->fetchAll(PDO::FETCH_ASSOC);
+      $filePathWeb = null;
+      if (!empty($_FILES['upload_dokumen']) && $_FILES['upload_dokumen']['error'] === UPLOAD_ERR_OK) {
+        $name = $_FILES['upload_dokumen']['name'];
+        if (!allowExt($name)) throw new Exception('Ekstensi file tidak diizinkan.');
+        $safe = preg_replace("/[^a-zA-Z0-9.\-_]/", "_", basename($name));
+        $fileName = time() . '_' . $safe;
+        $filePathAbs = $targetDir . $fileName;
+        if (!move_uploaded_file($_FILES['upload_dokumen']['tmp_name'], $filePathAbs)) {
+          throw new Exception('Gagal mengupload file.');
+        }
+        $filePathWeb = $subDir . '/' . $fileName; // simpan relatif
+      }
 
-    // [MODIFIED] Kirim 'meta' dan 'details'
-    echo json_encode(['success' => true, 'data' => ['details' => $details, 'meta' => $meta]]);
+      $stmt = $conn->prepare("INSERT INTO laporan_mingguan
+        (tahun, kebun_id, uraian, link_dokumen, upload_dokumen, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, NOW(), NOW())");
+      $stmt->execute([
+        $_POST['tahun'],
+        (int)$_POST['kebun_id'],
+        trim((string)$_POST['uraian']),
+        $_POST['link_dokumen'] ?: null,
+        $filePathWeb
+      ]);
 
-  } catch (Exception $e) {
-    http_response_code(500);
-    error_log("[LM_CRUD_FETCH] ".$e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Server error: Gagal mengambil data laporan.']);
+      echo json_encode(['success' => true, 'message' => 'Laporan berhasil disimpan.']);
+      break;
+    }
+
+    case 'update': {
+      if ($isStaf) throw new Exception('Akses ditolak.');
+      $id = (int)($_POST['id'] ?? 0);
+      if (!$id) throw new Exception('ID data tidak valid.');
+      if (empty($_POST['tahun']) || empty($_POST['kebun_id']) || empty($_POST['uraian'])) {
+        throw new Exception('Tahun, Kebun, dan Uraian wajib diisi.');
+      }
+
+      $stmt = $conn->prepare('SELECT upload_dokumen FROM laporan_mingguan WHERE id = ?');
+      $stmt->execute([$id]);
+      $oldFileRel = $stmt->fetchColumn();
+      $filePathWeb = $oldFileRel;
+
+      if (!empty($_FILES['upload_dokumen']) && $_FILES['upload_dokumen']['error'] === UPLOAD_ERR_OK) {
+        $name = $_FILES['upload_dokumen']['name'];
+        if (!allowExt($name)) throw new Exception('Ekstensi file tidak diizinkan.');
+
+        if ($oldFileRel) {
+          $oldFileAbs = $uploadDirAbs . '/' . $oldFileRel;
+          if (file_exists($oldFileAbs)) @unlink($oldFileAbs);
+        }
+
+        $safe = preg_replace("/[^a-zA-Z0-9.\-_]/", "_", basename($name));
+        $fileName = time() . '_' . $safe;
+        $filePathAbs = $targetDir . $fileName;
+        if (!move_uploaded_file($_FILES['upload_dokumen']['tmp_name'], $filePathAbs)) {
+          throw new Exception('Gagal mengupload file baru.');
+        }
+        $filePathWeb = $subDir . '/' . $fileName;
+      }
+
+      $stmt = $conn->prepare("UPDATE laporan_mingguan
+                              SET tahun=?, kebun_id=?, uraian=?, link_dokumen=?, upload_dokumen=?, updated_at=NOW()
+                              WHERE id=?");
+      $stmt->execute([
+        $_POST['tahun'],
+        (int)$_POST['kebun_id'],
+        trim((string)$_POST['uraian']),
+        $_POST['link_dokumen'] ?: null,
+        $filePathWeb,
+        $id
+      ]);
+
+      echo json_encode(['success' => true, 'message' => 'Laporan berhasil diperbarui.']);
+      break;
+    }
+
+    case 'delete': {
+      if ($isStaf) throw new Exception('Akses ditolak.');
+      $id = (int)($_POST['id'] ?? 0);
+      if (!$id) throw new Exception('ID data tidak valid.');
+
+      $stmt = $conn->prepare('SELECT upload_dokumen FROM laporan_mingguan WHERE id = ?');
+      $stmt->execute([$id]);
+      $fileRel = $stmt->fetchColumn();
+
+      if ($fileRel) {
+        $fileAbs = $uploadDirAbs . '/' . $fileRel;
+        if (file_exists($fileAbs)) @unlink($fileAbs);
+      }
+
+      $stmt = $conn->prepare('DELETE FROM laporan_mingguan WHERE id = ?');
+      $stmt->execute([$id]);
+
+      echo json_encode(['success' => true, 'message' => 'Data berhasil dihapus.']);
+      break;
+    }
+
+    default:
+      throw new Exception('Aksi tidak dikenal.');
   }
-
-} else {
-  echo json_encode(['success'=>false,'message'=>'Aksi tidak valid.']);
+} catch (Exception $e) {
+  echo json_encode(['success' => false, 'message' => $e->getMessage()]);
 }

@@ -133,7 +133,7 @@ include_once '../layouts/header.php';
 </div>
 
 <?php if (!$isStaf): ?>
-<!-- Modal CRUD (hanya non-staf) — TIDAK DIUBAH LOGIKANYA -->
+<!-- Modal CRUD (hanya non-staf) — logika tetap, frekuensi readonly & auto-calc -->
 <div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
   <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-4xl">
     <div class="flex justify-between items-center mb-4">
@@ -195,7 +195,12 @@ include_once '../layouts/header.php';
         <div><label class="block text-sm mb-1">Jumlah Tandan</label><input type="number" id="jumlah_tandan" name="jumlah_tandan" class="w-full border rounded px-3 py-2"></div>
         <div><label class="block text-sm mb-1">Jumlah HK</label>    <input type="number" step="0.001" id="jumlah_hk"   name="jumlah_hk"   class="w-full border rounded px-3 py-2"></div>
         <div><label class="block text-sm mb-1">Panen (Ha)</label>   <input type="number" step="0.001" id="panen_ha"    name="panen_ha"    class="w-full border rounded px-3 py-2"></div>
-        <div><label class="block text-sm mb-1">Frekuensi</label>    <input type="number" step="0.001" id="frekuensi"   name="frekuensi"   class="w-full border rounded px-3 py-2"></div>
+        <div>
+          <label class="block text-sm mb-1">Frekuensi</label>
+          <input type="number" step="0.001" id="frekuensi" name="frekuensi"
+                 class="w-full border rounded px-3 py-2 bg-gray-100"
+                 readonly title="Otomatis dihitung: panen_ha / luas_ha">
+        </div>
       </div>
       <div class="flex justify-end gap-3 mt-6">
         <button type="button" id="btn-cancel" class="px-4 py-2 rounded border text-gray-800 hover:bg-gray-50">Batal</button>
@@ -257,8 +262,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   let allData=[];
 
+  /* ========= FREKUENSI AUTO-CALC (panen_ha / luas_ha) ========= */
+  function calcFreq(){
+    const luas  = parseFloat(document.getElementById('luas_ha')?.value || '0');
+    const panen = parseFloat(document.getElementById('panen_ha')?.value || '0');
+    const out   = document.getElementById('frekuensi');
+    const freq  = (luas > 0) ? (panen / luas) : 0;
+    if (out) out.value = Number(freq).toFixed(3);
+  }
+
+  /* ======== Row Builder: frekuensi dihitung dari data (panen/luas) ======== */
   function buildRowHTML(r){
     const periode=`${r.bulan||'-'} ${r.tahun||'-'}`;
+    const freqCalc = (toNum(r.luas_ha) > 0) ? (toNum(r.panen_ha) / toNum(r.luas_ha)) : 0;
+
     let actionCell='';
     if (!IS_STAF){
       actionCell = `
@@ -287,7 +304,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         <td class="py-2 px-3 text-right">${fmt(r.jumlah_tandan)}</td>
         <td class="py-2 px-3 text-right">${fmt(r.jumlah_hk)}</td>
         <td class="py-2 px-3 text-right">${fmt(r.panen_ha)}</td>
-        <td class="py-2 px-3 text-right">${fmt(r.frekuensi)}</td>
+        <td class="py-2 px-3 text-right">${fmt(freqCalc)}</td>
         ${actionCell}
       </tr>`;
   }
@@ -301,7 +318,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     tot.hk.textContent        = fmt(sum(data,'jumlah_hk'));
     tot.panenha.textContent   = fmt(sum(data,'panen_ha'));
     const luas = sum(data,'luas_ha'), pan = sum(data,'panen_ha');
-    tot.freq.textContent      = fmt(luas ? (pan/luas) : 0);
+    tot.freq.textContent      = fmt(luas ? (pan/luas) : 0); // sudah benar
   }
 
   /* ======== Group & Render: ala LM-77 (Group by Unit) ======== */
@@ -403,7 +420,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   refresh();
   [fKebun,fUnit,fBulan,fTahun,fTT].forEach(el=>el.addEventListener('change', refresh));
 
-  /* ===== CRUD: non-staf (tetap) ===== */
+  /* ===== CRUD: non-staf (tetap, tambah auto-calc hook) ===== */
   if (!IS_STAF){
     const modal=$('#crud-modal'), form=$('#crud-form'), titleEl=$('#modal-title');
     const open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
@@ -424,6 +441,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         document.getElementById('form-id').value='';
         titleEl.textContent='Input LM-76';
         setDefaultsFromFilter();
+        calcFreq(); // frekuensi awal = 0
         open();
       });
     }
@@ -432,6 +450,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const btnCancel = document.getElementById('btn-cancel');
     if (btnClose)  btnClose.addEventListener('click', close);
     if (btnCancel) btnCancel.addEventListener('click', close);
+
+    // Dengarkan input luas & panen untuk hitung frekuensi real-time
+    ['luas_ha','panen_ha'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.addEventListener('input', calcFreq);
+    });
 
     document.body.addEventListener('click',(e)=>{
       const t=e.target.closest('button'); if(!t) return;
@@ -444,6 +468,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         titleEl.textContent='Edit LM-76';
         ['kebun_id','unit_id','bulan','tahun','tt','luas_ha','jumlah_pohon','anggaran_kg','realisasi_kg','jumlah_tandan','jumlah_hk','panen_ha','frekuensi']
           .forEach(id=>{ const el=document.getElementById(id); if(el && row[id]!==undefined) el.value=row[id]??''; });
+        calcFreq(); // pastikan frekuensi sesuai data panen/luas terkini
         open();
       }
 
@@ -476,6 +501,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const el=document.getElementById(id);
         if(!el || !el.value){ Swal.fire('Validasi',`Field ${id.replace('_',' ')} wajib diisi.`,'warning'); return; }
       }
+      calcFreq(); // pastikan frekuensi terbaru terset sebelum kirim
       const fd=new FormData(form);
       fetch('lm76_crud.php',{method:'POST',body:fd})
         .then(r=>r.json())

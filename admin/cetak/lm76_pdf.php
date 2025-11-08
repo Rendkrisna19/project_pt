@@ -16,11 +16,7 @@ function sum(array $arr, string $key): float {
     }, 0.0);
 }
 
-function cleanTT($tt) {
-    if ($tt === null || $tt === '') return null;
-    $num = preg_replace('/[^\d]/', '', (string)$tt);
-    return is_numeric($num) ? (int)$num : null;
-}
+// Fungsi cleanTT dihapus karena tidak lagi dipakai
 
 $bulanOrder = [
     'Januari' => 1, 'Februari' => 2, 'Maret' => 3, 'April' => 4, 'Mei' => 5, 'Juni' => 6,
@@ -36,7 +32,7 @@ try {
     $unit_id  = $_GET['unit_id']  ?? '';
     $bulan    = $_GET['bulan']    ?? '';
     $tahun    = $_GET['tahun']    ?? '';
-    $tt       = $_GET['tt']       ?? '';
+    $tt       = $_GET['tt']       ?? ''; // Filter TT tetap ada, tapi tidak dipakai di grouping/kolom
 
     $where = " WHERE 1=1 ";
     $bind = [];
@@ -54,32 +50,36 @@ try {
     $st->execute($bind);
     $allData = $st->fetchAll(PDO::FETCH_ASSOC);
 
-    // ===== GROUPING DATA =====
-    $ttBuckets = [];
+    // ===== GROUPING LOGIC (Sesuai UI lm76.php) =====
+    // 1. Group berdasarkan Unit
+    $unitBuckets = [];
     foreach ($allData as $r) {
-        $ttKey = cleanTT($r['tt']) ?? '__NA__';
         $unitKey = trim($r['nama_unit'] ?? '') ?: '(Unit Tidak Diketahui)';
-        $ttBuckets[$ttKey][$unitKey][] = $r;
+        $unitBuckets[$unitKey][] = $r;
     }
     
-    ksort($ttBuckets, SORT_NUMERIC);
+    // 2. Urutkan nama Unit A-Z
+    ksort($unitBuckets, SORT_STRING);
     
-    foreach ($ttBuckets as $ttKey => &$units) {
-        ksort($units, SORT_STRING);
-        foreach ($units as $unitKey => &$rows) {
-            usort($rows, function($a, $b) use ($bulanOrder) {
-                $tahunCompare = ($a['tahun'] ?? 0) <=> ($b['tahun'] ?? 0);
-                if ($tahunCompare !== 0) return $tahunCompare;
-                $bulanA = $bulanOrder[$a['bulan']] ?? 0;
-                $bulanB = $bulanOrder[$b['bulan']] ?? 0;
-                return $bulanA <=> $bulanB;
-            });
-        }
+    // 3. Urutkan data DI DALAM setiap unit (HANYA Tahun -> Bulan)
+    foreach ($unitBuckets as $unitKey => &$rows) { // pakai reference '&'
+        usort($rows, function($a, $b) use ($bulanOrder) {
+            // Urut 1: Tahun
+            $tahunCompare = ($a['tahun'] ?? 0) <=> ($b['tahun'] ?? 0);
+            if ($tahunCompare !== 0) return $tahunCompare;
+            
+            // Urut 2: Bulan
+            $bulanA = $bulanOrder[$a['bulan']] ?? 0;
+            $bulanB = $bulanOrder[$b['bulan']] ?? 0;
+            return $bulanA <=> $bulanB; // Sorting T.Tanam dihapus
+        });
     }
+    unset($rows); // Hapus reference
 
     // ===== MEMBUAT HTML UNTUK PDF =====
     $fmt = fn($n) => number_format((float)$n, 2, ',', '.');
     $fmt0 = fn($n) => number_format((float)$n, 0, ',', '.');
+    $calcFreq = fn($r) => ((float)($r['luas_ha'] ?? 0) > 0 ? (float)($r['panen_ha'] ?? 0) / (float)($r['luas_ha'] ?? 0) : 0);
 
     ob_start();
     ?>
@@ -94,74 +94,70 @@ try {
         th, td { border: 1px solid #ccc; padding: 4px; text-align: left; vertical-align: middle; }
         th { background-color: #065f46; color: white; text-align: center; }
         .text-right { text-align: right; }
-        .group-head td { background-color: #065f46; color: white; font-weight: bold; }
+        
+        /* GAYA GROUPING ALA LM-77 (Sesuai UI) */
         .unit-head td { background-color: #d1fae5; color: #065f46; font-weight: bold; }
-        .unit-sub { background-color: #ecfdf5; font-weight: bold; }
-        .group-sub { background-color: #ecfdf5; border-top: 2px solid #065f46; font-weight: bold; }
+        .unit-sub { background-color: #ecfdf5; font-weight: bold; border-top: 2px solid #065f46; }
+        
         .grand-total { background-color: #bbf7d0; border-top: 3px double #065f46; font-weight: bold; font-size: 10px; }
     </style>
     </head><body>
         <div class="header">
             <h1>PTPN IV REGIONAL 3</h1>
             <h2>LM-76 — STATISTIK PANEN KELAPA SAWIT</h2>
+            <p style="font-size: 10px; margin: 0;">(Grup per Unit/AFD, Urut Tahun -> Bulan)</p>
         </div>
         <table>
             <thead><tr>
-                <th>Tahun</th><th>Kebun</th><th>Unit/Defisi</th><th>Periode</th><th>T.Tanam</th>
+                <th>Tahun</th><th>Kebun</th><th>Unit/Defisi</th><th>Periode</th>
                 <th class="text-right">Luas(Ha)</th><th class="text-right">Invt Pokok</th><th class="text-right">Anggaran(Kg)</th>
                 <th class="text-right">Realisasi(Kg)</th><th class="text-right">Jlh Tandan</th><th class="text-right">Jlh HK</th>
                 <th class="text-right">Panen(Ha)</th><th class="text-right">Frekuensi</th>
             </tr></thead>
             <tbody>
             <?php if (empty($allData)): ?>
-                <tr><td colspan="13" style="text-align: center; padding: 20px;">Tidak ada data untuk filter yang dipilih.</td></tr>
+                <tr><td colspan="12" style="text-align: center; padding: 20px;">Tidak ada data untuk filter yang dipilih.</td></tr>
             <?php else: ?>
-                <?php foreach ($ttBuckets as $ttKey => $units): $rowsTT = array_merge(...array_values($units)); ?>
-                    <tr class="group-head"><td colspan="13">Tahun Tanam: <?= htmlspecialchars((string)($ttKey === '__NA__' ? 'N/A' : $ttKey)) ?></td></tr>
-                    <?php foreach ($units as $unitKey => $rowsU): ?>
-                        <tr class="unit-head"><td colspan="13">Unit/AFD: <?= htmlspecialchars((string)$unitKey) ?></td></tr>
-                        <?php foreach ($rowsU as $r): ?>
-                            <tr>
-                                <td><?= htmlspecialchars((string)($r['tahun'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['nama_kebun'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['nama_unit'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)(($r['bulan'] ?? '').' '.($r['tahun'] ?? ''))) ?></td>
-                                <td><?= htmlspecialchars((string)($r['tt'] ?? '')) ?></td>
-                                <td class="text-right"><?= $fmt($r['luas_ha']) ?></td><td class="text-right"><?= $fmt0($r['jumlah_pohon']) ?></td>
-                                <td class="text-right"><?= $fmt($r['anggaran_kg']) ?></td><td class="text-right"><?= $fmt($r['realisasi_kg']) ?></td>
-                                <td class="text-right"><?= $fmt0($r['jumlah_tandan']) ?></td><td class="text-right"><?= $fmt($r['jumlah_hk']) ?></td>
-                                <td class="text-right"><?= $fmt($r['panen_ha']) ?></td><td class="text-right"><?= $fmt($r['frekuensi']) ?></td>
-                            </tr>
-                        <?php endforeach; ?>
-                        <tr class="unit-sub">
-                            <td colspan="5">Jumlah (<?= htmlspecialchars((string)$unitKey) ?>)</td>
-                            <td class="text-right"><?= $fmt($luas_u = sum($rowsU, 'luas_ha')) ?></td>
-                            <td class="text-right"><?= $fmt0(sum($rowsU, 'jumlah_pohon')) ?></td>
-                            <td class="text-right"><?= $fmt(sum($rowsU, 'anggaran_kg')) ?></td>
-                            <td class="text-right"><?= $fmt(sum($rowsU, 'realisasi_kg')) ?></td>
-                            <td class="text-right"><?= $fmt0(sum($rowsU, 'jumlah_tandan')) ?></td>
-                            <td class="text-right"><?= $fmt(sum($rowsU, 'jumlah_hk')) ?></td>
-                            <td class="text-right"><?= $fmt($panen_u = sum($rowsU, 'panen_ha')) ?></td>
-                            <td class="text-right"><?= $fmt($luas_u > 0 ? $panen_u / $luas_u : 0) ?></td>
+                
+                <?php foreach ($unitBuckets as $unitKey => $rowsU): ?>
+                    <tr class="unit-head"><td colspan="12">Unit/AFD: <?= htmlspecialchars((string)$unitKey) ?></td></tr>
+                    
+                    <?php foreach ($rowsU as $r): ?>
+                        <tr>
+                            <td><?= htmlspecialchars((string)($r['tahun'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string)($r['nama_kebun'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string)($r['nama_unit'] ?? '')) ?></td>
+                            <td><?= htmlspecialchars((string)(($r['bulan'] ?? '').' '.($r['tahun'] ?? ''))) ?></td>
+                            
+                            <td class="text-right"><?= $fmt($r['luas_ha']) ?></td>
+                            <td class="text-right"><?= $fmt0($r['jumlah_pohon']) ?></td>
+                            <td class="text-right"><?= $fmt($r['anggaran_kg']) ?></td>
+                            <td class="text-right"><?= $fmt($r['realisasi_kg']) ?></td>
+                            <td class="text-right"><?= $fmt0($r['jumlah_tandan']) ?></td>
+                            <td class="text-right"><?= $fmt($r['jumlah_hk']) ?></td>
+                            <td class="text-right"><?= $fmt($r['panen_ha']) ?></td>
+                            <td class="text-right"><?= $fmt($calcFreq($r)) ?></td>
                         </tr>
                     <?php endforeach; ?>
-                    <tr class="group-sub">
-                        <td colspan="5">Subtotal TT: <?= htmlspecialchars((string)($ttKey === '__NA__' ? 'N/A' : $ttKey)) ?></td>
-                        <td class="text-right"><?= $fmt($luas_tt = sum($rowsTT, 'luas_ha')) ?></td>
-                        <td class="text-right"><?= $fmt0(sum($rowsTT, 'jumlah_pohon')) ?></td>
-                        <td class="text-right"><?= $fmt(sum($rowsTT, 'anggaran_kg')) ?></td>
-                        <td class="text-right"><?= $fmt(sum($rowsTT, 'realisasi_kg')) ?></td>
-                        <td class="text-right"><?= $fmt0(sum($rowsTT, 'jumlah_tandan')) ?></td>
-                        <td class="text-right"><?= $fmt(sum($rowsTT, 'jumlah_hk')) ?></td>
-                        <td class="text-right"><?= $fmt($panen_tt = sum($rowsTT, 'panen_ha')) ?></td>
-                        <td class="text-right"><?= $fmt($luas_tt > 0 ? sum($rowsTT, 'panen_ha') / $luas_tt : 0) ?></td>
+                    
+                    <tr class="unit-sub">
+                        <td colspan="4">Jumlah (<?= htmlspecialchars((string)$unitKey) ?>)</td>
+                        <td class="text-right"><?= $fmt($luas_u = sum($rowsU, 'luas_ha')) ?></td>
+                        <td class="text-right"><?= $fmt0(sum($rowsU, 'jumlah_pohon')) ?></td>
+                        <td class="text-right"><?= $fmt(sum($rowsU, 'anggaran_kg')) ?></td>
+                        <td class="text-right"><?= $fmt(sum($rowsU, 'realisasi_kg')) ?></td>
+                        <td class="text-right"><?= $fmt0(sum($rowsU, 'jumlah_tandan')) ?></td>
+                        <td class="text-right"><?= $fmt(sum($rowsU, 'jumlah_hk')) ?></td>
+                        <td class="text-right"><?= $fmt($panen_u = sum($rowsU, 'panen_ha')) ?></td>
+                        <td class="text-right"><?= $fmt($luas_u > 0 ? $panen_u / $luas_u : 0) ?></td>
                     </tr>
                 <?php endforeach; ?>
+                
             <?php endif; ?>
             </tbody>
             <tfoot>
                 <tr class="grand-total">
-                    <td colspan="5">GRAND TOTAL</td>
+                    <td colspan="4">GRAND TOTAL</td>
                     <td class="text-right"><?= $fmt($luas_total = sum($allData, 'luas_ha')) ?></td>
                     <td class="text-right"><?= $fmt0(sum($allData, 'jumlah_pohon')) ?></td>
                     <td class="text-right"><?= $fmt(sum($allData, 'anggaran_kg')) ?></td>

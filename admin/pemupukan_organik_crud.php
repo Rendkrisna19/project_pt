@@ -1,5 +1,5 @@
 <?php
-// admin/pemupukan_organik_crud.php — Revisi: +keterangan (angkutan), +t_tanam (menabur), -catatan (menabur)
+// admin/pemupukan_organik_crud.php — MODIFIKASI: +rayon_id, +asal_gudang_id, +keterangan_id
 session_start();
 header('Content-Type: application/json');
 
@@ -51,11 +51,32 @@ try{
     return (bool)$st->fetchColumn();
   };
   $kebunExists = function(?int $kebunId) use ($conn){
-    if ($kebunId===null) return false;
+    if ($kebunId===null || $kebunId<=0) return false;
     $st=$conn->prepare("SELECT 1 FROM md_kebun WHERE id=:id LIMIT 1");
     $st->execute([':id'=>$kebunId]);
     return (bool)$st->fetchColumn();
   };
+  
+  // BARU: Validasi Master Angkutan
+  $rayonExists = function(?int $id) use ($conn){
+    if ($id===null || $id<=0) return false;
+    $st=$conn->prepare("SELECT 1 FROM md_rayon WHERE id=:id LIMIT 1");
+    $st->execute([':id'=>$id]);
+    return (bool)$st->fetchColumn();
+  };
+  $gudangExists = function(?int $id) use ($conn){
+    if ($id===null || $id<=0) return false;
+    $st=$conn->prepare("SELECT 1 FROM md_asal_gudang WHERE id=:id LIMIT 1");
+    $st->execute([':id'=>$id]);
+    return (bool)$st->fetchColumn();
+  };
+  $keteranganExists = function(?int $id) use ($conn){
+    if ($id===null || $id<=0) return false; // Jika 0 atau null, anggap valid (opsional)
+    $st=$conn->prepare("SELECT 1 FROM md_keterangan WHERE id=:id LIMIT 1");
+    $st->execute([':id'=>$id]);
+    return (bool)$st->fetchColumn();
+  };
+
 
   /* =================== STORE =================== */
   if ($action==='store' || $action==='create') {
@@ -64,43 +85,55 @@ try{
     if ($tab==='angkutan') {
       $table = 'angkutan_pupuk_organik';
       $kebun_id       = i('kebun_id');
-      $gudang_asal    = s('gudang_asal');
+      $rayon_id       = i('rayon_id');       // BARU
+      $asal_gudang_id = i('asal_gudang_id'); // BARU
+      // $gudang_asal   = s('gudang_asal');  // LAMA
       $unit_tujuan_id = i('unit_tujuan_id'); // boleh NULL
       $tanggal        = s('tanggal');
       $jenis_pupuk    = s('jenis_pupuk');
       $jumlah         = f('jumlah');
       $nomor_do       = s('nomor_do');
       $supir          = s('supir');
-      $keterangan     = s('keterangan'); // NEW
+      $keterangan_id  = i('keterangan_id');  // BARU (opsional)
+      // $keterangan    = s('keterangan');   // LAMA
 
       if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
-      if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
+      if (!$rayon_id || !$rayonExists($rayon_id)) $errors[]='Rayon wajib dipilih.';
+      if (!$asal_gudang_id || !$gudangExists($asal_gudang_id)) $errors[]='Gudang asal wajib diisi.';
+      // if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.'; // LAMA
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      if ($keterangan_id!==null && !$keteranganExists($keterangan_id)) $errors[]='Keterangan terpilih tidak valid.';
+      
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      // Build kolom dinamis sesuai ketersediaan
-      $cols = ['kebun_id','gudang_asal','unit_tujuan_id','tanggal','jenis_pupuk','jumlah','nomor_do','supir','created_at','updated_at'];
-      $vals = [':kid',    ':ga',        ':ut',           ':tgl',   ':jp',        ':jml',  ':ndo',    ':sp',  'NOW()',     'NOW()'];
+      // Asumsi kolom baru (rayon_id, asal_gudang_id, keterangan_id) sudah ada di tabel
+      // Asumsi kolom lama (gudang_asal, keterangan) diganti
+      $cols = ['kebun_id','rayon_id','asal_gudang_id','unit_tujuan_id','tanggal','jenis_pupuk','jumlah','nomor_do','supir','keterangan_id','created_at','updated_at'];
+      $vals = [':kid',    ':rid',    ':gid',          ':ut',           ':tgl',   ':jp',        ':jml',  ':ndo',    ':sp',   ':ket_id',    'NOW()',    'NOW()'];
       $params = [
-        ':kid'=>$kebun_id, ':ga'=>$gudang_asal, ':ut'=>$unit_tujuan_id,
-        ':tgl'=>$tanggal,  ':jp'=>$jenis_pupuk, ':jml'=>$jumlah??0,
-        ':ndo'=>$nomor_do, ':sp'=>$supir
+        ':kid'    => $kebun_id,
+        ':rid'    => $rayon_id,
+        ':gid'    => $asal_gudang_id,
+        ':ut'     => $unit_tujuan_id,
+        ':tgl'    => $tanggal,
+        ':jp'     => $jenis_pupuk,
+        ':jml'    => $jumlah ?? 0,
+        ':ndo'    => $nomor_do,
+        ':sp'     => $supir,
+        ':ket_id' => $keterangan_id
       ];
-      if ($hasCol($table,'keterangan')) {
-        $cols[]='keterangan'; $vals[]=':ket'; $params[':ket']=$keterangan;
-      }
 
       $sql="INSERT INTO $table (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
       $st=$conn->prepare($sql); $st->execute($params);
 
-    } else {
-      $table   = 'menabur_pupuk_organik';
+    } else { // TAB MENABUR (Tidak berubah)
+      $table    = 'menabur_pupuk_organik';
       $kebun_id = i('kebun_id');
       $unit_id  = i('unit_id');
-      $blok     = s('blok');     // md_blok.kode
+      $blok     = s('blok');      // md_blok.kode
       $tanggal  = s('tanggal');
       $jenis    = s('jenis_pupuk'); // md_pupuk.nama
       $t_tanam  = i('t_tanam');     // NEW (opsional)
@@ -125,7 +158,7 @@ try{
 
       // Build kolom dinamis (t_tanam & dosis opsional; catatan DIHAPUS)
       $cols   = ['kebun_id','unit_id','blok','tanggal','jenis_pupuk','jumlah','luas','invt_pokok','created_at','updated_at'];
-      $vals   = [':kid',    ':uid',   ':blk',':tgl',   ':jp',        ':jml',  ':luas',':invt',     'NOW()',     'NOW()'];
+      $vals   = [':kid',    ':uid',   ':blk',':tgl',   ':jp',        ':jml',  ':luas',':invt',     'NOW()',    'NOW()'];
       $params = [
         ':kid'=>$kebun_id, ':uid'=>$unit_id, ':blk'=>$blok, ':tgl'=>$tanggal, ':jp'=>$jenis,
         ':jml'=>$jumlah??0, ':luas'=>$luas??0, ':invt'=>$invt??0
@@ -150,38 +183,62 @@ try{
     if ($tab==='angkutan') {
       $table = 'angkutan_pupuk_organik';
       $kebun_id       = i('kebun_id');
-      $gudang_asal    = s('gudang_asal');
+      $rayon_id       = i('rayon_id');       // BARU
+      $asal_gudang_id = i('asal_gudang_id'); // BARU
+      // $gudang_asal   = s('gudang_asal');  // LAMA
       $unit_tujuan_id = i('unit_tujuan_id');
       $tanggal        = s('tanggal');
       $jenis_pupuk    = s('jenis_pupuk');
       $jumlah         = f('jumlah');
       $nomor_do       = s('nomor_do');
       $supir          = s('supir');
-      $keterangan     = s('keterangan'); // NEW
+      $keterangan_id  = i('keterangan_id');  // BARU
+      // $keterangan    = s('keterangan');   // LAMA
 
       if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
-      if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.';
+      if (!$rayon_id || !$rayonExists($rayon_id)) $errors[]='Rayon wajib dipilih.';
+      if (!$asal_gudang_id || !$gudangExists($asal_gudang_id)) $errors[]='Gudang asal wajib diisi.';
+      // if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.'; // LAMA
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      if ($keterangan_id!==null && !$keteranganExists($keterangan_id)) $errors[]='Keterangan terpilih tidak valid.';
+      
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
       // SQL dinamis untuk kolom opsional keterangan
       $sql = "UPDATE $table SET
-                kebun_id=:kid, gudang_asal=:ga, unit_tujuan_id=:ut, tanggal=:tgl, jenis_pupuk=:jp,
-                jumlah=:jml, nomor_do=:ndo, supir=:sp".($hasCol($table,'keterangan')?', keterangan=:ket':'').", updated_at=NOW()
-              WHERE id=:id";
+                kebun_id = :kid, 
+                rayon_id = :rid,
+                asal_gudang_id = :gid,
+                unit_tujuan_id = :ut, 
+                tanggal = :tgl, 
+                jenis_pupuk = :jp,
+                jumlah = :jml, 
+                nomor_do = :ndo, 
+                supir = :sp,
+                keterangan_id = :ket_id,
+                updated_at = NOW()
+              WHERE id = :id";
       $params = [
-        ':kid'=>$kebun_id, ':ga'=>$gudang_asal, ':ut'=>$unit_tujuan_id, ':tgl'=>$tanggal, ':jp'=>$jenis_pupuk,
-        ':jml'=>$jumlah??0, ':ndo'=>$nomor_do, ':sp'=>$supir, ':id'=>$id
+        ':kid'    => $kebun_id,
+        ':rid'    => $rayon_id,
+        ':gid'    => $asal_gudang_id,
+        ':ut'     => $unit_tujuan_id,
+        ':tgl'    => $tanggal,
+        ':jp'     => $jenis_pupuk,
+        ':jml'    => $jumlah ?? 0,
+        ':ndo'    => $nomor_do,
+        ':sp'     => $supir,
+        ':ket_id' => $keterangan_id,
+        ':id'     => $id
       ];
-      if ($hasCol($table,'keterangan')) $params[':ket'] = $keterangan;
 
       $st=$conn->prepare($sql); $st->execute($params);
 
-    } else {
-      $table   = 'menabur_pupuk_organik';
+    } else { // TAB MENABUR (Tidak berubah)
+      $table    = 'menabur_pupuk_organik';
       $kebun_id = i('kebun_id');
       $unit_id  = i('unit_id');
       $blok     = s('blok');
