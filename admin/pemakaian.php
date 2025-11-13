@@ -289,20 +289,55 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // --- MODIFIKASI: Kirim role ke JavaScript ---
   const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
   const COLSPAN = IS_STAF ? 10 : 11;
 
   const $ = s => document.querySelector(s);
-  const tbody = $('#tbody-data'), q = $('#filter-q'), selUnit = $('#filter-unit'), selBulan = $('#filter-bulan');
+  const tbody = $('#tbody-data');
+  const q = $('#filter-q'), selUnit = $('#filter-unit'), selBulan = $('#filter-bulan');
   const selTahun = $('#filter-tahun'), selBahanName = $('#filter-bahan-name'), selJenis = $('#filter-jenis');
-  const perPageEl = $('#per-page'), btnPrev = $('#btn-prev'), btnNext = $('#btn-next'), infoFrom = $('#info-from');
-  const infoTo = $('#info-to'), infoTotal = $('#info-total'), pageNow = $('#page-now'), pageTotal = $('#page-total');
+  const perPageEl = $('#per-page'), btnPrev = $('#btn-prev'), btnNext = $('#btn-next');
+  const infoFrom = $('#info-from'), infoTo = $('#info-to'), infoTotal = $('#info-total');
+  const pageNow = $('#page-now'), pageTotal = $('#page-total');
   const sumDimintaEl = $('#sum-diminta'), sumFisikEl = $('#sum-fisik');
 
   let ALL_ROWS = [], CURRENT_PAGE = 1, PER_PAGE = parseInt(perPageEl.value, 10) || 10;
-  const fmt = (n) => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const fmt = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
+  /* === FUNGSI BANTU UNTUK URUT TERBARU === */
+  const MONTH_IDX = {
+    'januari':1,'februari':2,'maret':3,'april':4,'mei':5,'juni':6,
+    'juli':7,'agustus':8,'september':9,'oktober':10,'november':11,'desember':12
+  };
+  const norm = v => (v||'').toString().trim().toLowerCase();
+
+  function parseRowDate(r){
+    if (r.created_at) {
+      const d = new Date(r.created_at);
+      if (!isNaN(d)) return d.getTime();
+    }
+    if (r.tanggal) {
+      const d = new Date(r.tanggal);
+      if (!isNaN(d)) return d.getTime();
+    }
+    const th = parseInt(r.tahun,10);
+    const bln = MONTH_IDX[norm(r.bulan)];
+    if (!isNaN(th) && bln>=1 && bln<=12) {
+      return new Date(th, bln-1, 28, 23, 59, 59).getTime();
+    }
+    if (r.id && !isNaN(+r.id)) return +r.id;
+    return 0;
+  }
+
+  function compareDescByLatest(a,b){
+    const ta = parseRowDate(a), tb = parseRowDate(b);
+    if (tb !== ta) return tb - ta;
+    const ia = (a.id!==undefined && !isNaN(+a.id)) ? +a.id : -1;
+    const ib = (b.id!==undefined && !isNaN(+b.id)) ? +b.id : -1;
+    return ib - ia;
+  }
+
+  /* === RENDER TABEL === */
   function buildRowHTML(row) {
     const jumlahDiminta = fmt(row.jlh_diminta);
     const jumlahFisik   = fmt(row.jlh_fisik);
@@ -313,20 +348,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const ketText = (row.keterangan_clean && String(row.keterangan_clean).trim()) ? row.keterangan_clean : '-';
     const keteranganBadge = `<span class="badge-emerald" title="${ketText}">${ketText}</span>`;
 
-    // --- MODIFIKASI: Kolom aksi hanya dibuat jika bukan staf ---
     let actionCell = '';
     if (!IS_STAF) {
       const payload = encodeURIComponent(JSON.stringify(row || {}));
       actionCell = `
-        <td class="py-3 px-4">
-          <div class="flex items-center justify-center gap-2">
-            <button class="btn-edit btn-icon text-blue-600 hover:text-blue-800" data-json="${payload}" title="Edit">
-              <i class="ti ti-pencil text-lg"></i>
-            </button>
-            <button class="btn-delete btn-icon text-red-600 hover:text-red-800" data-id="${row.id}" title="Hapus">
-              <i class="ti ti-trash text-lg"></i>
-            </button>
-          </div>
+        <td class="py-3 px-4 text-center">
+          <button class="btn-edit btn-icon text-blue-600 hover:text-blue-800" data-json="${payload}" title="Edit">
+            <i class="ti ti-pencil text-lg"></i>
+          </button>
+          <button class="btn-delete btn-icon text-red-600 hover:text-red-800" data-id="${row.id}" title="Hapus">
+            <i class="ti ti-trash text-lg"></i>
+          </button>
         </td>`;
     }
 
@@ -355,66 +387,76 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderPage() {
-    const total = ALL_ROWS.length, totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+    const total = ALL_ROWS.length;
+    const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
     if (CURRENT_PAGE > totalPages) CURRENT_PAGE = totalPages;
-    if (CURRENT_PAGE < 1) CURRENT_PAGE = 1;
-    const startIdx = (CURRENT_PAGE - 1) * PER_PAGE, endIdx = Math.min(startIdx + PER_PAGE, total);
-    infoTotal.textContent = total.toLocaleString();
-    infoFrom.textContent = total ? (startIdx + 1).toLocaleString() : 0;
-    infoTo.textContent = endIdx.toLocaleString();
-    pageNow.textContent = CURRENT_PAGE.toString();
-    pageTotal.textContent = totalPages.toString();
+    const startIdx = (CURRENT_PAGE - 1) * PER_PAGE;
+    const endIdx = Math.min(startIdx + PER_PAGE, total);
+    infoTotal.textContent = total;
+    infoFrom.textContent = total ? (startIdx + 1) : 0;
+    infoTo.textContent = endIdx;
+    pageNow.textContent = CURRENT_PAGE;
+    pageTotal.textContent = totalPages;
     btnPrev.disabled = CURRENT_PAGE <= 1;
     btnNext.disabled = CURRENT_PAGE >= totalPages;
-    const emptyRow = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
 
     if (!total) {
-      tbody.innerHTML = emptyRow;
-      renderTotals(); return;
+      tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+      renderTotals();
+      return;
     }
+
     const rows = ALL_ROWS.slice(startIdx, endIdx).map(buildRowHTML).join('');
-    tbody.innerHTML = rows || emptyRow;
+    tbody.innerHTML = rows;
     renderTotals();
   }
 
+  /* === FETCH DATA === */
   function refreshList() {
     const fd = new FormData();
     fd.append('csrf_token', '<?= htmlspecialchars($CSRF) ?>');
     fd.append('action', 'list');
-    fd.append('q', q.value); fd.append('unit_id', selUnit.value);
-    fd.append('bulan', selBulan.value); fd.append('tahun', selTahun.value);
-    fd.append('nama_bahan', selBahanName.value); fd.append('jenis_pekerjaan', selJenis.value);
+    fd.append('q', q.value);
+    fd.append('unit_id', selUnit.value);
+    fd.append('bulan', selBulan.value);
+    fd.append('tahun', selTahun.value);
+    fd.append('nama_bahan', selBahanName.value);
+    fd.append('jenis_pekerjaan', selJenis.value);
+
     tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
     sumDimintaEl.textContent = '0'; sumFisikEl.textContent = '0';
+
     fetch('pemakaian_crud.php', { method: 'POST', body: fd })
-      .then(r => r.json()).then(j => {
+      .then(r => r.json())
+      .then(j => {
         if (!j.success) {
           tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
-          ALL_ROWS = []; renderPage(); return;
+          ALL_ROWS = [];
+          renderPage();
+          return;
         }
-        ALL_ROWS = Array.isArray(j.data) ? j.data : [];
+        ALL_ROWS = Array.isArray(j.data) ? j.data.slice().sort(compareDescByLatest) : [];
         CURRENT_PAGE = 1;
         renderPage();
-      }).catch(err => {
+      })
+      .catch(err => {
         tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
-        ALL_ROWS = []; renderPage();
+        ALL_ROWS = [];
+        renderPage();
       });
   }
 
   refreshList();
-  [q].forEach(el => el.addEventListener('input', refreshList));
-  [selUnit, selTahun, selBahanName, selJenis, selBulan].forEach(el => el.addEventListener('change', refreshList));
+  [q, selUnit, selBulan, selTahun, selBahanName, selJenis].forEach(el => el.addEventListener('change', refreshList));
   perPageEl.addEventListener('change', () => { PER_PAGE = parseInt(perPageEl.value, 10) || 10; CURRENT_PAGE = 1; renderPage(); });
-  btnPrev.addEventListener('click', () => { if(CURRENT_PAGE > 1){ CURRENT_PAGE -= 1; renderPage();} });
-  btnNext.addEventListener('click', () => { CURRENT_PAGE += 1; renderPage(); });
+  btnPrev.addEventListener('click', () => { if(CURRENT_PAGE>1){ CURRENT_PAGE--; renderPage(); } });
+  btnNext.addEventListener('click', () => { CURRENT_PAGE++; renderPage(); });
 
-
-  // --- MODIFIKASI: Seluruh event CRUD hanya untuk non-staf ---
+  /* === CRUD KHUSUS NON-STAF === */
   if (!IS_STAF) {
-    const modal = $('#crud-modal'), btnClose = $('#btn-close'), btnCancel = $('#btn-cancel'), form = $('#crud-form');
-    const formAction = $('#form-action'), formId = $('#form-id'), title = $('#modal-title');
+    const modal = $('#crud-modal'), form = $('#crud-form');
     const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); }
-    const close= () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
+    const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
     const bahanSelect = $('#nama_bahan'), hintSatuan = $('#hint-satuan-bahan');
 
     function updateSatuanHint() {
@@ -423,18 +465,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     bahanSelect.addEventListener('change', updateSatuanHint);
 
-    $('#btn-add').addEventListener('click', () => {
+    $('#btn-add')?.addEventListener('click', () => {
       form.reset();
-      formId.value = ''; formAction.value = 'store';
-      title.textContent = 'Input Pemakaian Baru';
-      if (selUnit.value) $('#unit_id').value = selUnit.value;
-      if (selBulan.value) $('#bulan').value = selBulan.value;
-      $('#tahun').value = selTahun.value;
+      $('#form-action').value = 'store';
+      $('#form-id').value = '';
       updateSatuanHint();
       open();
     });
-    btnClose.addEventListener('click', close);
-    btnCancel.addEventListener('click', close);
+
+    $('#btn-close')?.addEventListener('click', close);
+    $('#btn-cancel')?.addEventListener('click', close);
 
     document.body.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
@@ -443,42 +483,47 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btn.classList.contains('btn-edit')) {
         const row = JSON.parse(decodeURIComponent(btn.dataset.json));
         form.reset();
-        formAction.value = 'update';
-        formId.value = row.id;
-        title.textContent = 'Edit Pemakaian';
-        ['no_dokumen','bulan','tahun','nama_bahan','jenis_pekerjaan','jlh_diminta','jlh_fisik'].forEach(k=>{
+        $('#form-action').value = 'update';
+        $('#form-id').value = row.id;
+        ['no_dokumen','bulan','tahun','nama_bahan','jenis_pekerjaan','jlh_diminta','jlh_fisik','keterangan'].forEach(k=>{
           const el=$(`#${k}`); if(el) el.value=row[k] ?? '';
         });
         $('#unit_id').value = row.unit_id ?? '';
         $('#fisik_label').value= row.fisik_label ?? '';
         $('#kebun_label').value= row.kebun_label || '';
-        $('#keterangan').value = row.keterangan_clean || '';
         updateSatuanHint();
         open();
       }
-      
+
       if (btn.classList.contains('btn-delete')) {
         const id = btn.dataset.id;
         Swal.fire({
-          title: 'Hapus data ini?', text: 'Tindakan ini tidak dapat dibatalkan.', icon: 'warning',
-          showCancelButton: true, confirmButtonColor: '#d33', cancelButtonColor: '#3085d6',
-          confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal'
-        }).then((res) => {
+          title: 'Hapus data ini?',
+          text: 'Tindakan ini tidak dapat dibatalkan.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          cancelButtonColor: '#3085d6',
+          confirmButtonText: 'Ya, hapus',
+          cancelButtonText: 'Batal'
+        }).then(res => {
           if (!res.isConfirmed) return;
           const fd = new FormData();
           fd.append('csrf_token', '<?= htmlspecialchars($CSRF) ?>');
           fd.append('action', 'delete');
           fd.append('id', id);
           fetch('pemakaian_crud.php', { method: 'POST', body: fd })
-            .then(r => r.json()).then(j => {
+            .then(r => r.json())
+            .then(j => {
               if (j.success) { Swal.fire('Terhapus!', 'Data berhasil dihapus.', 'success'); refreshList(); }
               else Swal.fire('Gagal', j.message || 'Tidak bisa menghapus', 'error');
-            }).catch(err => Swal.fire('Error', err?.message || 'Network error', 'error'));
+            })
+            .catch(err => Swal.fire('Error', err?.message || 'Network error', 'error'));
         });
       }
     });
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', e => {
       e.preventDefault();
       const req = ['unit_id','bulan','tahun','nama_bahan','jenis_pekerjaan'];
       for (const id of req) {
@@ -487,35 +532,37 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       const fd = new FormData(form);
       fetch('pemakaian_crud.php', { method: 'POST', body: fd })
-        .then(r => r.json()).then(j => {
+        .then(r => r.json())
+        .then(j => {
           if (j.success) {
             close();
-            Swal.fire({ icon: 'success', title: 'Berhasil', text: j.message, timer: 1400, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'Berhasil', text: j.message, timer: 1300, showConfirmButton: false });
             refreshList();
           } else {
-            const html = j.errors?.length ? `<ul style="text-align:left">${j.errors.map(e=>`<li>• ${e}</li>`).join('')}</ul>` : j.message;
-            Swal.fire('Gagal', html || 'Terjadi kesalahan.', 'error');
+            Swal.fire('Gagal', j.message || 'Terjadi kesalahan.', 'error');
           }
         })
         .catch(err => Swal.fire('Error', err?.message || 'Network error', 'error'));
     });
-  } // end if !IS_STAF
+  }
 
   document.getElementById('btn-export-excel').addEventListener('click', () => {
     const qs = new URLSearchParams({
-      csrf_token: '<?= htmlspecialchars($CSRF) ?>', q: q.value || '', unit_id: selUnit.value || '',
-      bulan: selBulan.value || '', tahun: selTahun.value || '', nama_bahan: selBahanName.value || '',
-      jenis_pekerjaan: selJenis.value || ''
+      csrf_token:'<?= htmlspecialchars($CSRF) ?>', q:q.value||'',
+      unit_id:selUnit.value||'', bulan:selBulan.value||'',
+      tahun:selTahun.value||'', nama_bahan:selBahanName.value||'',
+      jenis_pekerjaan:selJenis.value||''
     }).toString();
-    window.open('cetak/pemakaian_export_excel.php?' + qs, '_blank');
+    window.open('cetak/pemakaian_export_excel.php?'+qs, '_blank');
   });
   document.getElementById('btn-export-pdf').addEventListener('click', () => {
     const qs = new URLSearchParams({
-      csrf_token: '<?= htmlspecialchars($CSRF) ?>', q: q.value || '', unit_id: selUnit.value || '',
-      bulan: selBulan.value || '', tahun: selTahun.value || '', nama_bahan: selBahanName.value || '',
-      jenis_pekerjaan: selJenis.value || ''
+      csrf_token:'<?= htmlspecialchars($CSRF) ?>', q:q.value||'',
+      unit_id:selUnit.value||'', bulan:selBulan.value||'',
+      tahun:selTahun.value||'', nama_bahan:selBahanName.value||'',
+      jenis_pekerjaan:selJenis.value||''
     }).toString();
-    window.open('cetak/pemakaian_export_pdf.php?' + qs, '_blank');
+    window.open('cetak/pemakaian_export_pdf.php?'+qs, '_blank');
   });
 });
 </script>

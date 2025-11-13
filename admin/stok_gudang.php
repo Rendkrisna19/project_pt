@@ -233,7 +233,7 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // --- MODIFIKASI: Kirim role ke JavaScript ---
+  // --- Role ke JS ---
   const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
 
   const $ = s => document.querySelector(s);
@@ -248,6 +248,45 @@ document.addEventListener('DOMContentLoaded', () => {
   const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
 
   let allRows = [], currentPage = 1, pageSize = parseInt(pageSizeEl.value || '10', 10);
+
+  // ====== UTIL: Sort Terbaru (created_at -> tanggal -> tahun+bulan -> id) ======
+  const MONTH_IDX = {
+    'januari':1,'februari':2,'maret':3,'april':4,'mei':5,'juni':6,
+    'juli':7,'agustus':8,'september':9,'oktober':10,'november':11,'desember':12
+  };
+  const norm = v => (v||'').toString().trim().toLowerCase();
+
+  function parseRowTimestamp(r){
+    // 1) created_at (ISO / Y-m-d H:i:s)
+    if (r.created_at) {
+      const d = new Date(r.created_at);
+      if (!isNaN(d)) return d.getTime();
+    }
+    // 2) tanggal (Y-m-d)
+    if (r.tanggal) {
+      const d = new Date(r.tanggal);
+      if (!isNaN(d)) return d.getTime();
+    }
+    // 3) tahun + bulan (teks Indonesia)
+    const th = parseInt(r.tahun,10);
+    const bln = MONTH_IDX[norm(r.bulan)];
+    if (!isNaN(th) && bln>=1 && bln<=12) {
+      // akhir bulan sebagai representasi
+      return new Date(th, bln-1, 28, 23, 59, 59).getTime();
+    }
+    // 4) fallback id (angka lebih besar = lebih baru)
+    if (r.id && !isNaN(+r.id)) return +r.id;
+    return 0;
+  }
+
+  function compareDescByLatest(a,b){
+    const ta = parseRowTimestamp(a), tb = parseRowTimestamp(b);
+    if (tb !== ta) return tb - ta;       // terbaru duluan
+    const ia = (a.id!==undefined && !isNaN(+a.id)) ? +a.id : -1;
+    const ib = (b.id!==undefined && !isNaN(+b.id)) ? +b.id : -1;
+    return ib - ia;                       // tie-break pakai id
+  }
+  // ============================================================================
 
   function numberFmt(x){ return Number(x ?? 0).toLocaleString(undefined,{maximumFractionDigits:2}); }
 
@@ -266,8 +305,14 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       tbody.innerHTML = pageRows.map(row => `
         <tr class="border-b hover:bg-gray-50">
-          <td class="py-3 px-4"><div class="font-semibold text-gray-800">${row.kebun_kode || ''}</div><div class="text-xs text-gray-500">${row.nama_kebun || ''}</div></td>
-          <td class="py-3 px-4"><div class="font-semibold text-gray-800">${row.nama_bahan || ''}</div><div class="text-xs text-gray-500">(${row.satuan||''})</div></td>
+          <td class="py-3 px-4">
+            <div class="font-semibold text-gray-800">${row.kebun_kode || ''}</div>
+            <div class="text-xs text-gray-500">${row.nama_kebun || ''}</div>
+          </td>
+          <td class="py-3 px-4">
+            <div class="font-semibold text-gray-800">${row.nama_bahan || ''}</div>
+            <div class="text-xs text-gray-500">(${row.satuan||''})</div>
+          </td>
           <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.stok_awal)}</td>
           <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.mutasi_masuk)}</td>
           <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.mutasi_keluar)}</td>
@@ -277,7 +322,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="py-3 px-4 text-right font-semibold text-gray-900">${numberFmt(row.sisa_stok)}</td>
           <td class="py-3 px-4">
             <div class="flex items-center gap-3">
-              <button class="btn-edit text-blue-600 underline" data-json='${JSON.stringify(row)}' ${IS_STAF ? 'disabled' : ''}>✏️</button>
+              <button class="btn-edit text-blue-600 underline" data-json='${encodeURIComponent(JSON.stringify(row))}' ${IS_STAF ? 'disabled' : ''}>✏️</button>
               <button class="btn-delete text-red-600 underline" data-id="${row.id}" ${IS_STAF ? 'disabled' : ''}>🗑️</button>
             </div>
           </td>
@@ -289,11 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const showTo   = endIdx;
     rangeLabel.textContent = `Menampilkan ${showFrom}–${showTo}`;
     totalLabel.textContent = `Total data: ${total}`;
-    pageInfo.textContent   = `Page ${currentPage}/${totalPages}`;
+    const totalPagesTxt = Math.max(1, Math.ceil(total / pageSize));
+    pageInfo.textContent   = `Page ${currentPage}/${totalPagesTxt}`;
     btnFirst.disabled = (currentPage <= 1);
     btnPrev.disabled  = (currentPage <= 1);
-    btnNext.disabled  = (currentPage >= totalPages);
-    btnLast.disabled  = (currentPage >= totalPages);
+    btnNext.disabled  = (currentPage >= totalPagesTxt);
+    btnLast.disabled  = (currentPage >= totalPagesTxt);
     [btnFirst, btnPrev, btnNext, btnLast].forEach(b=>{
       b.classList.toggle('opacity-50', b.disabled);
       b.classList.toggle('cursor-not-allowed', b.disabled);
@@ -308,21 +354,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selBahan.value) fd.append('bahan_id', selBahan.value);
     if (selBulan.value) fd.append('bulan', selBulan.value);
     fd.append('tahun', selTahun.value || '<?= (int)date('Y') ?>');
+
     tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
     fetch('stok_gudang_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
       .then(j=>{
         if (!j.success) {
-          allRows = []; renderPage();
+          allRows = [];
+          renderPage();
           tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
           return;
         }
-        allRows = Array.isArray(j.data) ? j.data : [];
+        // === PENTING: sort terbaru di sini ===
+        const arr = Array.isArray(j.data) ? j.data : [];
+        allRows = arr.slice().sort(compareDescByLatest);
         currentPage = 1;
         renderPage();
       })
       .catch(err=>{
-        allRows = []; renderPage();
+        allRows = [];
+        renderPage();
         tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
       });
   }
@@ -337,13 +388,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   btnFirst.addEventListener('click', ()=>{ currentPage = 1; renderPage(); });
-  btnPrev.addEventListener('click',  ()=>{ currentPage = Math.max(1, currentPage-1); renderPage(); });
-  btnNext.addEventListener('click',  ()=>{ 
+  btnPrev .addEventListener('click', ()=>{ currentPage = Math.max(1, currentPage-1); renderPage(); });
+  btnNext .addEventListener('click', ()=>{ 
     const totalPages = Math.max(1, Math.ceil(allRows.length / pageSize));
     currentPage = Math.min(totalPages, currentPage+1); 
     renderPage(); 
   });
-  btnLast.addEventListener('click',   ()=>{ 
+  btnLast .addEventListener('click', ()=>{ 
     currentPage = Math.max(1, Math.ceil(allRows.length / pageSize)); 
     renderPage(); 
   });
@@ -369,10 +420,11 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCancel.addEventListener('click', close);
 
   document.body.addEventListener('click', (e)=>{
-    const t = e.target;
-    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
-    if (t.classList.contains('btn-edit') && !IS_STAF) {
-      const row = JSON.parse(t.dataset.json);
+    const btn = e.target.closest('button');
+    if (!btn) return;
+
+    if (btn.classList.contains('btn-edit') && !IS_STAF) {
+      const row = JSON.parse(decodeURIComponent(btn.dataset.json));
       form.reset();
       formAction.value='update';
       formId.value = row.id;
@@ -383,24 +435,26 @@ document.addEventListener('DOMContentLoaded', () => {
       updateSatuanHint();
       open();
     }
-    // --- MODIFIKASI: Tambahkan pengecekan !IS_STAF ---
-    if (t.classList.contains('btn-delete') && !IS_STAF) {
-      const id = t.dataset.id;
-      Swal.fire({title:'Hapus data ini?',text:'Tindakan ini tidak dapat dibatalkan.',icon:'warning',showCancelButton:true,confirmButtonText:'Ya, hapus',confirmButtonColor:'#d33'})
-        .then(res=>{
-          if (!res.isConfirmed) return;
-          const fd = new FormData();
-          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-          fd.append('action','delete');
-          fd.append('id', id);
-          fetch('stok_gudang_crud.php',{method:'POST',body:fd})
-            .then(r=>r.json())
-            .then(j=>{
-              if (j.success){ Swal.fire('Terhapus!', j.message, 'success'); refreshList(); }
-              else Swal.fire('Gagal', j.message||'Tidak bisa menghapus','error');
-            })
-            .catch(err=> Swal.fire('Error', err?.message||'Network error','error'));
-        });
+
+    if (btn.classList.contains('btn-delete') && !IS_STAF) {
+      const id = btn.dataset.id;
+      Swal.fire({
+        title:'Hapus data ini?', text:'Tindakan ini tidak dapat dibatalkan.',
+        icon:'warning', showCancelButton:true, confirmButtonText:'Ya, hapus', confirmButtonColor:'#d33'
+      }).then(res=>{
+        if (!res.isConfirmed) return;
+        const fd = new FormData();
+        fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+        fd.append('action','delete');
+        fd.append('id', id);
+        fetch('stok_gudang_crud.php',{method:'POST',body:fd})
+          .then(r=>r.json())
+          .then(j=>{
+            if (j.success){ Swal.fire('Terhapus!', j.message, 'success'); refreshList(); }
+            else Swal.fire('Gagal', j.message||'Tidak bisa menghapus','error');
+          })
+          .catch(err=> Swal.fire('Error', err?.message||'Network error','error'));
+      });
     }
   });
 
@@ -429,15 +483,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-export-excel').addEventListener('click', ()=>{
     const qs = new URLSearchParams({
-      csrf_token: '<?= htmlspecialchars($CSRF) ?>', kebun_id: selKebun.value || '',
-      bahan_id: selBahan.value || '', bulan: selBulan.value || '', tahun: selTahun.value || ''
+      csrf_token: '<?= htmlspecialchars($CSRF) ?>',
+      kebun_id: selKebun.value || '', bahan_id: selBahan.value || '',
+      bulan: selBulan.value || '', tahun: selTahun.value || ''
     }).toString();
     window.open('cetak/stok_gudang_export_excel.php?'+qs, '_blank');
   });
   document.getElementById('btn-export-pdf').addEventListener('click', ()=>{
     const qs = new URLSearchParams({
-      csrf_token: '<?= htmlspecialchars($CSRF) ?>', kebun_id: selKebun.value || '',
-      bahan_id: selBahan.value || '', bulan: selBulan.value || '', tahun: selTahun.value || ''
+      csrf_token: '<?= htmlspecialchars($CSRF) ?>',
+      kebun_id: selKebun.value || '', bahan_id: selBahan.value || '',
+      bulan: selBulan.value || '', tahun: selTahun.value || ''
     }).toString();
     window.open('cetak/stok_gudang_export_pdf.php?'+qs, '_blank');
   });

@@ -17,8 +17,7 @@ if (($_GET['action'] ?? '') === 'list') {
   $afd   = trim((string)($_GET['afd'] ?? ''));        // '' = semua AFD
   $jenis = trim((string)($_GET['jenis'] ?? ''));      // optional
   $hk    = trim((string)($_GET['hk'] ?? ''));         // optional
-  $ket   = trim((string)($_GET['keterangan'] ?? '')); // optional
-
+$ket   = trim((string)($_GET['ket'] ?? '')); // optional
   $where = "WHERE tahun=:t";
   $p = [':t'=>$tahun];
 
@@ -28,8 +27,7 @@ if (($_GET['action'] ?? '') === 'list') {
   }
   if ($jenis!==''){ $where.=" AND jenis_nama=:j"; $p[':j']=$jenis; }
   if ($hk!==''){ $where.=" AND hk=:hk"; $p[':hk']=$hk; }
-  if ($ket!==''){ $where.=" AND keterangan LIKE :k"; $p[':k']="%$ket%"; }
-
+if ($ket!==''){ $where.=" AND ket LIKE :k"; $p[':k']="%$ket%"; }
   $sql="SELECT * FROM pemeliharaan_tbm3  $where ORDER BY jenis_nama ASC, unit_kode ASC, id ASC";
   $st=$pdo->prepare($sql);
   foreach($p as $k=>$v){ $st->bindValue($k,$v,is_int($v)?PDO::PARAM_INT:PDO::PARAM_STR); }

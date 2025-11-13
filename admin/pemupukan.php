@@ -1,6 +1,7 @@
 <?php
 // pemupukan.php — MOD: Role 'staf', tombol ikon, Dropdown Master Baru (FIXED)
 // FIX 2: Hapus fallback AJAX agar konsisten dengan validasi CRUD
+// MOD 2: Tambah filter APL di filter bar
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
@@ -96,7 +97,7 @@ try {
   $f_jenis      = qstr($_GET['jenis_pupuk'] ?? ''); // Filter jenis masih pakai nama
   // Filters untuk field baru (opsional, bisa ditambahkan jika perlu filter by ID master baru)
   $f_rayon_id      = qintOrEmpty($_GET['rayon_id'] ?? '');
-  $f_apl_id        = qintOrEmpty($_GET['apl_id'] ?? '');
+  $f_apl_id        = qintOrEmpty($_GET['apl_id'] ?? ''); // <--- Variabel filter APL sudah ada
   $f_keterangan_id = qintOrEmpty($_GET['keterangan_id'] ?? '');
   $f_gudang_id     = qintOrEmpty($_GET['gudang_asal_id'] ?? '');
   // Filter teks lama (jika kolomnya masih ada dan diperlukan)
@@ -130,7 +131,7 @@ try {
     error_log("Error fetching master rayon: " . $e->getMessage());
   }
   try {
-    $apls = $conn->query("SELECT id, nama FROM md_apl ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
+    $apls = $conn->query("SELECT id, nama FROM md_apl ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC); // <--- Master data APL sudah ada
   } catch (Throwable $e) {
     $apls = [];
     error_log("Error fetching master apl: " . $e->getMessage());
@@ -168,7 +169,7 @@ try {
 
   // Cek kolom ID baru
   $hasRayonIdM = $columnExists($conn, 'menabur_pupuk', 'rayon_id');
-  $hasAplIdM = $columnExists($conn, 'menabur_pupuk', 'apl_id');
+  $hasAplIdM = $columnExists($conn, 'menabur_pupuk', 'apl_id'); // <--- Pengecekan kolom APL ID sudah ada
   $hasKetIdM = $columnExists($conn, 'menabur_pupuk', 'keterangan_id');
   $hasRayonIdA = $columnExists($conn, 'angkutan_pupuk', 'rayon_id');
   $hasGudangIdA = $columnExists($conn, 'angkutan_pupuk', 'gudang_asal_id');
@@ -343,7 +344,7 @@ try {
       $where .= " AND m.rayon_id = :rid";
       $p[':rid'] = $f_rayon_id;
     }
-    if ($f_apl_id !== '' && $hasAplIdM) {
+    if ($f_apl_id !== '' && $hasAplIdM) { // <--- Logika filter APL di query sudah ada
       $where .= " AND m.apl_id = :aid";
       $p[':aid'] = $f_apl_id;
     }
@@ -390,8 +391,8 @@ try {
     $stt->execute();
     $tot_all = $stt->fetch(PDO::FETCH_ASSOC);
     $tot_all_kg = (float)($tot_all['tot_kg'] ?? 0);
-    $tot_all_luas = (float)($tot_all['tot_luas'] ?? 0);
-    $tot_all_invt = (int)($tot_all['tot_invt'] ?? 0);
+  $tot_all_luas = (float)($tot_all['tot_luas'] ?? 0);  
+  $tot_all_invt = (int)($tot_all['tot_invt'] ?? 0); 
     $sum_page_kg = 0.0;
     $sum_page_luas = 0.0;
     $sum_page_invt = 0;
@@ -594,6 +595,12 @@ include_once '../layouts/header.php';
       <div class="md:col-span-2"><label class="block text-xs font-semibold text-gray-700 mb-1">Jenis Pupuk</label><select name="jenis_pupuk" class="i-select">
           <option value="">— Semua Jenis —</option><?php foreach ($pupuks as $jp): ?><option value="<?= htmlspecialchars($jp) ?>" <?= ($f_jenis === $jp) ? 'selected' : '' ?>><?= htmlspecialchars($jp) ?></option><?php endforeach; ?>
         </select></div>
+
+      <?php if ($tab === 'menabur'): ?>
+      <div class="md:col-span-2"><label class="block text-xs font-semibold text-gray-700 mb-1">APL</label><select name="apl_id" class="i-select">
+          <option value="">— Semua APL —</option><?php foreach ($apls as $a): ?><option value="<?= (int)$a['id'] ?>" <?= ($f_apl_id !== '' && (int)$f_apl_id === (int)$a['id']) ? 'selected' : '' ?>><?= htmlspecialchars($a['nama']) ?></option><?php endforeach; ?>
+        </select></div>
+      <?php endif; ?>
       <div class="md:col-span-12 flex items-end justify-between gap-3">
         <div class="flex items-center gap-3">
           <?php $from = $total_rows ? ($offset + 1) : 0;
@@ -797,8 +804,7 @@ include_once '../layouts/header.php';
           <div class="md:col-span-2"><label class="block text-sm font-semibold mb-1">Keterangan</label><select id="keterangan_id_angkutan" name="keterangan_id" class="i-select">
               <option value="">— Pilih Keterangan —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?>
             </select></div>
-          <!-- <div><label class="block text-sm font-semibold mb-1">Nomor DO</label><input type="text" id="nomor_do" name="nomor_do" class="i-input"></div> -->
-          <div><label class="block text-sm font-semibold mb-1">Supir</label><input type="text" id="supir" name="supir" class="i-input"></div>
+          <!-- <div><label class="block text-sm font-semibold mb-1">Supir</label><input type="text" id="supir" name="supir" class="i-input"></div> -->
         </div>
       </div>
 
@@ -1022,7 +1028,7 @@ include_once '../layouts/header.php';
           $('#no_spb_angkutan').value = row.no_spb ?? '';
           $('#keterangan_id_angkutan').value = row.keterangan_id ?? ''; // Isi ID Keterangan
           // $('#nomor_do').value = row.nomor_do ?? '';
-          $('#supir').value = row.supir ?? '';
+          // $('#supir').value = row.supir ?? '';
         }
         // --- Isi Form Menabur ---
         else {

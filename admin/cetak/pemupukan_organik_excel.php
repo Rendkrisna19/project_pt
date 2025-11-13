@@ -92,7 +92,7 @@ $addr = function(int $colIndex, int $rowIndex){
 // Headers (revisi)
 $colHeadersAngkutan = [
   'Tahun','Kebun','Tanggal','Periode','Gudang Asal','Unit Tujuan','Jenis Pupuk',
-  'Jumlah (Kg)','Nomor DO','Supir','Keterangan'
+  'Jumlah (Kg)','Nomor DO','Keterangan'
 ];
 $colHeadersMenabur  = [
   'Tahun','Kebun','Tanggal','Periode','Unit/Defisi','T. Tanam','Blok',
@@ -148,7 +148,6 @@ if (!empty($rows)) {
       $sheet->setCellValue($addr(7,$r), $rec['jenis_pupuk'] ?? '');
       $sheet->setCellValue($addr(8,$r), (float)($rec['jumlah'] ?? 0));
       $sheet->setCellValue($addr(9,$r), $rec['nomor_do'] ?? '');
-      $sheet->setCellValue($addr(10,$r), $rec['supir'] ?? '');
       $sheet->setCellValue($addr(11,$r), $rec['keterangan'] ?? '');
       $sum_jumlah += (float)($rec['jumlah'] ?? 0);
     } else {

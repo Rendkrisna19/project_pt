@@ -1,6 +1,6 @@
 <?php
 // admin/cetak/pemupukan_organik_pdf.php
-// PDF Pemupukan Organik (Menabur/Angkutan) — filter terbaru: tahun, kebun, tanggal, periode, unit, keterangan(angkutan), jenis_pupuk
+// PDF Pemupukan Organik (Menabur/Angkutan) — support filter terbaru & kolom keterangan via relasi
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -19,35 +19,62 @@ function qstr($v){ $v = trim((string)$v); return $v==='' ? null : $v; }
 
 $bulanNama = [1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
 
-// ============ Params & Query ============
+// ============ Params ============
 $tab = $_GET['tab'] ?? 'menabur';
 if (!in_array($tab, ['menabur','angkutan'], true)) $tab = 'menabur';
 
-$f_tahun      = qint($_GET['tahun']      ?? null);
-$f_unit_id    = qint($_GET['unit_id']    ?? null);
-$f_kebun_id   = qint($_GET['kebun_id']   ?? null);
-$f_tanggal    = qstr($_GET['tanggal']    ?? null);
-$f_periode    = qint($_GET['periode']    ?? null);
-$f_keterangan = qstr($_GET['keterangan'] ?? null); // only angkutan
-$f_jenis      = qstr($_GET['jenis_pupuk']?? null);
+$f_tahun         = qint($_GET['tahun']         ?? null);
+$f_unit_id       = qint($_GET['unit_id']       ?? null);
+$f_kebun_id      = qint($_GET['kebun_id']      ?? null);
+$f_tanggal       = qstr($_GET['tanggal']       ?? null);
+$f_periode       = qint($_GET['periode']       ?? null);
+$f_jenis         = qstr($_GET['jenis_pupuk']   ?? null);
+
+// === Filter baru khusus angkutan (ID berbasis master) ===
+$f_rayon_id      = qint($_GET['rayon_id']      ?? null);
+$f_gudang_id     = qint($_GET['asal_gudang_id']?? null);
+$f_keterangan_id = qint($_GET['keterangan_id'] ?? null);
+
+// (legacy text keterangan untuk kompatibilitas—opsional)
+$f_keterangan_legacy = qstr($_GET['keterangan'] ?? null);
+
+// ============ Query ============
 
 if ($tab === 'angkutan') {
-  $sql = "SELECT a.*, u.nama_unit AS unit_tujuan_nama, k.nama_kebun AS kebun_nama,
-                 YEAR(a.tanggal) AS tahun, MONTH(a.tanggal) AS bulan
+  $sql = "SELECT 
+            a.*,
+            k.nama_kebun                         AS kebun_nama,
+            u.nama_unit                          AS unit_tujuan_nama,
+            r.nama                               AS nama_rayon,
+            g.nama                               AS nama_gudang,
+            ket.keterangan                       AS nama_keterangan,
+            YEAR(a.tanggal)                      AS tahun,
+            MONTH(a.tanggal)                     AS bulan
           FROM angkutan_pupuk_organik a
-          LEFT JOIN units u ON u.id = a.unit_tujuan_id
-          LEFT JOIN md_kebun k ON k.id = a.kebun_id
+          LEFT JOIN md_kebun       k   ON k.id = a.kebun_id
+          LEFT JOIN units          u   ON u.id = a.unit_tujuan_id
+          LEFT JOIN md_rayon       r   ON r.id = a.rayon_id
+          LEFT JOIN md_asal_gudang g   ON g.id = a.asal_gudang_id
+          LEFT JOIN md_keterangan  ket ON ket.id = a.keterangan_id
           WHERE 1=1";
   $p = [];
-  if ($f_tahun   !== null) { $sql .= " AND YEAR(a.tanggal)=:th"; $p[':th'] = $f_tahun; }
-  if ($f_unit_id !== null) { $sql .= " AND a.unit_tujuan_id = :uid"; $p[':uid'] = $f_unit_id; }
-  if ($f_kebun_id!== null) { $sql .= " AND a.kebun_id = :kid";      $p[':kid'] = $f_kebun_id; }
-  if ($f_tanggal !== null) { $sql .= " AND a.tanggal  = :tgl";      $p[':tgl'] = $f_tanggal; }
-  if ($f_periode !== null) { $sql .= " AND MONTH(a.tanggal) = :bln";$p[':bln'] = $f_periode; }
-  if ($f_jenis   !== null) { $sql .= " AND a.jenis_pupuk = :jp";    $p[':jp']  = $f_jenis; }
-  if ($f_keterangan!== null){$sql .= " AND a.keterangan LIKE :ket"; $p[':ket'] = "%{$f_keterangan}%"; }
+  if ($f_tahun   !== null) { $sql .= " AND YEAR(a.tanggal)=:th";       $p[':th']  = $f_tahun; }
+  if ($f_unit_id !== null) { $sql .= " AND a.unit_tujuan_id = :uid";   $p[':uid'] = $f_unit_id; }
+  if ($f_kebun_id!== null) { $sql .= " AND a.kebun_id = :kid";         $p[':kid'] = $f_kebun_id; }
+  if ($f_tanggal !== null) { $sql .= " AND a.tanggal  = :tgl";         $p[':tgl'] = $f_tanggal; }
+  if ($f_periode !== null) { $sql .= " AND MONTH(a.tanggal) = :bln";   $p[':bln'] = $f_periode; }
+  if ($f_jenis   !== null) { $sql .= " AND a.jenis_pupuk = :jp";       $p[':jp']  = $f_jenis; }
+  if ($f_rayon_id!== null) { $sql .= " AND a.rayon_id = :rid";         $p[':rid'] = $f_rayon_id; }
+  if ($f_gudang_id!==null) { $sql .= " AND a.asal_gudang_id = :gid";   $p[':gid'] = $f_gudang_id; }
+  if ($f_keterangan_id!==null){$sql .= " AND a.keterangan_id = :kid2"; $p[':kid2']= $f_keterangan_id; }
+  // legacy contains (tidak wajib, hanya jika frontend lama kirim 'keterangan' text)
+  if ($f_keterangan_legacy!==null){ $sql.=" AND ket.keterangan LIKE :ket"; $p[':ket'] = '%'.$f_keterangan_legacy.'%'; }
+
   $sql .= " ORDER BY a.tanggal DESC, a.id DESC";
-  $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+  $st = $pdo->prepare($sql);
+  $st->execute($p);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
   $judul = "Data Angkutan Pupuk Organik";
 
   // Totals
@@ -55,21 +82,29 @@ if ($tab === 'angkutan') {
   foreach ($rows as $r) $tot_jumlah += (float)($r['jumlah'] ?? 0);
 
 } else {
-  $sql = "SELECT m.*, u.nama_unit AS unit_nama, k.nama_kebun AS kebun_nama,
-                 YEAR(m.tanggal) AS tahun, MONTH(m.tanggal) AS bulan
+  $sql = "SELECT 
+            m.*,
+            k.nama_kebun    AS kebun_nama,
+            u.nama_unit     AS unit_nama,
+            YEAR(m.tanggal) AS tahun,
+            MONTH(m.tanggal)AS bulan
           FROM menabur_pupuk_organik m
-          LEFT JOIN units u ON u.id = m.unit_id
           LEFT JOIN md_kebun k ON k.id = m.kebun_id
+          LEFT JOIN units    u ON u.id = m.unit_id
           WHERE 1=1";
   $p = [];
-  if ($f_tahun   !== null) { $sql .= " AND YEAR(m.tanggal)=:th"; $p[':th'] = $f_tahun; }
-  if ($f_unit_id !== null) { $sql .= " AND m.unit_id = :uid";    $p[':uid'] = $f_unit_id; }
-  if ($f_kebun_id!== null) { $sql .= " AND m.kebun_id = :kid";   $p[':kid'] = $f_kebun_id; }
-  if ($f_tanggal !== null) { $sql .= " AND m.tanggal  = :tgl";   $p[':tgl'] = $f_tanggal; }
+  if ($f_tahun   !== null) { $sql .= " AND YEAR(m.tanggal)=:th";     $p[':th']  = $f_tahun; }
+  if ($f_unit_id !== null) { $sql .= " AND m.unit_id = :uid";        $p[':uid'] = $f_unit_id; }
+  if ($f_kebun_id!== null) { $sql .= " AND m.kebun_id = :kid";       $p[':kid'] = $f_kebun_id; }
+  if ($f_tanggal !== null) { $sql .= " AND m.tanggal  = :tgl";       $p[':tgl'] = $f_tanggal; }
   if ($f_periode !== null) { $sql .= " AND MONTH(m.tanggal) = :bln"; $p[':bln'] = $f_periode; }
-  if ($f_jenis   !== null) { $sql .= " AND m.jenis_pupuk = :jp"; $p[':jp']  = $f_jenis; }
+  if ($f_jenis   !== null) { $sql .= " AND m.jenis_pupuk = :jp";     $p[':jp']  = $f_jenis; }
+
   $sql .= " ORDER BY m.tanggal DESC, m.id DESC";
-  $st = $pdo->prepare($sql); $st->execute($p); $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+
+  $st = $pdo->prepare($sql);
+  $st->execute($p);
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
   $judul = "Data Penaburan Pupuk Organik";
 
   // Totals
@@ -82,16 +117,36 @@ if ($tab === 'angkutan') {
   $avg_dosis = $cnt_dosis>0 ? $sum_dosis/$cnt_dosis : 0.0;
 }
 
-// Ambil nama unit/kebun utk footnote filter
-$unitNama = 'Semua Unit';
+// ============ Nama untuk footnote ============
+$unitNama  = 'Semua Unit';
+$kebunNama = 'Semua Kebun';
+$rayonNama = 'Semua Rayon';
+$gudangNama= 'Semua Gudang';
+$ketNama   = 'Semua Keterangan';
+
 if ($f_unit_id !== null) {
   $s = $pdo->prepare("SELECT nama_unit FROM units WHERE id=:id"); $s->execute([':id'=>$f_unit_id]);
   $unitNama = $s->fetchColumn() ?: ('#'.$f_unit_id);
 }
-$kebunNama = 'Semua Kebun';
 if ($f_kebun_id !== null) {
-  $s2 = $pdo->prepare("SELECT nama_kebun FROM md_kebun WHERE id=:id"); $s2->execute([':id'=>$f_kebun_id]);
-  $kebunNama = $s2->fetchColumn() ?: ('#'.$f_kebun_id);
+  $s = $pdo->prepare("SELECT nama_kebun FROM md_kebun WHERE id=:id"); $s->execute([':id'=>$f_kebun_id]);
+  $kebunNama = $s->fetchColumn() ?: ('#'.$f_kebun_id);
+}
+if ($tab==='angkutan') {
+  if ($f_rayon_id !== null) {
+    $s=$pdo->prepare("SELECT nama FROM md_rayon WHERE id=:id"); $s->execute([':id'=>$f_rayon_id]);
+    $rayonNama = $s->fetchColumn() ?: ('#'.$f_rayon_id);
+  }
+  if ($f_gudang_id !== null) {
+    $s=$pdo->prepare("SELECT nama FROM md_asal_gudang WHERE id=:id"); $s->execute([':id'=>$f_gudang_id]);
+    $gudangNama = $s->fetchColumn() ?: ('#'.$f_gudang_id);
+  }
+  if ($f_keterangan_id !== null) {
+    $s=$pdo->prepare("SELECT keterangan FROM md_keterangan WHERE id=:id"); $s->execute([':id'=>$f_keterangan_id]);
+    $ketNama = $s->fetchColumn() ?: ('#'.$f_keterangan_id);
+  } elseif ($f_keterangan_legacy !== null) {
+    $ketNama = $f_keterangan_legacy;
+  }
 }
 
 // ============ Render HTML ============
@@ -131,12 +186,11 @@ ob_start();
           <th>Kebun</th>
           <th>Tanggal</th>
           <th>Periode</th>
+          <th>Rayon</th>
           <th>Gudang Asal</th>
           <th>Unit Tujuan</th>
           <th>Jenis Pupuk</th>
           <th class="right">Jumlah (Kg)</th>
-          <th>Nomor DO</th>
-          <th>Supir</th>
           <th>Keterangan</th>
         </tr>
       <?php else: ?>
@@ -157,7 +211,7 @@ ob_start();
     </thead>
     <tbody>
       <?php if (empty($rows)): ?>
-        <tr><td class="center" colspan="<?= $tab==='angkutan' ? 11 : 11 ?>">Tidak ada data.</td></tr>
+        <tr><td class="center" colspan="<?= $tab==='angkutan' ? 10 : 11 ?>">Tidak ada data.</td></tr>
       <?php else: foreach($rows as $r):
         $bulan = (int)($r['bulan'] ?? 0);
         $periode = ($bulan>=1 && $bulan<=12) ? ($bulan.' - '.$bulanNama[$bulan]) : '-';
@@ -168,13 +222,12 @@ ob_start();
             <td><?= h($r['kebun_nama'] ?? '-') ?></td>
             <td><?= h($r['tanggal'] ?? '') ?></td>
             <td><?= h($periode) ?></td>
-            <td><?= h($r['gudang_asal'] ?? '') ?></td>
+            <td><?= h($r['nama_rayon'] ?? '-') ?></td>
+            <td><?= h($r['nama_gudang'] ?? '-') ?></td>
             <td><?= h($r['unit_tujuan_nama'] ?? '-') ?></td>
             <td><?= h($r['jenis_pupuk'] ?? '') ?></td>
             <td class="right"><?= number_format((float)($r['jumlah'] ?? 0), 2, ',', '.') ?></td>
-            <td><?= h($r['nomor_do'] ?? '') ?></td>
-            <td><?= h($r['supir'] ?? '') ?></td>
-            <td><?= h($r['keterangan'] ?? '') ?></td>
+            <td><?= h($r['nama_keterangan'] ?? '-') ?></td>
           </tr>
         <?php else: ?>
           <tr>
@@ -198,9 +251,9 @@ ob_start();
       <?php if ($tab==='angkutan'): ?>
         <tfoot>
           <tr>
-            <td colspan="7" class="right">TOTAL</td>
+            <td colspan="8" class="right">TOTAL</td>
             <td class="right"><?= number_format($tot_jumlah, 2, ',', '.') ?></td>
-            <td colspan="3"></td>
+            <td></td>
           </tr>
         </tfoot>
       <?php else: ?>
@@ -225,7 +278,11 @@ ob_start();
     <?php if ($f_periode!==null): ?> | Periode: <?= h($f_periode) ?><?php endif; ?>
     <?php if ($f_tanggal!==null): ?> | Tanggal: <?= h($f_tanggal) ?><?php endif; ?>
     <?php if ($f_jenis!==null): ?> | Jenis: <?= h($f_jenis) ?><?php endif; ?>
-    <?php if ($tab==='angkutan' && $f_keterangan!==null): ?> | Keterangan: <?= h($f_keterangan) ?><?php endif; ?>
+    <?php if ($tab==='angkutan'): ?>
+      | Rayon: <?= h($rayonNama) ?>
+      | Gudang: <?= h($gudangNama) ?>
+      | Keterangan: <?= h($ketNama) ?>
+    <?php endif; ?>
   </div>
 </body>
 </html>
@@ -242,10 +299,13 @@ $dompdf->setPaper('A4', 'landscape');
 $dompdf->render();
 
 $fname = 'Pemupukan_Organik_'.$tab
-        .($f_tahun   ? '_THN-'.$f_tahun   : '')
-        .($f_unit_id ? '_UNIT-'.$f_unit_id: '')
-        .($f_kebun_id? '_KEBUN-'.$f_kebun_id: '')
-        .($f_periode ? '_BLN-'.$f_periode: '')
+        .($f_tahun    ? '_THN-'.$f_tahun       : '')
+        .($f_unit_id  ? '_UNIT-'.$f_unit_id    : '')
+        .($f_kebun_id ? '_KEBUN-'.$f_kebun_id  : '')
+        .($f_periode  ? '_BLN-'.$f_periode     : '')
+        .($f_rayon_id ? '_RY-'.$f_rayon_id     : '')
+        .($f_gudang_id? '_GD-'.$f_gudang_id    : '')
+        .($f_keterangan_id ? '_KET-'.$f_keterangan_id : '')
         .'.pdf';
 
 $dompdf->stream($fname, ['Attachment'=>true]);

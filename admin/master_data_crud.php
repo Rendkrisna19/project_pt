@@ -13,7 +13,7 @@ set_error_handler(function ($sev, $msg, $file, $line) {
 });
 set_exception_handler(function ($e) {
   http_response_code(500);
-  error_log("Master Data CRUD Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine()); // Log error
+  error_log("Master Data CRUD Error: " . $e->getMessage() . " in " . $e->getFile() . ":" . $e->getLine());
   echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan pada server.']);
   exit;
 });
@@ -32,7 +32,6 @@ if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], ($_P
   exit;
 }
 
-
 /* ===== DB ===== */
 require_once '../config/database.php';
 $db = new Database();
@@ -40,19 +39,16 @@ $conn = $db->getConnection();
 $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 /* ===== UTIL ===== */
-function null_if_empty($v)
-{
+function null_if_empty($v) {
   if (!isset($v)) return null;
   if (is_string($v) && trim($v) === '') return null;
   return $v;
 }
-function int_or_null($v)
-{
+function int_or_null($v) {
   $v = null_if_empty($v);
   return $v === null ? null : (int)$v;
 }
-function float_or_null($v)
-{
+function float_or_null($v) {
   $v = null_if_empty($v);
   return $v === null ? null : (float)$v;
 }
@@ -73,7 +69,7 @@ $MAP = [
     'joins' => '',
     'order' => 'k.nama_kebun ASC',
     'searchable' => ['k.kode', 'k.nama_kebun', 'k.keterangan'],
-    'unique_cols' => ['kode'] // Kolom yang harus unik
+    'unique_cols' => ['kode']
   ],
 
   // Bahan Kimia
@@ -97,7 +93,7 @@ $MAP = [
     'required' => ['nama'],
     'select' => 't.*',
     'joins' => '',
-    'order' => 't.nama ASC', // Order by nama
+    'order' => 't.nama ASC',
     'searchable' => ['t.nama', 't.keterangan'],
     'unique_cols' => ['nama']
   ],
@@ -122,10 +118,11 @@ $MAP = [
     'required' => ['nama_unit'],
     'select' => 'u.*',
     'joins' => '',
-    'order' => 'u.nama_unit ASC', // Order by nama_unit
+    'order' => 'u.nama_unit ASC',
     'searchable' => ['u.nama_unit', 'u.keterangan'],
     'unique_cols' => ['nama_unit']
   ],
+
   'tahun_tanam' => [
     'table' => 'md_tahun_tanam',
     'alias' => 't',
@@ -137,6 +134,7 @@ $MAP = [
     'searchable' => ['t.tahun', 't.keterangan'],
     'unique_cols' => ['tahun']
   ],
+
   'blok' => [
     'table' => 'md_blok',
     'alias' => 'b',
@@ -144,10 +142,11 @@ $MAP = [
     'required' => ['unit_id', 'kode'],
     'select' => 'b.*, u.nama_unit',
     'joins' => 'LEFT JOIN units u ON b.unit_id=u.id',
-    'order' => 'u.nama_unit ASC, b.kode ASC', // Order by unit then kode
+    'order' => 'u.nama_unit ASC, b.kode ASC',
     'searchable' => ['b.kode', 'u.nama_unit', 'b.tahun_tanam'],
-    'unique_cols' => ['kode'] // Asumsi kode blok unik secara global, atau perlu cek kombinasi unit+kode
+    'unique_cols' => ['kode']
   ],
+
   'fisik' => [
     'table' => 'md_fisik',
     'alias' => 'f',
@@ -155,10 +154,11 @@ $MAP = [
     'required' => ['nama'],
     'select' => 'f.*',
     'joins' => '',
-    'order' => 'f.nama ASC', // Order by nama
+    'order' => 'f.nama ASC',
     'searchable' => ['f.nama'],
     'unique_cols' => ['nama']
   ],
+
   'satuan' => [
     'table' => 'md_satuan',
     'alias' => 's',
@@ -166,10 +166,11 @@ $MAP = [
     'required' => ['nama'],
     'select' => 's.*',
     'joins' => '',
-    'order' => 's.nama ASC', // Order by nama
+    'order' => 's.nama ASC',
     'searchable' => ['s.nama'],
     'unique_cols' => ['nama']
   ],
+
   'tenaga' => [
     'table' => 'md_tenaga',
     'alias' => 't',
@@ -177,10 +178,11 @@ $MAP = [
     'required' => ['kode', 'nama'],
     'select' => 't.*',
     'joins' => '',
-    'order' => 't.nama ASC', // Order by nama
+    'order' => 't.nama ASC',
     'searchable' => ['t.kode', 't.nama'],
     'unique_cols' => ['kode', 'nama']
   ],
+
   'mobil' => [
     'table' => 'md_mobil',
     'alias' => 'm',
@@ -188,10 +190,11 @@ $MAP = [
     'required' => ['kode', 'nama'],
     'select' => 'm.*',
     'joins' => '',
-    'order' => 'm.nama ASC', // Order by nama
+    'order' => 'm.nama ASC',
     'searchable' => ['m.kode', 'm.nama'],
     'unique_cols' => ['kode', 'nama']
   ],
+
   'alat_panen' => [
     'table' => 'md_jenis_alat_panen',
     'alias' => 'a',
@@ -199,10 +202,11 @@ $MAP = [
     'required' => ['nama'],
     'select' => 'a.*',
     'joins' => '',
-    'order' => 'a.nama ASC', // Order by nama
+    'order' => 'a.nama ASC',
     'searchable' => ['a.nama', 'a.keterangan'],
     'unique_cols' => ['nama']
   ],
+
   'sap' => [
     'table' => 'md_sap',
     'alias' => 's',
@@ -210,10 +214,11 @@ $MAP = [
     'required' => ['no_sap'],
     'select' => 's.*',
     'joins' => '',
-    'order' => 's.no_sap ASC', // Order by no_sap
+    'order' => 's.no_sap ASC',
     'searchable' => ['s.no_sap', 's.deskripsi'],
     'unique_cols' => ['no_sap']
   ],
+
   'jabatan' => [
     'table' => 'md_jabatan',
     'alias' => 'j',
@@ -221,10 +226,11 @@ $MAP = [
     'required' => ['nama'],
     'select' => 'j.*',
     'joins' => '',
-    'order' => 'j.nama ASC', // Order by nama
+    'order' => 'j.nama ASC',
     'searchable' => ['j.nama'],
     'unique_cols' => ['nama']
   ],
+
   'pupuk' => [
     'table' => 'md_pupuk',
     'alias' => 'p',
@@ -232,10 +238,11 @@ $MAP = [
     'required' => ['nama'],
     'select' => 'p.*, st.nama AS nama_satuan',
     'joins' => 'LEFT JOIN md_satuan st ON p.satuan_id=st.id',
-    'order' => 'p.nama ASC', // Order by nama
+    'order' => 'p.nama ASC',
     'searchable' => ['p.nama', 'st.nama'],
     'unique_cols' => ['nama']
   ],
+
   'kode_aktivitas' => [
     'table' => 'md_kode_aktivitas',
     'alias' => 'k',
@@ -243,10 +250,11 @@ $MAP = [
     'required' => ['kode', 'nama'],
     'select' => 'k.*, s.no_sap',
     'joins' => 'LEFT JOIN md_sap s ON k.no_sap_id=s.id',
-    'order' => 'k.kode ASC', // Order by kode
+    'order' => 'k.kode ASC',
     'searchable' => ['k.kode', 'k.nama', 's.no_sap'],
     'unique_cols' => ['kode']
   ],
+
   'anggaran' => [
     'table' => 'md_anggaran',
     'alias' => 'a',
@@ -258,9 +266,9 @@ $MAP = [
               LEFT JOIN md_pupuk p ON a.pupuk_id=p.id',
     'order' => 'a.tahun DESC, FIELD(a.bulan,"Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember") DESC, u.nama_unit ASC',
     'searchable' => ['a.tahun', 'a.bulan', 'u.nama_unit', 'k.kode', 'p.nama']
-    // Unique check for anggaran might be complex (combination of fields) - skipped for now
   ],
-  // === [MODIFIED] Entitas Baru ===
+
+  // === Entity Baru Sederhana ===
   'rayon' => [
     'table' => 'md_rayon',
     'alias' => 'r',
@@ -274,7 +282,7 @@ $MAP = [
   ],
   'apl' => [
     'table' => 'md_apl',
-    'alias' => 'apl', // alias can be different from entity name
+    'alias' => 'apl',
     'cols' => ['nama'],
     'required' => ['nama'],
     'select' => 'apl.*',
@@ -286,13 +294,12 @@ $MAP = [
   'keterangan' => [
     'table' => 'md_keterangan',
     'alias' => 'ket',
-    'cols' => ['keterangan'], // Only keterangan column
+    'cols' => ['keterangan'],
     'required' => ['keterangan'],
     'select' => 'ket.*',
     'joins' => '',
-    'order' => 'ket.id DESC', // Order by newest first
+    'order' => 'ket.id DESC',
     'searchable' => ['ket.keterangan'],
-    // 'unique_cols' => [] // Keterangan doesn't need to be unique
   ],
   'asal_gudang' => [
     'table' => 'md_asal_gudang',
@@ -306,6 +313,7 @@ $MAP = [
     'unique_cols' => ['nama']
   ],
 
+  // === Pemeliharaan (nama + deskripsi) ===
   'pem_tm' => [
     'table' => 'md_pemeliharaan_tm',
     'alias' => 't',
@@ -395,6 +403,29 @@ $MAP = [
     'unique_cols' => ['nama']
   ],
 
+  // === NEW: Bibit TM & Bibit PN ===
+  'bibit_tm' => [
+    'table' => 'md_jenis_bibitmn',
+    'alias' => 'btm',
+    'cols' => ['kode', 'nama', 'is_active'],
+    'required' => ['nama'],
+    'select' => 'btm.*',
+    'joins' => '',
+    'order' => 'btm.nama ASC',
+    'searchable' => ['btm.kode', 'btm.nama'],
+    'unique_cols' => ['nama', 'kode'] // kode unik jika diisi; jika null, dilewati
+  ],
+  'bibit_pn' => [
+    'table' => 'md_jenis_bibitpn',
+    'alias' => 'bpn',
+    'cols' => ['kode', 'nama', 'is_active'],
+    'required' => ['nama'],
+    'select' => 'bpn.*',
+    'joins' => '',
+    'order' => 'bpn.nama ASC',
+    'searchable' => ['bpn.kode', 'bpn.nama'],
+    'unique_cols' => ['nama', 'kode']
+  ],
 ];
 
 if (!isset($MAP[$entity])) {
@@ -408,19 +439,16 @@ $select = $cfg['select'] ?? "$alias.*";
 $joins = $cfg['joins'] ?? '';
 $order = $cfg['order'] ?? "$alias.id DESC";
 $searchable = $cfg['searchable'] ?? [];
-$uniqueCols = $cfg['unique_cols'] ?? []; // Kolom unik
+$uniqueCols = $cfg['unique_cols'] ?? [];
 
-/* ========= LIST (pagination + optional search + filter blok) ========= */
+/* ========= LIST ========= */
 if ($action === 'list') {
-  // pagination
   $page = max(1, (int)($_POST['page'] ?? 1));
   $per  = min(500, max(1, (int)($_POST['per_page'] ?? 15)));
   $off  = ($page - 1) * $per;
 
-  // pencarian umum 'q' (opsional)
   $q = trim((string)($_POST['q'] ?? ''));
 
-  // where & params
   $where = ' WHERE 1=1 ';
   $params = [];
 
@@ -435,43 +463,27 @@ if ($action === 'list') {
     }
   }
 
-  // filter khusus entity 'blok'
   if ($entity === 'blok') {
     $unit_id = int_or_null($_POST['unit_id'] ?? '');
     $kode    = null_if_empty($_POST['kode'] ?? '');
     $tahun   = int_or_null($_POST['tahun'] ?? '');
 
-    if ($unit_id !== null) {
-      $where .= " AND b.unit_id = :unit_id";
-      $params[':unit_id'] = $unit_id;
-    }
-    if ($kode !== null) {
-      $where .= " AND b.kode LIKE :kode";
-      $params[':kode']    = "%$kode%";
-    }
-    if ($tahun !== null) {
-      $where .= " AND b.tahun_tanam = :th";
-      $params[':th']      = $tahun;
-    }
+    if ($unit_id !== null) { $where .= " AND b.unit_id = :unit_id"; $params[':unit_id'] = $unit_id; }
+    if ($kode !== null)    { $where .= " AND b.kode LIKE :kode";   $params[':kode'] = "%$kode%"; }
+    if ($tahun !== null)   { $where .= " AND b.tahun_tanam = :th"; $params[':th'] = $tahun; }
   }
 
-  // SQL count
   $from = " FROM $table $alias ";
   if ($joins) $from .= " $joins ";
   $sqlCount = "SELECT COUNT(*) AS c " . $from . $where;
   $stC = $conn->prepare($sqlCount);
-  foreach ($params as $k => $v) {
-    $stC->bindValue($k, $v);
-  }
+  foreach ($params as $k => $v) $stC->bindValue($k, $v);
   $stC->execute();
   $total = (int)$stC->fetchColumn();
 
-  // SQL data
   $sql = "SELECT $select " . $from . $where . " ORDER BY $order LIMIT :lim OFFSET :off";
   $st  = $conn->prepare($sql);
-  foreach ($params as $k => $v) {
-    $st->bindValue($k, $v);
-  }
+  foreach ($params as $k => $v) $st->bindValue($k, $v);
   $st->bindValue(':lim', $per, PDO::PARAM_INT);
   $st->bindValue(':off', $off, PDO::PARAM_INT);
   $st->execute();
@@ -497,7 +509,7 @@ if ($action === 'store' || $action === 'update') {
     $data[$k] = null_if_empty($v);
   }
 
-  // casting sesuai entity
+  // casting khusus
   if ($entity === 'tahun_tanam') {
     $data['tahun'] = int_or_null($data['tahun'] ?? null);
   }
@@ -522,11 +534,15 @@ if ($action === 'store' || $action === 'update') {
     $data['pupuk_id']            = int_or_null($data['pupuk_id'] ?? null);
     $data['anggaran_bulan_ini']  = float_or_null($data['anggaran_bulan_ini'] ?? null);
     $data['anggaran_tahun']      = float_or_null($data['anggaran_tahun'] ?? null);
-    $allowedBulan = ["Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus", "September", "Oktober", "November", "Desember"];
+    $allowedBulan = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
     if (isset($data['bulan']) && !in_array($data['bulan'], $allowedBulan, true)) {
-      echo json_encode(['success' => false, 'message' => 'Bulan tidak valid']);
-      exit;
+      echo json_encode(['success' => false, 'message' => 'Bulan tidak valid']); exit;
     }
+  }
+  // NEW: normalisasi checkbox is_active (default 1)
+  if ($entity === 'bibit_tm' || $entity === 'bibit_pn') {
+    // jika tidak terkirim (edge case), anggap 0; namun dari UI kita kirim eksplisit 1/0
+    $data['is_active'] = (isset($_POST['is_active']) && $_POST['is_active'] !== '0') ? 1 : 0;
   }
 
   // validasi wajib
@@ -540,17 +556,15 @@ if ($action === 'store' || $action === 'update') {
     }
   }
 
-  // [MODIFIED] Cek keunikan (Uniqueness Check)
+  // cek unik
   $currentId = ($action === 'update') ? (int)($_POST['id'] ?? 0) : 0;
   if (!empty($uniqueCols)) {
     foreach ($uniqueCols as $col) {
-      if (isset($data[$col])) {
+      if (array_key_exists($col, $data) && $data[$col] !== null) {
         $sqlC = "SELECT id FROM {$table} WHERE {$col} = :val " . ($currentId > 0 ? ' AND id <> :id' : '') . " LIMIT 1";
         $stC = $conn->prepare($sqlC);
         $stC->bindValue(':val', $data[$col]);
-        if ($currentId > 0) {
-          $stC->bindValue(':id', $currentId, PDO::PARAM_INT);
-        }
+        if ($currentId > 0) $stC->bindValue(':id', $currentId, PDO::PARAM_INT);
         $stC->execute();
         if ($stC->fetch()) {
           echo json_encode(['success' => false, 'message' => ucfirst(str_replace('_', ' ', $col)) . " '{$data[$col]}' sudah digunakan."]);
@@ -560,50 +574,31 @@ if ($action === 'store' || $action === 'update') {
     }
   }
 
-
   if ($action === 'store') {
     $cols = array_keys($data);
     $vals = array_map(fn($c) => ":$c", $cols);
-    // Tambahkan created_at dan updated_at jika ada di tabel
-    if (in_array('created_at', $cfg['cols'] ?? [])) {
-      $cols[] = 'created_at';
-      $vals[] = 'NOW()';
-    }
-    if (in_array('updated_at', $cfg['cols'] ?? [])) {
-      $cols[] = 'updated_at';
-      $vals[] = 'NOW()';
-    }
 
     $sql = "INSERT INTO {$table} (" . implode(',', $cols) . ") VALUES (" . implode(',', $vals) . ")";
     $st  = $conn->prepare($sql);
     foreach ($data as $k => $v) {
-      $param = is_null($v) ? PDO::PARAM_NULL : (is_int($v) ? PDO::PARAM_INT : (is_float($v) ? PDO::PARAM_STR : PDO::PARAM_STR)); // Handle float as string
+      $param = is_null($v) ? PDO::PARAM_NULL : (is_int($v) ? PDO::PARAM_INT : (is_float($v) ? PDO::PARAM_STR : PDO::PARAM_STR));
       $st->bindValue(":$k", $v, $param);
     }
     $st->execute();
     echo json_encode(['success' => true, 'message' => 'Data berhasil disimpan', 'id' => $conn->lastInsertId()]);
     exit;
-  } else { // update
+  } else {
     $id = (int)($_POST['id'] ?? 0);
-    if ($id <= 0) {
-      echo json_encode(['success' => false, 'message' => 'ID tidak valid']);
-      exit;
-    }
+    if ($id <= 0) { echo json_encode(['success' => false, 'message' => 'ID tidak valid']); exit; }
 
     $setParts = [];
-    foreach (array_keys($data) as $c) {
-      $setParts[] = "$c = :$c";
-    }
-    // Tambahkan updated_at jika ada di tabel
-    if (in_array('updated_at', $cfg['cols'] ?? [])) {
-      $setParts[] = "updated_at = NOW()";
-    }
-
+    foreach (array_keys($data) as $c) $setParts[] = "$c = :$c";
     $set = implode(', ', $setParts);
+
     $sql = "UPDATE {$table} SET {$set} WHERE id=:id";
     $st  = $conn->prepare($sql);
     foreach ($data as $k => $v) {
-      $param = is_null($v) ? PDO::PARAM_NULL : (is_int($v) ? PDO::PARAM_INT : (is_float($v) ? PDO::PARAM_STR : PDO::PARAM_STR)); // Handle float as string
+      $param = is_null($v) ? PDO::PARAM_NULL : (is_int($v) ? PDO::PARAM_INT : (is_float($v) ? PDO::PARAM_STR : PDO::PARAM_STR));
       $st->bindValue(":$k", $v, $param);
     }
     $st->bindValue(':id', $id, PDO::PARAM_INT);
@@ -616,26 +611,17 @@ if ($action === 'store' || $action === 'update') {
 /* ========= DELETE ========= */
 if ($action === 'delete') {
   $id = (int)($_POST['id'] ?? 0);
-  if ($id <= 0) {
-    echo json_encode(['success' => false, 'message' => 'ID tidak valid']);
-    exit;
-  }
+  if ($id <= 0) { echo json_encode(['success' => false, 'message' => 'ID tidak valid']); exit; }
   try {
     $st = $conn->prepare("DELETE FROM {$table} WHERE id=:id");
     $st->execute([':id' => $id]);
-    echo json_encode(['success' => true, 'message' => 'Data berhasil dihapus']);
-    exit;
+    echo json_encode(['success' => true, 'message' => 'Data berhasil dihapus']); exit;
   } catch (PDOException $e) {
-    // Cek kode error untuk foreign key constraint violation
     if ($e->getCode() === '23000') {
-      echo json_encode(['success' => false, 'message' => 'Tidak bisa menghapus: data master ini sedang digunakan di tabel lain.']);
-      exit;
+      echo json_encode(['success' => false, 'message' => 'Tidak bisa menghapus: data master ini sedang digunakan di tabel lain.']); exit;
     }
-    // Jika error lain, log dan beri pesan generik
     error_log("Master Data Delete Error: " . $e->getMessage());
-    echo json_encode(['success' => false, 'message' => 'Gagal menghapus data karena masalah database.']);
-    exit;
-    // throw $e; // Jangan re-throw di production
+    echo json_encode(['success' => false, 'message' => 'Gagal menghapus data karena masalah database.']); exit;
   }
 }
 
