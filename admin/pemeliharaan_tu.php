@@ -1,5 +1,5 @@
 <?php
-// pages/pemeliharaan_tu.php — Rekap TM (Live Filter / No Reload)
+// pages/pemeliharaan_tu.php — Rekap TU (Live Filter / No Reload)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
@@ -9,8 +9,19 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
 
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf   = ($userRole === 'staf');
+// --- MODIFIKASI PERMISSION LOGIC ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer jika session error
+
+// Admin: Input & Action (Edit/Del)
+// Staf: Input Only
+// Viewer: View Only
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+$canInput  = ($isAdmin || $isStaf); // Admin dan Staf boleh input
+$canAction = ($isAdmin);            // Hanya Admin boleh Edit/Hapus
+// -----------------------------------
 
 require_once '../config/database.php';
 $db   = new Database();
@@ -26,7 +37,8 @@ $JENIS_ROWS  = $conn->query("SELECT id, nama FROM md_pemeliharaan_tu ORDER BY na
 /* Konfigurasi Kolom */
 $monthLabels = ['Jan','Feb','Mar','Apr','Mei','Juni','Juli','Agust','Sept','Okt','Nov','Des'];
 $monthKeys   = ['jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des']; 
-$COLS_TOTAL  = 7 + 1 + count($monthLabels) + 1 + 1 + 1 + ($isStaf ? 0 : 1);
+// Modifikasi jumlah kolom total berdasarkan $canAction
+$COLS_TOTAL  = 7 + 1 + count($monthLabels) + 1 + 1 + 1 + ($canAction ? 1 : 0);
 
 $currentPage = 'pemeliharaan_tu';
 include_once '../layouts/header.php';
@@ -130,7 +142,7 @@ include_once '../layouts/header.php';
           <i class="ti ti-file-type-pdf"></i> <span class="hidden md:inline">PDF</span>
       </button>
 
-      <?php if (!$isStaf): ?>
+      <?php if ($canInput): ?>
         <button id="btn-add" class="btn shadow-md"><i class="ti ti-plus"></i> Tambah Data</button>
       <?php endif; ?>
   </div>
@@ -180,10 +192,10 @@ include_once '../layouts/header.php';
 
   <div class="flex justify-between items-center px-1 mb-2">
       <div class="text-sm text-gray-600 font-medium" id="filter-info">
-         Menampilkan data...
+          Menampilkan data...
       </div>
       <div id="loading-indicator" class="hidden text-blue-600 text-sm font-bold flex items-center gap-1">
-         <i class="ti ti-loader animate-spin"></i> Memuat...
+          <i class="ti ti-loader animate-spin"></i> Memuat...
       </div>
   </div>
 
@@ -203,7 +215,7 @@ include_once '../layouts/header.php';
           <th rowspan="2" class="text-right" style="min-width:120px;">Jumlah Realisasi</th>
           <th rowspan="2" class="text-right" style="min-width:120px;">+/- Anggaran</th>
           <th rowspan="2" class="text-right" style="min-width:80px;">%</th>
-          <?php if(!$isStaf): ?><th rowspan="2" class="text-center" style="min-width:100px;">Aksi</th><?php endif; ?>
+          <?php if($canAction): ?><th rowspan="2" class="text-center" style="min-width:100px;">Aksi</th><?php endif; ?>
         </tr>
         <tr>
           <?php foreach($monthLabels as $m): ?>
@@ -249,7 +261,11 @@ function exportData(type) {
 
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  const IS_STAF = <?= $isStaf ? 'true' : 'false' ?>;
+  // --- MODIFIKASI LOGIC JS ---
+  // Mengambil variable dari PHP
+  const CAN_ACTION = <?= $canAction ? 'true' : 'false' ?>; // Untuk edit/delete
+  const CAN_INPUT  = <?= $canInput ? 'true' : 'false' ?>;  // Untuk tambah data
+
   const CSRF    = '<?= htmlspecialchars($CSRF) ?>';
   const months  = <?= json_encode($monthKeys) ?>;
   const COLS_TOTAL = <?= $COLS_TOTAL ?>;
@@ -272,7 +288,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const inpHk     = document.getElementById('f_hk');
   const inpKet    = document.getElementById('f_ket');
 
-  if (btnAdd) btnAdd.addEventListener('click', ()=> openForm({ unit_kode: inpAfd.value || 'AFD01', tahun: inpTahun.value }));
+  // MODIFIKASI: Event listener hanya dipasang jika user boleh input
+  if (btnAdd && CAN_INPUT) {
+      btnAdd.addEventListener('click', ()=> openForm({ unit_kode: inpAfd.value || 'AFD01', tahun: inpTahun.value }));
+  }
 
   // Rayon Logic
   const rayonA_AFDS = ['AFD02','AFD03','AFD04','AFD05','AFD06'];
@@ -398,7 +417,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             <td class="text-right font-semibold text-gray-900">${dash(jml)}</td>
             <td class="text-right ${deltCls}">${deltStr}</td>
             <td class="text-right text-sm">${dashPct(prog)}</td>
-            ${!IS_STAF ? `
+            ${CAN_ACTION ? `
             <td class="text-center">
               <div class="flex justify-center gap-1">
                 <button class="act text-blue-600 border-blue-200 hover:bg-blue-50" title="Edit" data-edit='${JSON.stringify(r).replaceAll("'","&apos;")}'><i class="ti ti-pencil"></i></button>
@@ -418,7 +437,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
           <td class="text-right">${dash(sumJenis.jumlah)}</td>
           <td class="text-right ${(deltaJenis<0)?'delta-neg':(deltaJenis>0?'delta-pos':'')}">${Number(deltaJenis||0)===0?'—':nf(deltaJenis)}</td>
           <td class="text-right">${sumJenis.anggaran>0?dashPct(sumJenis.jumlah/sumJenis.anggaran*100):'—'}</td>
-          ${!IS_STAF ? '<td></td>' : ''}
+          ${CAN_ACTION ? '<td></td>' : ''}
         </tr>
       `;
 
@@ -433,7 +452,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             <td class="text-right">${dash(sumRY['RY A'].jumlah)}</td>
             <td class="text-right ${(dRYA<0)?'delta-neg':(dRYA>0?'delta-pos':'')}">${Number(dRYA||0)===0?'—':nf(dRYA)}</td>
             <td class="text-right">${sumRY['RY A'].anggaran>0?dashPct(sumRY['RY A'].jumlah/sumRY['RY A'].anggaran*100):'—'}</td>
-            ${!IS_STAF ? '<td></td>' : ''}
+            ${CAN_ACTION ? '<td></td>' : ''}
           </tr>`;
       }
 
@@ -448,15 +467,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
             <td class="text-right">${dash(sumRY['RY B'].jumlah)}</td>
             <td class="text-right ${(dRYB<0)?'delta-neg':(dRYB>0?'delta-pos':'')}">${Number(dRYB||0)===0?'—':nf(dRYB)}</td>
             <td class="text-right">${sumRY['RY B'].anggaran>0?dashPct(sumRY['RY B'].jumlah/sumRY['RY B'].anggaran*100):'—'}</td>
-            ${!IS_STAF ? '<td></td>' : ''}
+            ${CAN_ACTION ? '<td></td>' : ''}
           </tr>`;
       }
     } // end for order
     
     tbody.innerHTML = html;
     
-    // Re-bind actions
-    if (!IS_STAF) bindActions();
+    // Re-bind actions hanya jika boleh aksi
+    if (CAN_ACTION) bindActions();
   }
 
   // --- ACTION BINDING (Edit/Delete) ---
@@ -656,13 +675,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  <?php if(!$isStaf): ?>
-  document.addEventListener('keydown', (e)=>{ 
-    if (e.key==='n' && (e.ctrlKey||e.metaKey)){ 
-      e.preventDefault(); 
-      openForm({ unit_kode: inpAfd.value || 'AFD01', tahun: inpTahun.value }); 
-    }
-  });
-  <?php endif; ?>
+  // MODIFIKASI: Shortcut hanya aktif jika boleh input
+  if (CAN_INPUT) {
+    document.addEventListener('keydown', (e)=>{ 
+        if (e.key==='n' && (e.ctrlKey||e.metaKey)){ 
+        e.preventDefault(); 
+        openForm({ unit_kode: inpAfd.value || 'AFD01', tahun: inpTahun.value }); 
+        }
+    });
+  }
 });
 </script>
