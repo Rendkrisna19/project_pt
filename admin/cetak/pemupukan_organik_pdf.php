@@ -1,6 +1,7 @@
 <?php
 // admin/cetak/pemupukan_organik_pdf.php
-// PDF Pemupukan Organik (Menabur/Angkutan) — support filter terbaru & kolom keterangan via relasi
+// PDF Pemupukan Organik (Menabur/Angkutan) — PREVIEW MODE (Tidak Auto Download)
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -43,13 +44,13 @@ $f_keterangan_legacy = qstr($_GET['keterangan'] ?? null);
 if ($tab === 'angkutan') {
   $sql = "SELECT 
             a.*,
-            k.nama_kebun                         AS kebun_nama,
-            u.nama_unit                          AS unit_tujuan_nama,
-            r.nama                               AS nama_rayon,
-            g.nama                               AS nama_gudang,
-            ket.keterangan                       AS nama_keterangan,
-            YEAR(a.tanggal)                      AS tahun,
-            MONTH(a.tanggal)                     AS bulan
+            k.nama_kebun                       AS kebun_nama,
+            u.nama_unit                        AS unit_tujuan_nama,
+            r.nama                             AS nama_rayon,
+            g.nama                             AS nama_gudang,
+            ket.keterangan                     AS nama_keterangan,
+            YEAR(a.tanggal)                    AS tahun,
+            MONTH(a.tanggal)                   AS bulan
           FROM angkutan_pupuk_organik a
           LEFT JOIN md_kebun       k   ON k.id = a.kebun_id
           LEFT JOIN units          u   ON u.id = a.unit_tujuan_id
@@ -67,7 +68,7 @@ if ($tab === 'angkutan') {
   if ($f_rayon_id!== null) { $sql .= " AND a.rayon_id = :rid";         $p[':rid'] = $f_rayon_id; }
   if ($f_gudang_id!==null) { $sql .= " AND a.asal_gudang_id = :gid";   $p[':gid'] = $f_gudang_id; }
   if ($f_keterangan_id!==null){$sql .= " AND a.keterangan_id = :kid2"; $p[':kid2']= $f_keterangan_id; }
-  // legacy contains (tidak wajib, hanya jika frontend lama kirim 'keterangan' text)
+  // legacy contains
   if ($f_keterangan_legacy!==null){ $sql.=" AND ket.keterangan LIKE :ket"; $p[':ket'] = '%'.$f_keterangan_legacy.'%'; }
 
   $sql .= " ORDER BY a.tanggal DESC, a.id DESC";
@@ -308,4 +309,6 @@ $fname = 'Pemupukan_Organik_'.$tab
         .($f_keterangan_id ? '_KET-'.$f_keterangan_id : '')
         .'.pdf';
 
-$dompdf->stream($fname, ['Attachment'=>true]);
+// MODIFIKASI: Attachment => false agar preview di browser
+$dompdf->stream($fname, ['Attachment' => false]);
+?>

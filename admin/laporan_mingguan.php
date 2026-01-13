@@ -6,7 +6,7 @@ if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
 
-// Role (asumsikan admin/non-staf bisa kelola kategori)
+// Role Check
 $userRole = $_SESSION['user_role'] ?? 'staf';
 $isStaf   = ($userRole === 'staf');
 
@@ -14,79 +14,252 @@ require_once '../config/database.php';
 $db   = new Database();
 $conn = $db->getConnection();
 
-// Ganti $currentPage jadi 'laporan_mingguan' agar menu aktif
 $currentPage = 'laporan_mingguan'; 
 include_once '../layouts/header.php';
 ?>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
 
+<style>
+  /* --- Grid Container --- */
+  .grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.25rem;
+    padding-bottom: 2rem;
+  }
+
+  /* --- Widget Card Base Style --- */
+  .widget-card {
+    border-radius: 12px;
+    position: relative;
+    color: #ffffff; /* Teks Putih Bersih */
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    display: flex;
+    flex-direction: column;
+    min-height: 150px; /* Sedikit lebih tinggi untuk menampung judul besar */
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  /* Efek Hover */
+  .widget-card:hover {
+    transform: translateY(-7px);
+    box-shadow: 0 20px 35px rgba(0,0,0,0.35);
+    z-index: 10;
+  }
+
+  /* Konten Utama (Atas) */
+  .widget-body {
+    padding: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center; /* Center vertikal */
+    flex: 1;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* === MODIFIKASI: IKON JELAS & BESAR === */
+  .widget-icon {
+    font-size: 5rem; /* Sangat Besar */
+    color: rgba(255, 255, 255, 0.9); /* Putih Terang (Hampir Solid) */
+    position: absolute;
+    left: 0.5rem;
+    bottom: 2.5rem; 
+    transition: all 0.4s ease;
+    z-index: 1;
+  }
+  
+  .widget-card:hover .widget-icon {
+    transform: scale(1.1) rotate(-8deg);
+    color: #ffffff; /* Solid Putih saat hover */
+  }
+
+  /* Bagian Teks di Kanan */
+  .widget-text {
+    text-align: right;
+    width: 100%;
+    z-index: 3;
+    margin-left: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: center;
+    padding-left: 4rem; /* Ruang agar tidak menabrak ikon besar */
+  }
+
+  /* === MODIFIKASI: ANGKA DATA DIKECILIN === */
+  .widget-count {
+    font-size: 1rem; /* Lebih kecil dari sebelumnya */
+    font-weight: 200;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+    opacity: 0.9;
+    order: 1; /* Pindah ke atas judul */
+  }
+
+  /* === MODIFIKASI: JUDUL DIPERBESAR === */
+  .widget-title {
+    font-size: 1.25rem; /* Jauh Lebih Besar */
+    font-weight: 700; /* Lebih Tebal (Bold) */
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+    opacity: 1; /* Sangat Jelas */
+    text-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Shadow agar lebih pop-out */
+    order: 2; /* Pindah ke bawah angka */
+    word-break: break-word; /* Agar text panjang turun ke bawah */
+  }
+
+  /* Footer (Bagian Bawah "More Info") */
+  .widget-footer {
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(5px);
+    padding: 0.75rem 1rem;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    z-index: 4;
+  }
+  
+  .widget-desc {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 85%;
+    font-style: italic;
+    opacity: 0.85;
+    color: #f1f5f9;
+  }
+
+  /* Badge Nomor */
+  .widget-number {
+    position: absolute;
+    top: 0;
+    left: 0;
+    background: rgba(0,0,0,0.4);
+    color: #fff;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    border-bottom-right-radius: 10px;
+    z-index: 5;
+    border-right: 1px solid rgba(255,255,255,0.2);
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+  }
+
+  /* --- PALET WARNA GELAP (TETAP) --- */
+  .theme-0 { background: linear-gradient(135deg, #1e3a8a, #9da1a9ff); } /* Deep Ocean */
+  .theme-1 { background: linear-gradient(135deg, #064e3b, #b2bdbaff); } /* Dark Emerald */
+  .theme-2 { background: linear-gradient(135deg, #4c1d95, #9e9ba3ff); } /* Royal Purple */
+  .theme-3 { background: linear-gradient(135deg, #7f1d1d, #b3aaaaff); } /* Burnt Maroon */
+  .theme-4 { background: linear-gradient(135deg, #334155, #9e9fa3ff); } /* Charcoal Slate */
+  .theme-5 { background: linear-gradient(135deg, #78350f, #c4c2c1ff); } /* Deep Bronze */
+
+  /* Tombol Aksi Floating */
+  .widget-actions {
+    position: absolute;
+    top: 12px;
+    right: -50px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: right 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 20;
+  }
+
+  .widget-card:hover .widget-actions {
+    right: 12px;
+  }
+
+  .action-btn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: none;
+    background: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.4);
+    font-size: 1rem;
+  }
+  .btn-edit { color: #1e40af; }
+  .btn-del { color: #991b1b; }
+  .action-btn:hover { transform: scale(1.15); }
+
+</style>
+
 <div class="space-y-6">
-    <div class="flex items-center justify-between">
+    
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-            <h1 class="text-3xl font-bold text-gray-800">🗂️ Arsip Dokumen</h1>
-            <p class="text-gray-500 mt-1">Kelola kategori (folder) arsip Anda.</p>
+            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <i class="ti ti-dashboard text-slate-700"></i> Dashboard Arsip
+            </h1>
+            <p class="text-gray-500 text-sm mt-1">Pantau dokumen dan kategori arsip.</p>
         </div>
 
         <div class="flex gap-3">
             <?php if (!$isStaf): ?>
-            <button id="btn-add-kategori" class="bg-emerald-700 text-white px-4 py-2 rounded-lg hover:bg-emerald-800 flex items-center gap-2">
-                <i class="ti ti-folder-plus"></i>
-                <span>Buat Kategori Baru</span>
+            <button id="btn-add-kategori" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-900 flex items-center gap-2 shadow-sm transition-all font-medium text-sm">
+                <i class="ti ti-plus"></i>
+                <span>Tambah Kategori</span>
             </button>
             <?php endif; ?>
         </div>
     </div>
 
-    <div class="bg-white p-4 rounded-xl shadow-sm border">
-        <label for="filter-q" class="block text-sm text-gray-600 mb-1">Pencarian Kategori</label>
-        <input id="filter-q" type="text" class="w-full border rounded-lg px-3 py-2 text-gray-800" placeholder="Ketik nama kategori untuk mencari...">
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead class="bg-gray-100 text-gray-700">
-                    <tr>
-                        <th class="py-3 px-4 text-left w-16">No</th>
-                        <th class="py-3 px-4 text-left">Nama Dokumen (Kategori)</th>
-                        <th class="py-3 px-4 text-left">Keterangan (Jumlah Dokumen)</th>
-                        <th class="py-3 px-4 text-center w-40">Aksi</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody-kategori" class="text-gray-800">
-                    <tr><td colspan="4" class="text-center py-8 text-gray-500">Memuat data...</td></tr>
-                </tbody>
-            </table>
+    <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+        <div class="relative">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <i class="ti ti-search text-gray-400"></i>
+            </div>
+            <input id="filter-q" type="text" class="w-full pl-10 pr-4 py-2 border-gray-200 rounded-md text-sm focus:ring-2 focus:ring-slate-600 outline-none transition-all" placeholder="Cari kategori...">
         </div>
     </div>
+
+    <div id="grid-kategori" class="grid-container">
+        <div class="col-span-full text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+            <i class="ti ti-loader animate-spin text-2xl mb-2 block"></i> Memuat data...
+        </div>
+    </div>
+
 </div>
 
 <?php if (!$isStaf): ?>
-<div id="kategori-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
-    <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-lg">
-        <div class="flex items-center justify-between mb-4">
+<div id="kategori-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-opacity">
+    <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg transform scale-100 transition-transform">
+        <div class="flex items-center justify-between mb-6 border-b pb-4">
             <h3 id="modal-title" class="text-xl font-bold text-gray-900">Buat Kategori Baru</h3>
-            <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800" aria-label="Tutup">&times;</button>
+            <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600 transition">&times;</button>
         </div>
         <form id="kategori-form" novalidate>
             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
             <input type="hidden" name="action" id="form-action">
             <input type="hidden" name="id" id="form-id">
 
-            <div class="mt-4">
-                <label for="nama_kategori" class="block text-sm mb-1">Nama Dokumen (Kategori) <span class="text-red-500">*</span></label>
-                <input type="text" id="nama_kategori" name="nama_kategori" class="w-full border rounded px-3 py-2 text-gray-800" placeholder="Contoh: Laporan Bulanan" required>
-            </div>
-            
-            <div class="mt-4">
-                <label for="keterangan" class="block text-sm mb-1">Keterangan (Opsional)</label>
-                <textarea id="keterangan" name="keterangan" rows="3" class="w-full border rounded px-3 py-2 text-gray-800" placeholder="Penjelasan singkat mengenai isi kategori ini..."></textarea>
+            <div class="space-y-4">
+                <div>
+                    <label for="nama_kategori" class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Kategori <span class="text-red-500">*</span></label>
+                    <input type="text" id="nama_kategori" name="nama_kategori" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-slate-700 outline-none" placeholder="Contoh: Laporan Bulanan" required>
+                </div>
+                <div>
+                    <label for="keterangan" class="block text-xs font-bold text-gray-600 uppercase mb-1">Keterangan</label>
+                    <textarea id="keterangan" name="keterangan" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-slate-700 outline-none" placeholder="Deskripsi singkat..."></textarea>
+                </div>
             </div>
 
-            <div class="flex justify-end gap-3 mt-6">
-                <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800">Batal</button>
-                <button type="submit" class="px-5 py-2 rounded-lg bg-emerald-700 text-white hover:bg-emerald-800">Simpan</button>
+            <div class="flex justify-end gap-3 mt-8 pt-4 border-t">
+                <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 text-sm font-medium transition">Batal</button>
+                <button type="submit" class="px-5 py-2 rounded-lg bg-slate-800 text-white hover:bg-slate-900 text-sm font-medium shadow-lg transition">Simpan</button>
             </div>
         </form>
     </div>
@@ -99,83 +272,106 @@ include_once '../layouts/header.php';
 document.addEventListener('DOMContentLoaded', () => {
     const IS_STAF    = <?= $isStaf ? 'true' : 'false'; ?>;
     const CSRF_TOKEN = '<?= htmlspecialchars($CSRF) ?>';
-    
-    // ==========================================================
-    // PERBAIKAN: API_URL harus menunjuk ke backend KATEGORI
-    // ==========================================================
     const API_URL    = 'arsip_crud.php'; 
     
-    const tbody = document.getElementById('tbody-kategori');
+    const gridContainer = document.getElementById('grid-kategori');
     const searchInput = document.getElementById('filter-q');
     
     let ALL_KATEGORI = [];
 
-    function buildRowHTML(kategori, index) {
-        const payload = encodeURIComponent(JSON.stringify(kategori || {}));
-        const nama = htmlspecialchars(kategori.nama_kategori || '-');
-        const ket = htmlspecialchars(kategori.keterangan || '');
-        const jumlah = parseInt(kategori.jumlah_dokumen || 0);
+    const ICONS_LIST = [
+        'ti-folder-filled', 'ti-files', 'ti-archive', 'ti-briefcase', 
+        'ti-chart-pie-2', 'ti-clipboard-data', 'ti-box-multiple', 'ti-folder-star', 
+        'ti-notebook', 'ti-stack-3', 'ti-report-analytics', 'ti-database'
+    ];
 
-        // ==========================================================
-        // PERBAIKAN: Link "Buka" harus ke 'laporan_mingguan_detail.php'
-        // ==========================================================
-        let aksiHtml = `
-            <a href="laporan_mingguan_detail.php?k_id=${kategori.id}" class="bg-emerald-600 text-white px-3 py-2 rounded-lg hover:bg-emerald-700 text-xs inline-flex items-center gap-1">
-                <i class="ti ti-folder-open"></i> Buka
-            </a>`;
-        
-        if (!IS_STAF) {
-            aksiHtml += `
-                <button class="btn-edit-kategori btn-icon text-blue-600 hover:text-blue-800" data-json="${payload}" title="Edit Kategori">
-                    <i class="ti ti-pencil text-lg"></i>
-                </button>
-                <button class="btn-delete-kategori btn-icon text-red-600 hover:text-red-800" data-id="${kategori.id}" title="Hapus Kategori">
-                    <i class="ti ti-trash text-lg"></i>
-                </button>
-            `;
-        }
-
-        return `
-            <tr class="border-b hover:bg-gray-50" data-nama="${nama.toLowerCase()}">
-                <td class="py-3 px-4">${index + 1}</td>
-                <td class="py-3 px-4 font-semibold">${nama}</td>
-                <td class="py-3 px-4">
-                    <span class="bg-gray-200 text-gray-800 px-2 py-1 rounded-full text-xs font-medium">
-                        ${jumlah} Dokumen
-                    </span>
-                    ${ket ? `<p class="text-gray-500 text-xs mt-1">${ket}</p>` : ''}
-                </td>
-                <td class="py-3 px-4">
-                    <div class="flex items-center justify-center gap-2">
-                        ${aksiHtml}
-                    </div>
-                </td>
-            </tr>`;
+    function htmlspecialchars(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]);
     }
 
-    function renderTable(kategoriList) {
+    // --- FUNGSI BUILD CARD WIDGET ---
+    function buildCardHTML(kategori, index) {
+        const payload = encodeURIComponent(JSON.stringify(kategori || {}));
+        const nama = htmlspecialchars(kategori.nama_kategori || '-');
+        const ket = htmlspecialchars(kategori.keterangan || 'Tidak ada deskripsi');
+        const jumlah = parseInt(kategori.jumlah_dokumen || 0);
+        
+        const themeClass = `theme-${index % 6}`;
+        const iconClass = ICONS_LIST[index % ICONS_LIST.length];
+        const linkDetail = `laporan_mingguan_detail.php?k_id=${kategori.id}`;
+
+        let actionsHtml = '';
+        if (!IS_STAF) {
+            actionsHtml = `
+            <div class="widget-actions">
+                <button class="action-btn btn-edit btn-edit-kategori" data-json="${payload}" title="Edit" onclick="event.stopPropagation()">
+                    <i class="ti ti-pencil"></i>
+                </button>
+                <button class="action-btn btn-del btn-delete-kategori" data-id="${kategori.id}" title="Hapus" onclick="event.stopPropagation()">
+                    <i class="ti ti-trash"></i>
+                </button>
+            </div>`;
+        }
+
+        // Perhatikan urutan: widget-count dulu, baru widget-title agar sesuai CSS order
+        return `
+        <div class="widget-card ${themeClass}" onclick="window.location.href='${linkDetail}'">
+            <div class="widget-number">NO. ${index + 1}</div>
+
+            <div class="widget-body">
+                <div class="widget-icon">
+                    <i class="ti ${iconClass}"></i>
+                </div>
+                
+                <div class="widget-text">
+                    <div class="widget-count">${jumlah} Files</div>
+                    <div class="widget-title">${nama}</div>
+                </div>
+            </div>
+
+            <div class="widget-footer">
+                <span class="widget-desc">${ket}</span>
+                <i class="ti ti-arrow-right text-white"></i>
+            </div>
+
+            ${actionsHtml}
+        </div>
+        `;
+    }
+
+    // --- Render Logic ---
+    function renderGrid(kategoriList) {
         if (!kategoriList || kategoriList.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500">Belum ada kategori. ${!IS_STAF ? 'Klik "Buat Kategori Baru" untuk memulai.' : ''}</td></tr>`;
+            gridContainer.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+                    <i class="ti ti-folder-off text-4xl mb-3 opacity-50"></i>
+                    <p class="text-sm font-medium">Tidak ada kategori ditemukan.</p>
+                </div>`;
             return;
         }
-        tbody.innerHTML = kategoriList.map(buildRowHTML).join('');
+        gridContainer.innerHTML = kategoriList.map(buildCardHTML).join('');
+        attachActionListeners();
     }
 
     function applySearchFilter() {
         const query = searchInput.value.trim().toLowerCase();
         if (!query) {
-            renderTable(ALL_KATEGORI);
+            renderGrid(ALL_KATEGORI);
             return;
         }
         const filtered = ALL_KATEGORI.filter(k => 
             (k.nama_kategori || '').toLowerCase().includes(query) ||
             (k.keterangan || '').toLowerCase().includes(query)
         );
-        renderTable(filtered);
+        renderGrid(filtered);
     }
     
     function refreshKategoriList() {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-gray-500">Memuat data...</td></tr>`;
+        gridContainer.innerHTML = `
+            <div class="col-span-full text-center py-16 text-gray-500">
+                <i class="ti ti-loader animate-spin text-2xl mb-2 inline-block"></i><br>Sedang memuat data...
+            </div>`;
         
         const fd = new FormData();
         fd.append('action', 'list');
@@ -188,27 +384,75 @@ document.addEventListener('DOMContentLoaded', () => {
                     ALL_KATEGORI = j.data;
                     applySearchFilter(); 
                 } else {
-                    // Jika error (misal token '<'), ini akan tampil
-                    tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-red-500">${j.message || 'Gagal memuat data (format JSON tidak valid)'}</td></tr>`;
+                    gridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500 font-bold">${j.message || 'Gagal memuat data'}</div>`;
                 }
             })
             .catch(err => {
-                // Ini adalah tempat error 'Unexpected token <' ditangkap
                 console.error('Fetch Error:', err);
-                tbody.innerHTML = `<tr><td colspan="4" class="text-center py-8 text-red-500">Error: ${err.message || 'Network error'}. Pastikan API_URL benar.</td></tr>`;
+                gridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500">Error Koneksi Server</div>`;
             });
     }
-
-    function htmlspecialchars(str) {
-        if (typeof str !== 'string') return '';
-        return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'})[m]);
-    }
     
-    // Init
+    // --- Event Listeners ---
+    function attachActionListeners() {
+        if (IS_STAF) return;
+
+        document.querySelectorAll('.btn-edit-kategori').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const row = JSON.parse(decodeURIComponent(btn.dataset.json));
+                const form = $('#kategori-form');
+                
+                form.reset();
+                $('#form-action').value = 'update';
+                $('#form-id').value = row.id;
+                $('#modal-title').textContent = 'Edit Kategori';
+                $('#nama_kategori').value = row.nama_kategori || '';
+                $('#keterangan').value = row.keterangan || '';
+                
+                const modal = $('#kategori-modal');
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            });
+        });
+
+        document.querySelectorAll('.btn-delete-kategori').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.id;
+                Swal.fire({
+                    title: 'Hapus Folder?',
+                    text: 'Kategori dan isinya akan dihapus.',
+                    icon: 'warning',
+                    showCancelButton: true, confirmButtonColor: '#d33',
+                    confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal'
+                }).then((res) => {
+                    if (!res.isConfirmed) return;
+                    
+                    const fd = new FormData();
+                    fd.append('csrf_token', CSRF_TOKEN);
+                    fd.append('action', 'delete');
+                    fd.append('id', id);
+                    
+                    fetch(API_URL, { method: 'POST', body: fd })
+                        .then(r => r.json()).then(j => {
+                            if (j.success) {
+                                Swal.fire('Terhapus!', j.message, 'success');
+                                refreshKategoriList();
+                            } else {
+                                Swal.fire('Gagal', j.message, 'error');
+                            }
+                        }).catch(err => Swal.fire('Error', 'Koneksi error', 'error'));
+                });
+            });
+        });
+    }
+
+    // --- Init ---
     refreshKategoriList();
     searchInput.addEventListener('input', applySearchFilter);
 
-    // Modal Logic (hanya jika bukan Staf)
+    // --- Modal Logic ---
     if (!IS_STAF) {
         const modal = $('#kategori-modal');
         const btnClose = $('#btn-close');
@@ -229,50 +473,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         btnClose.addEventListener('click', close);
         btnCancel.addEventListener('click', close);
-
-        document.body.addEventListener('click', (e) => {
-            const btn = e.target.closest('button');
-            if (!btn) return;
-
-            if (btn.classList.contains('btn-edit-kategori')) {
-                const row = JSON.parse(decodeURIComponent(btn.dataset.json));
-                form.reset();
-                $('#form-action').value = 'update';
-                $('#form-id').value = row.id;
-                title.textContent = 'Edit Kategori';
-                $('#nama_kategori').value = row.nama_kategori || '';
-                $('#keterangan').value = row.keterangan || '';
-                open();
-            }
-
-            if (btn.classList.contains('btn-delete-kategori')) {
-                const id = btn.dataset.id;
-                Swal.fire({
-                    title: 'Hapus Kategori?',
-                    text: 'Menghapus kategori TIDAK akan menghapus file di dalamnya (file akan jadi "tanpa kategori"). Yakin?',
-                    icon: 'warning',
-                    showCancelButton: true, confirmButtonColor: '#d33',
-                    confirmButtonText: 'Ya, hapus', cancelButtonText: 'Batal'
-                }).then((res) => {
-                    if (!res.isConfirmed) return;
-                    
-                    const fd = new FormData();
-                    fd.append('csrf_token', CSRF_TOKEN);
-                    fd.append('action', 'delete');
-                    fd.append('id', id);
-                    
-                    fetch(API_URL, { method: 'POST', body: fd })
-                        .then(r => r.json()).then(j => {
-                            if (j.success) {
-                                Swal.fire('Terhapus!', j.message, 'success');
-                                refreshKategoriList();
-                            } else {
-                                Swal.fire('Gagal', j.message, 'error');
-                            }
-                        }).catch(err => Swal.fire('Error', err.message, 'error'));
-                });
-            }
-        });
         
         form.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -280,7 +480,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 Swal.fire('Validasi', 'Nama Kategori wajib diisi.', 'warning');
                 return;
             }
-            
             const fd = new FormData(form);
             fetch(API_URL, { method: 'POST', body: fd })
                 .then(r => r.json()).then(j => {
@@ -291,9 +490,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         Swal.fire('Gagal', j.message, 'error');
                     }
-                }).catch(err => Swal.fire('Error', err.message, 'error'));
+                }).catch(err => Swal.fire('Error', 'Gagal menyimpan', 'error'));
         });
-    } // end if (!IS_STAF)
+    } 
     
     function $(s) { return document.querySelector(s); }
 });

@@ -1,974 +1,749 @@
 <?php
-  // admin/dashboard.php (UI + API selaras skema db_ptpn)
-  // Rapi + Donut konsisten + KPI angkutan tampil
-  // Versi: 2025-10-13 (Perbaikan chart & sumber data angkutan organik + FIX layout chart bawah)
-  // UPDATE: Produksi TBS, Tandan/Pokok, PROTAS, BTR, Prestasi sesuai kolom nyata (lm76/lm77)
-  //
-  // MODIFIKASI 1: Menambahkan 'break-words' pada card KPI untuk mencegah teks/angka besar
-  //               keluar dari card (overflow) saat di-zoom atau pada angka yang sangat panjang.
-  // MODIFIKASI 2: Menghapus 'max-w-7xl' dan 'mx-auto' dari header dan content wrapper
-  //               agar layout menjadi full-width (fluid) dan mengikuti lebar viewport.
-  //
-  declare(strict_types=1);
-  session_start();
+session_start();
 
-  // ===== CSRF =====
-  if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-  $CSRF = $_SESSION['csrf_token'];
+// SET TIMEZONE INDONESIA (WIB)
+date_default_timezone_set('Asia/Jakarta');
 
-  // ===== DB =====
-  require_once '../config/database.php';
-  $db  = new Database();
-  $pdo = $db->getConnection();
+// 1. Cek Sesi & Security
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
+    header("Location: ../auth/login.php");
+    exit;
+}
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+$CSRF = $_SESSION['csrf_token'];
 
-  // ===== AJAX (API) =====
-  if (($_POST['ajax'] ?? '') === 'dashboard') {
+require_once '../config/database.php';
+
+try {
+    $db  = new Database();
+    $pdo = $db->getConnection();
+} catch (Exception $e) {
+    die("Koneksi Database Gagal: " . $e->getMessage());
+}
+
+// ==========================================================================
+// BACKEND AJAX HANDLER
+// ==========================================================================
+if (isset($_POST['ajax']) && $_POST['ajax'] === 'dashboard') {
+    ini_set('display_errors', 0);
+    error_reporting(E_ALL);
     header('Content-Type: application/json; charset=utf-8');
 
-    if (($_POST['csrf_token'] ?? '') !== ($_SESSION['csrf_token'] ?? '')) {
-      echo json_encode(['success'=>false,'message'=>'CSRF invalid']); exit;
+    $response = ['success' => false, 'message' => '', 'debug' => []];
+
+    if (($_POST['csrf_token'] ?? '') !== $_SESSION['csrf_token']) {
+        echo json_encode(['success' => false, 'message' => 'Invalid CSRF Token']);
+        exit;
     }
 
-    $section  = trim($_POST['section']  ?? '');
+    $section  = trim($_POST['section'] ?? '');
     $afdeling = trim($_POST['afdeling'] ?? '');
-    $bulan    = trim($_POST['bulan']    ?? '');
-    $tahun    = trim($_POST['tahun']    ?? '');
-    $kebun    = trim($_POST['kebun']    ?? '');
+    $bulan    = trim($_POST['bulan'] ?? '');
+    $tahun    = trim($_POST['tahun'] ?? date('Y'));
+    $kebun    = trim($_POST['kebun'] ?? ''); 
 
-    // Nama bulan dari kolom DATE
-    $bulanFromDate = "ELT(MONTH(tanggal),
-      'Januari','Februari','Maret','April','Mei','Juni',
-      'Juli','Agustus','September','Oktober','November','Desember')";
+    $response['debug']['request_params'] = $_POST;
+    $bulanSQL = "ELT(MONTH(tanggal), 'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember')";
 
     try {
-      // ==================== GUDANG ====================
-      if ($section === 'gudang') {
-        $sql = "
-          SELECT mk.nama_kebun, b.nama_bahan, s.nama AS satuan, sg.bulan, sg.tahun,
-                 sg.stok_awal, sg.mutasi_masuk, sg.mutasi_keluar, sg.pasokan, sg.dipakai
-          FROM stok_gudang sg
-          JOIN md_bahan_kimia b ON b.id = sg.bahan_id
-          LEFT JOIN md_satuan s ON s.id = b.satuan_id
-          JOIN md_kebun mk ON mk.id = sg.kebun_id
-          WHERE (:bulan='' OR sg.bulan = :bulan)
-            AND (:tahun='' OR sg.tahun = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY sg.tahun DESC,
-            FIELD(sg.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                           'Agustus','September','Oktober','November','Desember'),
-            b.nama_bahan ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
+        // --- 1. DATA PEMELIHARAAN (KPI & PROGRESS BAR) ---
+        if ($section === 'pemeliharaan_data') {
+            $tables = ['TM'=>'pemeliharaan_tm','TBM 1'=>'pemeliharaan_tbm1','TBM 2'=>'pemeliharaan_tbm2','TBM 3'=>'pemeliharaan_tbm3','TK'=>'pemeliharaan_tk','PN'=>'pemeliharaan_pn','MN'=>'pemeliharaan_mn'];
+            $mapBulan = ['Januari'=>'jan','Februari'=>'feb','Maret'=>'mar','April'=>'apr','Mei'=>'mei','Juni'=>'jun','Juli'=>'jul','Agustus'=>'agu','September'=>'sep','Oktober'=>'okt','November'=>'nov','Desember'=>'des'];
 
-      // ============== KPI Pemeliharaan (TU/TBM/TM/PN/MN) ==============
-      if ($section === 'pemeliharaan_kpi') {
-        $map = ['TU'=>'TU','TBM'=>'TBM','TM'=>'TM','PN'=>'BIBIT_PN','MN'=>'BIBIT_MN'];
-        $rows = [];
-        foreach ($map as $label=>$kat) {
-          $sql = "
-            SELECT :label AS label,
-                   COALESCE(SUM(pml.rencana),0)   AS rencana,
-                   COALESCE(SUM(pml.realisasi),0) AS realisasi
-            FROM pemeliharaan pml
-            LEFT JOIN units u ON u.id = pml.unit_id
-            WHERE pml.kategori = :kat
-              AND (:afdeling='' OR COALESCE(NULLIF(pml.afdeling,''), u.nama_unit) = :afdeling)
-              AND (:bulan='' OR {$bulanFromDate} = :bulan)
-              AND (:tahun='' OR YEAR(pml.tanggal) = :tahun)";
-          $st = $pdo->prepare($sql);
-          $st->execute([':label'=>$label, ':kat'=>$kat, ':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
-          $rows[] = $st->fetch(PDO::FETCH_ASSOC);
-        }
-        echo json_encode(['success'=>true,'data'=>$rows]); exit;
-      }
+            if (!empty($bulan) && isset($mapBulan[$bulan])) {
+                $colRealisasi = "COALESCE(" . $mapBulan[$bulan] . ", 0)";
+            } else {
+                $colRealisasi = "(COALESCE(jan,0)+COALESCE(feb,0)+COALESCE(mar,0)+COALESCE(apr,0)+COALESCE(mei,0)+COALESCE(jun,0)+COALESCE(jul,0)+COALESCE(agu,0)+COALESCE(sep,0)+COALESCE(okt,0)+COALESCE(nov,0)+COALESCE(des,0))";
+            }
 
-      // ================== LM 76 Tren (TBS — pakai anggaran_kg & realisasi_kg) ==================
-      if ($section === 'lm76_tren') {
-        $sql = "
-          SELECT lm.bulan, lm.tahun,
-                 SUM(COALESCE(lm.anggaran_kg,0))  AS rkap,
-                 SUM(COALESCE(lm.realisasi_kg,0)) AS real
-          FROM lm76 lm
-          LEFT JOIN units u ON u.id = lm.unit_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:tahun='' OR lm.tahun = :tahun)
-            AND (:bulan='' OR lm.bulan = :bulan)
-          GROUP BY lm.tahun, lm.bulan
-          ORDER BY lm.tahun,
-            FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember')";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':tahun'=>$tahun, ':bulan'=>$bulan]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
+            $kebunId = null;
+            if (!empty($kebun)) {
+                $stmtK = $pdo->prepare("SELECT id FROM md_kebun WHERE nama_kebun = ? LIMIT 1");
+                $stmtK->execute([$kebun]);
+                $kebunId = $stmtK->fetchColumn();
+            }
 
-      // ================== LM 77 Tren (Tandan/Pokok, PROTAS, BTR, Prestasi) ==================
-      if ($section === 'lm77_tren') {
-        $sql = "
-          SELECT lm.bulan, lm.tahun,
-                 AVG(NULLIF(lm.jtandan_per_pohon_bi,0))    AS tandan_pokok_bi,
-                 AVG(NULLIF(lm.prod_tonha_bi,0))          AS prod_tonha_bi,
-                 AVG(NULLIF(lm.btr_bi,0))                  AS btr_bi,
-                 SUM(COALESCE(lm.prestasi_kg_hk_bi,0))     AS prestasi_kg_hk_bi,
-                 SUM(COALESCE(lm.prestasi_tandan_hk_bi,0)) AS prestasi_tandan_hk_bi
-          FROM lm77 lm
-          LEFT JOIN units u ON u.id = lm.unit_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:tahun='' OR lm.tahun = :tahun)
-            AND (:bulan='' OR lm.bulan = :bulan)
-          GROUP BY lm.tahun, lm.bulan
-          ORDER BY lm.tahun,
-            FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember')";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':tahun'=>$tahun, ':bulan'=>$bulan]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== LM Biaya Tren (tetap) ==================
-      if ($section === 'lm_biaya_tren') {
-        $sql = "
-          SELECT lb.bulan, lb.tahun, SUM(COALESCE(lb.realisasi_bi,0)) AS total
-          FROM lm_biaya lb
-          LEFT JOIN units u ON u.id = lb.unit_id
-          LEFT JOIN md_kebun mk ON mk.id = lb.kebun_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-            AND (:tahun='' OR lb.tahun = :tahun)
-            AND (:bulan='' OR lb.bulan = :bulan)
-          GROUP BY lb.tahun, lb.bulan
-          ORDER BY lb.tahun,
-            FIELD(lb.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember')";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':kebun'=>$kebun, ':tahun'=>$tahun, ':bulan'=>$bulan]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== PEMAKAIAN (gabungan) ==================
-      if ($section === 'pemakaian') {
-        $sql = "
-          SELECT * FROM (
-            SELECT pbk.no_dokumen, u.nama_unit AS afdeling, pbk.bulan, pbk.tahun,
-                   pbk.nama_bahan, pbk.jenis_pekerjaan,
-                   COALESCE(pbk.jlh_diminta,0) AS jlh_diminta,
-                   COALESCE(pbk.jlh_fisik,0)   AS jlh_fisik,
-                   NULL AS nama_kebun
-            FROM pemakaian_bahan_kimia pbk
-            LEFT JOIN units u ON u.id = pbk.unit_id
-            WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-              AND (:bulan='' OR pbk.bulan = :bulan)
-              AND (:tahun='' OR pbk.tahun = :tahun)
-            UNION ALL
-            SELECT CONCAT('MENABUR-', LPAD(CAST(mp.id AS CHAR),6,'0')) AS no_dokumen,
-                   mp.afdeling AS afdeling, {$bulanFromDate} AS bulan, YEAR(mp.tanggal) AS tahun,
-                   mp.jenis_pupuk AS nama_bahan, 'Pemupukan' AS jenis_pekerjaan,
-                   COALESCE(mp.jumlah,0) AS jlh_diminta, COALESCE(mp.jumlah,0) AS jlh_fisik,
-                   mk.nama_kebun
-            FROM menabur_pupuk mp
-            JOIN md_kebun mk ON mk.kode = mp.kebun_kode
-            WHERE (:afdeling='' OR mp.afdeling = :afdeling)
-              AND (:bulan='' OR {$bulanFromDate} = :bulan)
-              AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
-              AND (:kebun='' OR mk.nama_kebun = :kebun)
-            UNION ALL
-            SELECT CONCAT('MENABURORG-', LPAD(CAST(mpo.id AS CHAR),6,'0')) AS no_dokumen,
-                   uo.nama_unit AS afdeling, {$bulanFromDate} AS bulan, YEAR(mpo.tanggal) AS tahun,
-                   mpo.jenis_pupuk AS nama_bahan, 'Pemupukan Organik' AS jenis_pekerjaan,
-                   COALESCE(mpo.jumlah,0) AS jlh_diminta, COALESCE(mpo.jumlah,0) AS jlh_fisik,
-                   mk2.nama_kebun
-            FROM menabur_pupuk_organik mpo
-            LEFT JOIN units uo ON uo.id = mpo.unit_id
-            LEFT JOIN md_kebun mk2 ON mk2.id = mpo.kebun_id
-            WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
-              AND (:bulan='' OR {$bulanFromDate} = :bulan)
-              AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
-              AND (:kebun='' OR mk2.nama_kebun = :kebun)
-          ) x
-          ORDER BY tahun DESC,
-            FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                         'Agustus','September','Oktober','November','Desember'),
-            no_dokumen ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== KHUSUS KIMIA ==================
-      if ($section === 'pemakaian_kimia') {
-        $sql = "
-          SELECT pbk.no_dokumen, u.nama_unit AS afdeling, pbk.bulan, pbk.tahun,
-                 pbk.nama_bahan, pbk.jenis_pekerjaan,
-                 COALESCE(pbk.jlh_diminta,0) AS jlh_diminta,
-                 COALESCE(pbk.jlh_fisik,0)   AS jlh_fisik
-          FROM pemakaian_bahan_kimia pbk
-          LEFT JOIN units u ON u.id = pbk.unit_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:bulan='' OR pbk.bulan = :bulan)
-            AND (:tahun='' OR pbk.tahun = :tahun)
-          ORDER BY pbk.tahun DESC,
-            FIELD(pbk.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                             'Agustus','September','Oktober','November','Desember'),
-            pbk.no_dokumen ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== PEKERJAAN (LM Biaya) ==================
-      if ($section === 'pekerjaan') {
-        $sql = "
-          SELECT lb.bulan, lb.tahun,
-                 u.nama_unit AS afdeling, mk.nama_kebun,
-                 lb.alokasi, lb.uraian_pekerjaan,
-                 lb.rencana_bi, lb.realisasi_bi
-          FROM lm_biaya lb
-          LEFT JOIN units u ON u.id = lb.unit_id
-          LEFT JOIN md_kebun mk ON mk.id = lb.kebun_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:bulan='' OR lb.bulan = :bulan)
-            AND (:tahun='' OR lb.tahun = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY lb.tahun DESC,
-            FIELD(lb.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                             'Agustus','September','Oktober','November','Desember'),
-            lb.id ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== PEMELIHARAAN (REAL) ==================
-      if ($section === 'pemeliharaan') {
-        $sql = "
-          SELECT COALESCE(NULLIF(pml.afdeling,''), u.nama_unit) AS afdeling,
-                 pml.kategori, pml.jenis_pekerjaan, pml.tanggal,
-                 {$bulanFromDate} AS bulan, YEAR(pml.tanggal) AS tahun,
-                 pml.rencana, pml.realisasi, pml.status
-          FROM pemeliharaan pml
-          LEFT JOIN units u ON u.id = pml.unit_id
-          WHERE (:afdeling='' OR COALESCE(NULLIF(pml.afdeling,''), u.nama_unit) = :afdeling)
-            AND (:bulan='' OR {$bulanFromDate} = :bulan)
-            AND (:tahun='' OR YEAR(pml.tanggal) = :tahun)
-          ORDER BY pml.tanggal DESC, pml.jenis_pekerjaan ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== PEMUPUKAN ==================
-      if ($section === 'pemupukan') {
-        $sql = "
-          SELECT * FROM (
-            SELECT 'Anorganik' AS sumber, mp.afdeling AS afdeling, mp.tanggal,
-                   {$bulanFromDate} AS bulan, YEAR(mp.tanggal) AS tahun, mp.jenis_pupuk,
-                   COALESCE(mp.jumlah,0) AS jumlah, COALESCE(mp.luas,0) AS luas,
-                   COALESCE(mp.invt_pokok,0) AS invt_pokok, mk.nama_kebun
-            FROM menabur_pupuk mp
-            JOIN md_kebun mk ON mk.kode = mp.kebun_kode
-            WHERE (:afdeling='' OR mp.afdeling = :afdeling)
-              AND (:bulan='' OR {$bulanFromDate} = :bulan)
-              AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
-              AND (:kebun='' OR mk.nama_kebun = :kebun)
-            UNION ALL
-            SELECT 'Organik' AS sumber, uo.nama_unit AS afdeling, mpo.tanggal,
-                   {$bulanFromDate} AS bulan, YEAR(mpo.tanggal) AS tahun, mpo.jenis_pupuk,
-                   COALESCE(mpo.jumlah,0) AS jumlah, COALESCE(mpo.luas,0) AS luas,
-                   COALESCE(mpo.invt_pokok,0) AS invt_pokok, mk2.nama_kebun
-            FROM menabur_pupuk_organik mpo
-            LEFT JOIN units uo ON uo.id = mpo.unit_id
-            LEFT JOIN md_kebun mk2 ON mk2.id = mpo.kebun_id
-            WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
-              AND (:bulan='' OR {$bulanFromDate} = :bulan)
-              AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
-              AND (:kebun='' OR mk2.nama_kebun = :kebun)
-          ) x
-          ORDER BY tahun DESC,
-            FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                         'Agustus','September','Oktober','November','Desember'),
-            tanggal DESC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      if ($section === 'pemupukan_kimia') {
-        $sql = "
-          SELECT mp.afdeling AS afdeling, mp.tanggal, {$bulanFromDate} AS bulan,
-                 YEAR(mp.tanggal) AS tahun, mp.jenis_pupuk,
-                 COALESCE(mp.jumlah,0) AS jumlah, COALESCE(mp.luas,0) AS luas,
-                 COALESCE(mp.invt_pokok,0) AS invt_pokok, mk.nama_kebun
-          FROM menabur_pupuk mp
-          JOIN md_kebun mk ON mk.kode = mp.kebun_kode
-          WHERE (:afdeling='' OR mp.afdeling = :afdeling)
-            AND (:bulan='' OR {$bulanFromDate} = :bulan)
-            AND (:tahun='' OR YEAR(mp.tanggal) = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY mp.tanggal DESC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      if ($section === 'pemupukan_organik') {
-        $sql = "
-          SELECT uo.nama_unit AS afdeling, mpo.tanggal, {$bulanFromDate} AS bulan,
-                 YEAR(mpo.tanggal) AS tahun, mpo.jenis_pupuk,
-                 COALESCE(mpo.jumlah,0) AS jumlah, COALESCE(mpo.luas,0) AS luas,
-                 COALESCE(mpo.invt_pokok,0) AS invt_pokok, mk.nama_kebun
-          FROM menabur_pupuk_organik mpo
-          LEFT JOIN units uo ON uo.id = mpo.unit_id
-          LEFT JOIN md_kebun mk ON mk.id = mpo.kebun_id
-          WHERE (:afdeling='' OR uo.nama_unit = :afdeling)
-            AND (:bulan='' OR {$bulanFromDate} = :bulan)
-            AND (:tahun='' OR YEAR(mpo.tanggal) = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY mpo.tanggal DESC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== ANGKUTAN ==================
-      if ($section === 'angkutan_kimia') {
-        $sql = "
-          SELECT ap.tanggal, {$bulanFromDate} AS bulan, YEAR(ap.tanggal) AS tahun,
-                 u.nama_unit AS unit_tujuan, mk.nama_kebun, ap.gudang_asal, ap.jenis_pupuk,
-                 COALESCE(ap.jumlah,0) AS jumlah
-          FROM angkutan_pupuk ap
-          LEFT JOIN units u ON u.id = ap.unit_tujuan_id
-          LEFT JOIN md_kebun mk ON mk.kode = ap.kebun_kode
-          WHERE ap.jenis_pupuk <> 'Organik'
-            AND (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:bulan='' OR {$bulanFromDate} = :bulan)
-            AND (:tahun='' OR YEAR(ap.tanggal) = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY ap.tanggal DESC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      if ($section === 'angkutan_organik') {
-        $sql = "
-          SELECT apo.tanggal, {$bulanFromDate} AS bulan, YEAR(apo.tanggal) AS tahun,
-                 u.nama_unit AS unit_tujuan, mk.nama_kebun, apo.gudang_asal, 'Organik' as jenis_pupuk,
-                 COALESCE(apo.jumlah,0) AS jumlah
-          FROM angkutan_pupuk_organik apo
-          LEFT JOIN units u ON u.id = apo.unit_tujuan_id
-          LEFT JOIN md_kebun mk ON mk.id = apo.kebun_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:bulan='' OR {$bulanFromDate} = :bulan)
-            AND (:tahun='' OR YEAR(apo.tanggal) = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY apo.tanggal DESC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      // ================== ALAT PANEN ==================
-      if ($section === 'alat_panen') {
-        $sql = "
-          SELECT mk.nama_kebun, u.nama_unit AS afdeling, ap.bulan, ap.tahun, ap.jenis_alat,
-                 COALESCE(ap.stok_awal,0) AS stok_awal,
-                 COALESCE(ap.mutasi_masuk,0) AS mutasi_masuk,
-                 COALESCE(ap.mutasi_keluar,0) AS mutasi_keluar,
-                 COALESCE(ap.dipakai,0) AS dipakai,
-                 COALESCE(ap.stok_akhir,0) AS stok_akhir,
-                 ap.krani_afdeling
-          FROM alat_panen ap
-          LEFT JOIN units u ON u.id = ap.unit_id
-          LEFT JOIN md_kebun mk ON mk.id = ap.kebun_id
-          WHERE (:afdeling='' OR u.nama_unit = :afdeling)
-            AND (:bulan='' OR ap.bulan = :bulan)
-            AND (:tahun='' OR ap.tahun = :tahun)
-            AND (:kebun='' OR mk.nama_kebun = :kebun)
-          ORDER BY ap.tahun DESC,
-            FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli',
-                             'Agustus','September','Oktober','November','Desember'),
-            ap.jenis_alat ASC";
-        $st = $pdo->prepare($sql);
-        $st->execute([':afdeling'=>$afdeling, ':bulan'=>$bulan, ':tahun'=>$tahun, ':kebun'=>$kebun]);
-        echo json_encode(['success'=>true,'data'=>$st->fetchAll(PDO::FETCH_ASSOC)]); exit;
-      }
-
-      echo json_encode(['success'=>false,'message'=>'Section tidak dikenal']);
-    } catch (Throwable $e) {
-      echo json_encode(['success'=>false,'message'=>'DB error','error'=>$e->getMessage() ]);
-    }
-    exit;
-  }
-
-  // ====== RENDER HALAMAN ======
-  $HARI_ID  = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
-  $BULAN_ID = ["","Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
-  $now = new DateTime('now');
-  $hariIni = $HARI_ID[(int)$now->format('w')] . ', ' . $now->format('d') . ' ' . $BULAN_ID[(int)$now->format('n')] . ' ' . $now->format('Y');
-  $tahunNow = (int)date('Y');
-  $bulanList = $BULAN_ID; array_shift($bulanList);
-
-  // Ambil daftar Afdeling & Kebun
-  try {
-    $opsiAfdeling = $pdo->query("SELECT nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_COLUMN);
-    $opsiKebun    = $pdo->query("SELECT nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_COLUMN);
-  } catch (Throwable $e) { $opsiAfdeling = []; $opsiKebun = []; }
-
-  include_once '../layouts/header.php';
-  ?>
-  <!doctype html>
-  <html lang="id">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Dashboard Utama</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <style>
-      /* Pastikan kanvas donut tidak kepotong */
-      .donut-wrap{ width:96px;height:96px; display:flex; align-items:center; justify-content:center; }
-      .donut-wrap canvas{ width:96px !important; height:96px !important; display:block; }
-
-      /* ====== FIX CHART MEMANJANG KE BAWAH ====== */
-      .chart-card{
-        min-height: 240px;
-        height: 240px;
-        display: flex;
-        flex-direction: column;
-      }
-      .chart-card > .card-title{ margin-bottom: .5rem; font-weight: 600; }
-      .chart-card canvas{
-        flex-grow: 1;
-        height: 200px !important;
-        width: 100% !important;
-        display: block;
-      }
-    </style>
-  </head>
-  <body class="bg-[#f6f9fc] text-slate-800">
-    <div class="min-h-screen flex">
-      <main class="flex-1">
-        <header class="bg-white border-b sticky top-0 z-10">
-          
-          <div class="px-4 py-3 flex items-center justify-between">
-            <div>
-              <div class="text-xs uppercase tracking-wide text-slate-500">Dashboard Utama</div>
-              <h1 class="text-xl font-bold"><?= htmlspecialchars($hariIni) ?></h1>
-            </div>
-            <div class="flex flex-wrap gap-2 items-center">
-              <select id="f-kebun" class="border rounded-lg px-3 py-2 text-sm min-w-[180px]">
-                <option value="">Semua Kebun</option>
-                <?php foreach ($opsiKebun as $kb): ?>
-                  <option value="<?= htmlspecialchars($kb) ?>"><?= htmlspecialchars($kb) ?></option>
-                <?php endforeach; ?>
-              </select>
-              <select id="f-afdeling" class="border rounded-lg px-3 py-2 text-sm min-w-[170px]">
-                <option value="">Semua Afdeling</option>
-                <?php foreach ($opsiAfdeling as $afd): ?>
-                  <option value="<?= htmlspecialchars($afd) ?>"><?= htmlspecialchars($afd) ?></option>
-                <?php endforeach; ?>
-              </select>
-              <select id="f-bulan" class="border rounded-lg px-3 py-2 text-sm min-w-[140px]">
-                <option value="">Semua Bulan</option>
-                <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-              </select>
-              <select id="f-tahun" class="border rounded-lg px-3 py-2 text-sm min-w-[110px]">
-                <?php for ($y=$tahunNow-2; $y<=$tahunNow+2; $y++): ?>
-                  <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-                <?php endfor; ?>
-              </select>
-              <button id="btn-refresh" class="bg-sky-500 hover:bg-sky-600 text-white px-4 py-2 rounded-lg text-sm">Refresh</button>
-            </div>
-          </div>
-        </header>
-
-        <div class="px-4 py-6 space-y-6">
-
-          <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <?php
-              function pemCard($id,$title){
-                echo '
-                <div class="bg-white rounded-xl shadow p-4 border">
-                  <div class="text-[12px] font-semibold">'.htmlspecialchars($title).'</div>
-                  <div class="mt-2 grid grid-cols-[1fr_auto] gap-3 items-center">
-                    <div class="min-w-0"> <div class="text-[11px] text-slate-500">Rencana</div>
-                      <div class="text-[20px] font-bold text-rose-600 leading-tight break-words"><span id="rcn-'.$id.'">0</span></div>
-                      <div class="mt-1 text-[11px] text-slate-500">Realisasi</div>
-                      <div class="text-[20px] font-bold text-sky-700 leading-tight break-words"><span id="real-'.$id.'">0</span></div>
-                    </div>
-                    <div class="donut-wrap"><canvas id="donut-'.$id.'" aria-label="Progress"></canvas></div>
-                  </div>
-                </div>';
-              }
-              pemCard('TU','Pemeliharaan TU');
-              pemCard('TBM','Pemeliharaan TBM');
-              pemCard('TM','Pemeliharaan TM');
-              pemCard('PN','Pemeliharaan PN');
-              pemCard('MN','Pemeliharaan MN');
-            ?>
-          </section>
-
-          <section id="biaya-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></section>
-
-          <section class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div class="bg-white rounded-xl shadow px-6 py-4 border">
-              <div class="text-sm text-slate-500">Pemupukan Kimia (Σ jumlah)</div>
-              <div class="text-2xl font-extrabold text-indigo-600 mt-1"><span id="kpi-ppk-kimia">0</span></div>
-              <div class="text-[11px] mt-1 text-slate-400">menabur_pupuk</div>
-            </div>
-            <div class="bg-white rounded-xl shadow px-6 py-4 border">
-              <div class="text-sm text-slate-500">Pemupukan Organik (Σ jumlah)</div>
-              <div class="text-2xl font-extrabold text-teal-600 mt-1"><span id="kpi-ppk-organik">0</span></div>
-              <div class="text-[11px] mt-1 text-slate-400">menabur_pupuk_organik</div>
-            </div>
-            <div class="bg-white rounded-xl shadow px-6 py-4 border">
-              <div class="text-sm text-slate-500">Angkutan Kimia (Σ jumlah)</div>
-              <div class="text-2xl font-extrabold text-fuchsia-600 mt-1"><span id="kpi-ang-kimia">0</span></div>
-              <div class="text-[11px] mt-1 text-slate-400">angkutan_pupuk ≠ Organik</div>
-            </div>
-            <div class="bg-white rounded-xl shadow px-6 py-4 border">
-              <div class="text-sm text-slate-500">Angkutan Organik (Σ jumlah)</div>
-              <div class="text-2xl font-extrabold text-rose-600 mt-1"><span id="kpi-ang-organik">0</span></div>
-              <div class="text-[11px] mt-1 text-slate-400">angkutan_pupuk_organik</div>
-            </div>
-          </section>
-
-          <section class="space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              <div class="bg-white rounded-xl shadow p-4 border">
-                <div class="text-sm font-semibold">Produksi TBS (Kg)</div>
-                <div class="mt-2 grid grid-cols-[1fr_auto] gap-3 items-center">
-                  <div class="min-w-0"> <div class="text-[11px] text-slate-500">RKAP</div>
-                    <div class="text-[20px] font-bold text-rose-600 leading-tight break-words">
-                      <span id="prd-tbs-rkap">0</span>
-                    </div>
-                    <div class="mt-1 text-[11px] text-slate-500">Realisasi</div>
-                    <div class="text-[20px] font-bold text-sky-700 leading-tight break-words">
-                      <span id="prd-tbs-real">0</span>
-                    </div>
-                  </div>
-                  <div class="donut-wrap"><canvas id="donut-tbs" aria-label="TBS"></canvas></div>
-                </div>
-              </div>
-              <?php
-                function smallCard($id,$title,$subTop='',$subBottom=''){
-                  echo '
-                  <div class="bg-white rounded-xl shadow p-4 border">
-                    <div class="text-sm font-semibold">'.htmlspecialchars($title).'</div>
-                    <div class="mt-2 grid grid-cols-[1fr_auto] gap-3 items-center">
-                      <div class="min-w-0"> '.($subTop!==''?'<div class="text-[11px] text-slate-500">'.htmlspecialchars($subTop).'</div>':'<div class="text-[11px] text-slate-500">Nilai</div>').'
-                        <div class="text-[20px] font-bold text-rose-600 leading-tight break-words"><span id="'.htmlspecialchars($id).'">0</span></div>
-                        '.($subBottom!==''?'<div class="mt-1 text-[11px] text-slate-500">'.htmlspecialchars($subBottom).'</div>':'').'
-                      </div>
-                      <div class="donut-wrap"><canvas id="donut-'.htmlspecialchars($id).'" aria-label="'.htmlspecialchars($title).'"></canvas></div>
-                    </div>
-                  </div>';
+            $kpi = [];
+            foreach ($tables as $label => $tableName) {
+                $conditions = ["1=1"];
+                if (!empty($tahun)) $conditions[] = "tahun = " . intval($tahun);
+                if (!empty($afdeling)) $conditions[] = "unit_kode = " . $pdo->quote($afdeling);
+                if (!empty($kebun)) {
+                    if ($kebunId) $conditions[] = "kebun_id = " . intval($kebunId);
+                    else $conditions[] = "1=0"; 
                 }
-                smallCard('prd-tandan','Tandan','Tandan/Pokok');
-                smallCard('prd-hk','Jumlah Hk Panen','Kilogram','Prestasi');
-                smallCard('prd-protas','Protas (Ton/Ha)');
-                smallCard('prd-btr','BTR');
-              ?>
-            </div>
+                $whereStr = implode(" AND ", $conditions);
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="card-title">Produksi (kg)</div>
-                <canvas id="ch-prod"></canvas>
-              </div>
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="card-title">TDN/PKK</div>
-                <canvas id="ch-tdn"></canvas>
-              </div>
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="card-title">PROTAS (TON/HA)</div>
-                <canvas id="ch-protas"></canvas>
-              </div>
-            </div>
-          </section>
+                $sqlSum = "SELECT COALESCE(SUM(anggaran_tahun), 0) as rcn, COALESCE(SUM($colRealisasi), 0) as realis FROM $tableName WHERE $whereStr";
+                $stmt = $pdo->query($sqlSum);
+                $rencana = 0; $realisasi = 0;
+                if ($stmt) {
+                    $rowSum = $stmt->fetch(PDO::FETCH_ASSOC);
+                    $rencana = floatval($rowSum['rcn'] ?? 0);
+                    $realisasi = floatval($rowSum['realis'] ?? 0);
+                }
+                $persen = ($rencana > 0) ? round(($realisasi / $rencana) * 100, 1) : 0;
+                $color = ($persen >= 100) ? 'text-cyan-600' : (($persen >= 80) ? 'text-blue-600' : 'text-red-500');
 
-          <section>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div class="bg-white rounded-xl shadow p-5 border">
-                <div class="text-slate-500 text-sm">Total Item Gudang</div>
-                <div class="text-3xl font-extrabold mt-1"><span id="kpi-total-item">0</span></div>
-                <div class="text-[11px] text-slate-400 mt-1">Distinct nama bahan (periode dipilih)</div>
-              </div>
-              <div class="bg-white rounded-xl shadow p-5 border">
-                <div class="text-slate-500 text-sm">Stok Bersih</div>
-                <div class="text-3xl font-extrabold mt-1 text-emerald-600"><span id="kpi-stok-bersih">0</span></div>
-                <div class="text-[11px] text-slate-400 mt-1">Awal + Masuk + Pasokan − Keluar − Dipakai</div>
-              </div>
-              <div class="bg-white rounded-xl shadow p-5 border">
-                <div class="text-slate-500 text-sm">Total Pemakaian (fisik)</div>
-                <div class="text-3xl font-extrabold mt-1 text-sky-600"><span id="kpi-pemakaian">0</span></div>
-                <div class="text-[11px] text-slate-400 mt-1">Σ jlh_fisik (kimia + pemupukan)</div>
-              </div>
-              <div class="bg-white rounded-xl shadow p-5 border">
-                <div class="text-slate-500 text-sm">Dokumen Pemakaian</div>
-                <div class="text-3xl font-extrabold mt-1 text-amber-600"><span id="kpi-doc">0</span></div>
-                <div class="text-[11px] text-slate-400 mt-1">Count no_dokumen</div>
-              </div>
-            </div>
+                $kpi[] = ['label' => $label, 'rencana' => $rencana, 'realisasi' => $realisasi, 'persen' => $persen, 'color_class' => $color];
+            }
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="flex items-center justify-between mb-2">
-                  <div class="card-title">Top Sisa Stok Gudang</div>
-                  <select id="limit-stok" class="border rounded px-2 py-1 text-xs">
-                    <option value="5">Top 5</option>
-                    <option value="10" selected>Top 10</option>
-                    <option value="20">Top 20</option>
-                  </select>
-                </div>
-                <canvas id="ch-stok-top"></canvas>
-              </div>
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="card-title">Tren Pemakaian (per Bulan)</div>
-                <canvas id="ch-pemakaian-tren"></canvas>
-              </div>
-              <div class="bg-white rounded-xl shadow p-4 border chart-card">
-                <div class="card-title">Pemeliharaan: Realisasi per Jenis</div>
-                <canvas id="ch-pemeliharaan-jenis"></canvas>
-              </div>
-            </div>
-          </section>
+            $response['success'] = true;
+            $response['kpi'] = $kpi;
+            $response['rows'] = []; 
+            echo json_encode($response);
+            exit;
+        }
 
+        // --- 2. DATA PRODUKSI ---
+        if ($section === 'produksi_data') {
+            $params = [];
+            $conditions = ["1=1"];
+
+            if (!empty($afdeling)) { 
+                $conditions[] = "u.nama_unit = :afdeling"; 
+                $params[':afdeling'] = $afdeling; 
+            }
+            if (!empty($tahun)) { 
+                $conditions[] = "lm.tahun = :tahun"; 
+                $params[':tahun'] = $tahun; 
+            }
+            
+            if (!empty($kebun)) {
+                $stmtK = $pdo->prepare("SELECT id FROM md_kebun WHERE nama_kebun = ? LIMIT 1");
+                $stmtK->execute([$kebun]);
+                $kebunId = $stmtK->fetchColumn();
+                
+                if ($kebunId) {
+                    $conditions[] = "lm.kebun_id = :kid";
+                    $params[':kid'] = $kebunId;
+                } else {
+                    $conditions[] = "1=0";
+                }
+            }
+            
+            $whereChart = implode(" AND ", $conditions);
+            
+            $sqlChart = "SELECT lm.bulan, SUM(COALESCE(lm.anggaran_kg,0)) as rkap, SUM(COALESCE(lm.realisasi_kg,0)) as `real`
+                         FROM lm76 lm 
+                         LEFT JOIN units u ON u.id = lm.unit_id
+                         WHERE $whereChart
+                         GROUP BY lm.bulan 
+                         ORDER BY FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember')";
+            
+            $stmt = $pdo->prepare($sqlChart);
+            $stmt->execute($params);
+            $chartData = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!empty($bulan)) { 
+                $conditions[] = "lm.bulan = :bulan"; 
+                $params[':bulan'] = $bulan; 
+            }
+            $whereTable = implode(" AND ", $conditions);
+
+            $sqlTable = "SELECT 
+                            lm.tahun, 
+                            lm.bulan, 
+                            u.nama_unit,
+                            lm.tt,              
+                            lm.luas_ha,         
+                            lm.jumlah_pohon,
+                            (CASE WHEN lm.jumlah_pohon > 0 THEN lm.jumlah_tandan / lm.jumlah_pohon ELSE 0 END) as tdn_pkk,
+                            (CASE WHEN lm.luas_ha > 0 THEN (lm.realisasi_kg / lm.luas_ha) / 1000 ELSE 0 END) as protas,
+                            (CASE WHEN lm.jumlah_hk > 0 THEN lm.realisasi_kg / lm.jumlah_hk ELSE 0 END) as kg_hk
+                         FROM lm76 lm 
+                         LEFT JOIN units u ON u.id = lm.unit_id
+                         WHERE $whereTable
+                         ORDER BY lm.tahun DESC, FIELD(lm.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember') DESC
+                         LIMIT 500";
+            
+            $stmtTable = $pdo->prepare($sqlTable);
+            $stmtTable->execute($params);
+            $tableData = $stmtTable->fetchAll(PDO::FETCH_ASSOC);
+            
+            $response['success'] = true;
+            $response['chart_data'] = $chartData;
+            $response['table_data'] = $tableData;
+            echo json_encode($response);
+            exit;
+        }
+
+        // --- 3. DATA GUDANG & ALAT ---
+        if ($section === 'gudang_ops') {
+            $params = [];
+            $conditions = ["1=1"];
+
+            if (!empty($bulan)) { $conditions[] = "sg.bulan = :bulan"; $params[':bulan'] = $bulan; }
+            if (!empty($tahun)) { $conditions[] = "sg.tahun = :tahun"; $params[':tahun'] = $tahun; }
+            if (!empty($kebun)) { $conditions[] = "mk.nama_kebun = :kebun"; $params[':kebun'] = $kebun; }
+
+            $whereGudang = implode(" AND ", $conditions);
+            $sqlG = "SELECT mk.nama_kebun, b.nama_bahan, s.nama AS satuan, sg.bulan, sg.stok_awal, sg.mutasi_masuk, sg.mutasi_keluar, 
+                    (sg.stok_awal + sg.mutasi_masuk + COALESCE(sg.pasokan,0) - sg.mutasi_keluar - COALESCE(sg.dipakai,0)) as stok_akhir
+                    FROM stok_gudang sg 
+                    JOIN md_bahan_kimia b ON b.id = sg.bahan_id 
+                    LEFT JOIN md_satuan s ON s.id = b.satuan_id 
+                    JOIN md_kebun mk ON mk.id = sg.kebun_id
+                    WHERE $whereGudang ORDER BY mk.nama_kebun, b.nama_bahan";
+            
+            $stmt = $pdo->prepare($sqlG);
+            $stmt->execute($params);
+            $dataGudang = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $stats = ['stok_gudang' => 0, 'stok_kimia' => 0, 'stok_alat' => 0];
+            foreach ($dataGudang as $row) {
+                $nama = strtolower($row['nama_bahan']);
+                $stok = floatval($row['stok_akhir']);
+                $stats['stok_gudang'] += $stok;
+                if (preg_match('/(egrek|dodos|angkong|gancu|cangkul|parang|batu asah)/i', $nama)) {
+                    $stats['stok_alat'] += $stok;
+                } elseif (!preg_match('/(solar|bensin|dexlite|pertalite|pertamax|oli|pelumas)/i', $nama)) {
+                    $stats['stok_kimia'] += $stok;
+                }
+            }
+
+            $paramsAP = []; $condAP = ["1=1"];
+            if (!empty($bulan)) { $condAP[] = "ap.bulan = :b"; $paramsAP[':b'] = $bulan; }
+            if (!empty($tahun)) { $condAP[] = "ap.tahun = :t"; $paramsAP[':t'] = $tahun; }
+            if (!empty($kebun)) { $condAP[] = "k.nama_kebun = :k"; $paramsAP[':k'] = $kebun; }
+            
+            $whereAP = implode(" AND ", $condAP);
+            
+            $sqlAlat = "SELECT COALESCE(SUM(ap.stok_akhir), 0) 
+                        FROM alat_panen ap 
+                        LEFT JOIN md_kebun k ON k.id = ap.kebun_id 
+                        WHERE $whereAP";
+            
+            $stmtAlat = $pdo->prepare($sqlAlat);
+            $stmtAlat->execute($paramsAP);
+            $totalAlatPanen = floatval($stmtAlat->fetchColumn());
+
+            $stats['stok_alat'] += $totalAlatPanen;
+
+            $paramsPakai = [];
+            $condPakai = ["1=1"];
+            if (!empty($tahun)) { 
+                $condPakai[] = "YEAR(tanggal) = :tahun"; 
+                $paramsPakai[':tahun'] = $tahun; 
+            }
+            if (!empty($bulan)) { 
+                $condPakai[] = "$bulanSQL = :bulan"; 
+                $paramsPakai[':bulan'] = $bulan; 
+            }
+            $wherePakai = implode(" AND ", $condPakai);
+            $sqlBBM = "SELECT COALESCE(SUM(jumlah), 0) FROM tr_pemakaian_barang_gudang WHERE $wherePakai";
+            $stmtBBM = $pdo->prepare($sqlBBM);
+            $stmtBBM->execute($paramsPakai);
+            $pakaiBBM = floatval($stmtBBM->fetchColumn());
+
+            $paramsP = []; $condP = ["1=1"];
+            if (!empty($tahun)) { $condP[] = "YEAR(tanggal) = :t"; $paramsP[':t'] = $tahun; }
+            if (!empty($bulan)) { $condP[] = "$bulanSQL = :b"; $paramsP[':b'] = $bulan; }
+            $whereP = implode(" AND ", $condP);
+
+            $s1 = $pdo->prepare("SELECT COALESCE(SUM(jumlah),0) FROM menabur_pupuk WHERE $whereP"); $s1->execute($paramsP);
+            $s2 = $pdo->prepare("SELECT COALESCE(SUM(jumlah),0) FROM menabur_pupuk_organik WHERE $whereP"); $s2->execute($paramsP);
+            $s3 = $pdo->prepare("SELECT COALESCE(SUM(jumlah),0) FROM angkutan_pupuk WHERE jenis_pupuk NOT LIKE '%Organik%' AND $whereP"); $s3->execute($paramsP);
+            $s4 = $pdo->prepare("SELECT COALESCE(SUM(jumlah),0) FROM angkutan_pupuk WHERE jenis_pupuk LIKE '%Organik%' AND $whereP"); $s4->execute($paramsP);
+
+            $response['success'] = true;
+            $response['gudang_rows'] = $dataGudang;
+            $response['stock_stats'] = $stats;
+            $response['usage_stats'] = ['bbm' => $pakaiBBM, 'kimia' => 0];
+            $response['pupuk_stats'] = [
+                'tabur_kimia' => floatval($s1->fetchColumn()), 'tabur_org' => floatval($s2->fetchColumn()),
+                'angkut_kimia' => floatval($s3->fetchColumn()), 'angkut_org' => floatval($s4->fetchColumn())
+            ];
+            echo json_encode($response);
+            exit;
+        }
+        throw new Exception("Unknown Section");
+    } catch (Exception $e) {
+        $response['message'] = $e->getMessage();
+        $response['debug']['exception'] = $e->getTraceAsString();
+        echo json_encode($response);
+        exit;
+    }
+}
+
+// ----------------------------------------------------------------------
+// FRONTEND VIEW
+// ----------------------------------------------------------------------
+$opsiAfdeling = $pdo->query("SELECT nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_COLUMN);
+$opsiKebun    = $pdo->query("SELECT nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_COLUMN);
+$bulanList    = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+$currentMonth = date('n') - 1; 
+$currentYear  = date('Y');
+$pageTitle = 'Dashboard Monitoring';
+
+// LOGIKA SAPAAN WAKTU (PHP - Server Side, Backup jika JS lambat)
+$hour = date('H');
+if ($hour >= 3 && $hour < 11) {
+    $sapaan = "Selamat Pagi";
+} elseif ($hour >= 11 && $hour < 15) {
+    $sapaan = "Selamat Siang";
+} elseif ($hour >= 15 && $hour < 19) {
+    $sapaan = "Selamat Sore";
+} else {
+    $sapaan = "Selamat Malam";
+}
+
+include_once '../layouts/header.php'; 
+?>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+    :root { --primary: #0891b2; --primary-hover: #0e7490; --bg-body: #f8fafc; }
+    body { background-color: var(--bg-body); font-family: 'Inter', sans-serif; }
+    .filter-bar { background: white; border-radius: 12px; padding: 16px 24px; box-shadow: 0 4px 15px -5px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 24px; position: sticky; top: 10px; z-index: 50; }
+    .filter-item { flex: 1; min-width: 140px; }
+    .filter-item label { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block; }
+    .filter-select { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 0.9rem; color: #334155; outline: none; background-color: #f8fafc; transition: all 0.2s; }
+    .filter-select:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 3px rgba(3,98,115,0.1); }
+    .filter-btn { background: var(--primary); color: white; border-radius: 8px; padding: 0 24px; height: 42px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
+    .filter-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .mini-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid #f1f5f9; text-align: center; }
+    .mini-lbl { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
+    .mini-val { font-size: 1.5rem; font-weight: 800; color: #1e293b; margin: 4px 0; }
+    .mini-sub { font-size: 0.7rem; color: #64748b; }
+    .middle-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
+    @media (max-width: 1024px) { .middle-grid { grid-template-columns: 1fr; } }
+    .chart-panel { background: white; border-radius: 16px; padding: 24px; border: 1px solid #eef2f6; height: 400px; }
+    .stat-card { background: white; border-radius: 16px; padding: 20px; border-left: 5px solid var(--primary); margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem; }
+    .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .stock-card { background: white; border-radius: 12px; padding: 20px; border-top: 4px solid #cbd5e1; min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
+    .stock-card h3 { font-size: 1.6rem; font-weight: 800; color: #1e293b; }
+    .table-wrapper { background: white; border-radius: 16px; border: 1px solid #eef2f6; overflow: hidden; }
+    .nav-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    .nav-btn { padding: 14px 24px; font-size: 0.9rem; font-weight: 600; color: #64748b; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; }
+    .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: white; }
+    .modern-table { width: 100%; border-collapse: collapse; }
+    .modern-table th { background: #f8fafc; color: #475569; padding: 12px 16px; font-size: 0.75rem; text-transform: uppercase; text-align: left; font-weight: 700; }
+    .modern-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; color: #334155; }
+    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; }
+    .loading-overlay.active { display: flex; }
+    .spinner { border: 4px solid #f3f4f6; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .welcome-banner { 
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); 
+        border-radius: 16px; padding: 24px 32px; color: white; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px -5px rgba(6, 182, 212, 0.3); position: relative; overflow: hidden; 
+    }
+    .welcome-banner::before { content: ''; position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%; }
+    .weather-widget { background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); padding: 10px 20px; border-radius: 12px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(255,255,255,0.3); }
+    .quick-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .qa-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; text-decoration: none; position: relative; overflow: hidden; }
+    .qa-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1); border-color: var(--primary); }
+    .qa-card:hover .qa-icon { background: var(--primary); color: white; transform: scale(1.1); }
+    .qa-icon { width: 48px; height: 48px; border-radius: 12px; background: #f1f5f9; color: #64748b; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; transition: all 0.3s ease; }
+    .qa-title { font-size: 0.85rem; font-weight: 600; color: #334155; }
+    .qa-desc { font-size: 0.7rem; color: #94a3b8; margin-top: 4px; }
+</style>
+
+<div class="loading-overlay" id="loading"><div class="spinner"></div></div>
+
+<div class="pb-12 px-4 md:px-8 mt-4 relative z-0">
+
+    <div class="welcome-banner">
+        <div class="relative z-10">
+            <h2 class="text-2xl font-bold mb-1">
+                <span id="sapaan-waktu"><?= $sapaan ?></span>, <?= htmlspecialchars($_SESSION['user_nama'] ?? 'User') ?>!
+            </h2>
+            <p class="text-cyan-50 text-sm font-medium">
+                <?= date('l, d F Y') ?> &bull; <span class="uppercase tracking-wider opacity-80"><?= htmlspecialchars($_SESSION['user_role'] ?? 'Staff') ?></span>
+            </p>
         </div>
-      </main>
+        <div class="weather-widget hidden md:flex relative z-10">
+            <i id="weather-icon" data-lucide="cloud" class="w-8 h-8 text-yellow-300"></i>
+            <div class="text-right">
+                <div id="weather-temp" class="text-xl font-bold">--°C</div>
+                <div id="weather-desc" class="text-[10px] uppercase tracking-wide opacity-90">Memuat...</div>
+            </div>
+        </div>
     </div>
 
-  <script>
-  document.addEventListener('DOMContentLoaded', () => {
-    const $ = s => document.querySelector(s);
+    <div class="filter-bar">
+        <div class="filter-item">
+            <label>Tahun</label>
+            <select id="f-tahun" class="filter-select">
+                <?php 
+                $tahunSaatIni = date('Y');
+                for($y = $tahunSaatIni; $y >= $tahunSaatIni - 3; $y--): 
+                ?>
+                    <option value="<?= $y ?>" <?= $y == $tahunSaatIni ? 'selected' : '' ?>><?= $y ?></option>
+                <?php endfor; ?>
+            </select>
+        </div>
+        <div class="filter-item">
+            <label>Bulan</label>
+            <select id="f-bulan" class="filter-select">
+                <option value="">Semua Bulan (YTD)</option>
+                <?php foreach($bulanList as $idx => $b): ?>
+                    <option value="<?= $b ?>" <?= $idx == $currentMonth ? 'selected' : '' ?>><?= $b ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-item" style="flex: 1.5;">
+            <label>Unit Kebun</label>
+            <select id="f-kebun" class="filter-select">
+                <option value="">Semua Kebun</option>
+                <?php foreach($opsiKebun as $k): ?><option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($k) ?></option><?php endforeach; ?>
+            </select>
+        </div>
+        <div class="filter-item" style="flex: 1.5;">
+            <label>Afdeling</label>
+            <select id="f-afdeling" class="filter-select">
+                <option value="">Semua Afdeling</option>
+                <?php foreach($opsiAfdeling as $a): ?><option value="<?= htmlspecialchars($a) ?>"><?= htmlspecialchars($a) ?></option><?php endforeach; ?>
+            </select>
+        </div>
+        <button id="btn-refresh" class="filter-btn"><i data-lucide="filter" class="w-4 h-4"></i> Terapkan Filter</button>
+    </div>
 
-    // Filter controls
-    const fKebun = $('#f-kebun');
-    const fAfd   = $('#f-afdeling');
-    const fBulan = $('#f-bulan');
-    const fTahun = $('#f-tahun');
-    const limitStok = $('#limit-stok');
-    $('#btn-refresh').addEventListener('click', () => refreshDashboard(false));
+    <div class="mb-2 text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+        <i data-lucide="zap" class="w-3 h-3 text-amber-500"></i> Aksi Cepat
+    </div>
+    
+    <div class="quick-action-grid">
+        <?php if(($_SESSION['user_role'] ?? '') !== 'viewer'): ?>
+            <a href="lm77.php" class="qa-card group">
+                <div class="qa-icon text-cyan-600 bg-cyan-50 group-hover:bg-cyan-600 group-hover:text-white"><i data-lucide="sprout" class="w-6 h-6"></i></div>
+                <div class="qa-title">Input Panen</div>
+                <div class="qa-desc">Catat produksi harian</div>
+            </a>
+            <a href="pemeliharaan_tm.php" class="qa-card group">
+                <div class="qa-icon text-emerald-600 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white"><i data-lucide="axe" class="w-6 h-6"></i></div>
+                <div class="qa-title">Rawat TM</div>
+                <div class="qa-desc">Realisasi pemeliharaan</div>
+            </a>
+            <a href="pemakaian.php" class="qa-card group">
+                <div class="qa-icon text-pink-600 bg-pink-50 group-hover:bg-pink-600 group-hover:text-white"><i data-lucide="clipboard-list" class="w-6 h-6"></i></div>
+                <div class="qa-title">Pakai Bahan</div>
+                <div class="qa-desc">Catat penggunaan kimia</div>
+            </a>
+            <a href="stok_barang_gudang.php" class="qa-card group">
+                <div class="qa-icon text-amber-600 bg-amber-50 group-hover:bg-amber-600 group-hover:text-white"><i data-lucide="package-plus" class="w-6 h-6"></i></div>
+                <div class="qa-title">Stok Gudang</div>
+                <div class="qa-desc">Cek ketersediaan barang</div>
+            </a>
+        <?php else: ?>
+            <a href="lm76.php" class="qa-card group">
+                <div class="qa-icon text-indigo-600 bg-indigo-50 group-hover:bg-indigo-600 group-hover:text-white"><i data-lucide="file-bar-chart" class="w-6 h-6"></i></div>
+                <div class="qa-title">Laporan LM76</div>
+                <div class="qa-desc">Lihat rekap produksi</div>
+            </a>
+             <a href="laporan_mingguan.php" class="qa-card group">
+                <div class="qa-icon text-blue-600 bg-blue-50 group-hover:bg-blue-600 group-hover:text-white"><i data-lucide="folder-search" class="w-6 h-6"></i></div>
+                <div class="qa-title">Arsip Laporan</div>
+                <div class="qa-desc">Cari data lama</div>
+            </a>
+        <?php endif; ?>
+    </div>
 
-    // KPI nodes
-    const KPI = {
-      total:  $('#kpi-total-item'),
-      stok:   $('#kpi-stok-bersih'),
-      pakai:  $('#kpi-pemakaian'),
-      doc:    $('#kpi-doc'),
-    };
+    <div>
+        <div class="mb-2 text-xs font-bold text-slate-500 uppercase"><i data-lucide="bar-chart-3" class="w-3 h-3"></i> Persentase Realisasi Pemeliharaan</div>
+        <div id="kpi-container" class="kpi-grid"></div>
 
-    // chart refs
-    let chStokTop, chPemTren, chPmlJenis;
-    let chProd, chTDN, chProtas;
-
-    // Donut refs
-    const donut = {TU:null,TBM:null,TM:null,PN:null,MN:null, TBS:null};
-
-    const bulanOrder = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
-    const palette = n => Array.from({length:n}, (_,i)=>['#16a34a','#f59e0b','#0ea5e9','#a855f7','#ef4444','#10b981','#6366f1','#22c55e','#eab308','#06b6d4','#f97316','#84cc16'][i%12]);
-    const fmt = x => Number(x||0).toLocaleString(undefined,{maximumFractionDigits:2});
-    const sisaStok = r => (+r.stok_awal||0)+(+r.mutasi_masuk||0)+(+r.pasokan||0)-(+r.mutasi_keluar||0)-(+r.dipakai||0);
-
-    async function postJSON(section, extra){
-      const fd = new FormData();
-      fd.append('ajax','dashboard');
-      fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-      fd.append('section', section);
-      fd.append('kebun',    fKebun.value || '');
-      fd.append('afdeling', fAfd.value || '');
-      fd.append('bulan',    fBulan.value || '');
-      fd.append('tahun',    fTahun.value || '');
-      if (extra) Object.entries(extra).forEach(([k,v])=> fd.append(k,v));
-      const ctrl = new AbortController(); const t = setTimeout(()=>ctrl.abort(), 15000);
-      try {
-        const res = await fetch(location.href, {method:'POST', body:fd, signal:ctrl.signal});
-        clearTimeout(t);
-        return await res.json();
-      } catch (e) { clearTimeout(t); return {success:false,error:String(e)}; }
-    }
-
-    // Loaders
-    const fetchGudang   = async()=> (await postJSON('gudang'))?.data || [];
-    const fetchMixPem   = async()=> (await postJSON('pemakaian'))?.data || [];
-    const fetchPkj      = async()=> (await postJSON('pekerjaan'))?.data || [];
-    const fetchPml      = async()=> (await postJSON('pemeliharaan'))?.data || [];
-    const fetchPpkK     = async()=> (await postJSON('pemupukan_kimia'))?.data || [];
-    const fetchPpkO     = async()=> (await postJSON('pemupukan_organik'))?.data || [];
-    const fetchAngK     = async()=> (await postJSON('angkutan_kimia'))?.data || [];
-    const fetchAngO     = async()=> (await postJSON('angkutan_organik'))?.data || [];
-    const fetchPemKPI   = async()=> (await postJSON('pemeliharaan_kpi'))?.data || [];
-    const fetchLM76     = async()=> (await postJSON('lm76_tren'))?.data || [];
-    const fetchLM77     = async()=> (await postJSON('lm77_tren'))?.data || [];
-
-    // ===== CHART RENDER HELPER (FIX utama) =====
-    function renderOrUpdate(ctxId, cfg, holder){
-      const canvas = document.getElementById(ctxId);
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      if (holder.value instanceof Chart) holder.value.destroy();
-
-      cfg.options = Object.assign({
-        responsive: true,
-        maintainAspectRatio: false,
-        resizeDelay: 100,
-        plugins: { legend: { display: true } },
-        scales: { y: { beginAtZero: true } }
-      }, cfg.options || {});
-
-      holder.value = new Chart(ctx, cfg);
-    }
-
-    const barCfg  = (labels, datasets, stacked=false, horizontal=false)=>({
-      type:'bar',
-      data:{labels,datasets},
-      options:{
-        indexAxis:horizontal?'y':'x',
-        plugins:{legend:{display:true}},
-        scales: stacked?{x:{stacked:true},y:{stacked:true}}:{}
-      }
-    });
-
-    const lineCfg = (labels, dataset)=>({
-      type:'line',
-      data:{labels, datasets:[dataset]},
-      options:{
-        plugins:{legend:{display:true}},
-        tension:.35,
-        elements:{point:{radius:3}},
-        scales:{y:{beginAtZero:true}}
-      }
-    });
-
-    // Plugin donut – text tengah
-    const CenterTextPlugin = {
-      id: 'centerText',
-      beforeDraw(chart) {
-        const txt = chart?.options?.plugins?.centerText?.text;
-        if (!txt) return;
-        const {ctx, chartArea} = chart;
-        const radius = chart.getDatasetMeta(0)?.controller?.innerRadius || Math.min(chartArea.width, chartArea.height)/3;
-        ctx.save();
-        const size = Math.max(12, Math.min(26, Math.floor(radius*0.6)));
-        ctx.font = `600 ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
-        ctx.fillStyle = (chart.options.plugins.centerText.color || '#111827');
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const cx = (chartArea.left + chartArea.right)/2;
-        const cy = (chartArea.top + chartArea.bottom)/2;
-        ctx.fillText(txt, cx, cy); ctx.restore();
-      }
-    };
-    Chart.register(CenterTextPlugin);
-
-    const donutCfg = (percent)=>({
-      type:'doughnut',
-      data:{ labels:['Progress','Sisa'], datasets:[{ data:[percent, Math.max(0,100-percent)], borderWidth:0, backgroundColor:['#3b82f6','#e5e7eb'] }]},
-      options:{ cutout:'70%', plugins:{ legend:{display:false}, tooltip:{enabled:false}, centerText:{ text: `${Math.round(percent)}%`, color:'#111827' } } }
-    });
-
-    function setPemCard(id, rcn, real){
-      const p = rcn>0 ? Math.max(0, Math.min(100, (real/rcn)*100)) : 0;
-      document.getElementById('rcn-'+id).textContent  = fmt(rcn);
-      document.getElementById('real-'+id).textContent = fmt(real);
-      const holder = { get value(){ return donut[id]; }, set value(v){ donut[id]=v; } };
-      renderOrUpdate('donut-'+id, donutCfg(+p.toFixed(2)), holder);
-    }
-
-    // Kartu biaya/HPP builder (mini donut)
-    function renderBiayaCards(list) {
-      const wrap = document.getElementById('biaya-grid');
-      wrap.innerHTML = '';
-      list.forEach((it,idx) => {
-        const id = `mini-${it.key}-${idx}`;
-        const html = `
-          <div class="bg-white rounded-xl shadow p-4 border">
-            <div class="text-[12px] font-semibold">${it.title}</div>
-            <div class="mt-2 grid grid-cols-[1fr_auto] gap-3 items-center">
-              <div class="min-w-0"> <div class="text-[11px] text-slate-500">Rencana</div>
-                <div class="text-[20px] font-bold text-rose-600 leading-tight break-words">${fmt(it.anggaran)}</div>
-                <div class="mt-1 text-[11px] text-slate-500">Realisasi</div>
-                <div class="text-[20px] font-bold text-sky-700 leading-tight break-words">${fmt(it.realisasi)}</div>
-              </div>
-              <div class="donut-wrap"><canvas id="${id}" aria-label="${it.title}"></canvas></div>
+        <div class="middle-grid">
+            <div class="chart-panel">
+                <div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-700">Tren Produksi (Ton)</h3></div>
+                <div style="height: 300px; position: relative;"><canvas id="chart-produksi"></canvas></div>
             </div>
-          </div>`;
-        wrap.insertAdjacentHTML('beforeend', html);
-        const percent = it.anggaran > 0 ? Math.min(100, (it.realisasi / it.anggaran) * 100) : 0;
-        const dummyHolder = { value: null };
-        renderOrUpdate(id, donutCfg(percent), dummyHolder);
-      });
+            <div>
+                <div class="stat-card" style="border-color: #3b82f6;">
+                    <div class="font-bold mb-2 text-slate-600">PUPUK KIMIA (KG)</div>
+                    <div class="stat-row"><span>Menabur</span> <strong id="val-tabur-kimia" class="text-blue-600">0</strong></div>
+                    <div class="stat-row"><span>Angkutan</span> <strong id="val-angkut-kimia">0</strong></div>
+                </div>
+                <div class="stat-card" style="border-color: #22c55e;">
+                    <div class="font-bold mb-2 text-slate-600">PUPUK ORGANIK (KG)</div>
+                    <div class="stat-row"><span>Menabur</span> <strong id="val-tabur-org" class="text-green-600">0</strong></div>
+                    <div class="stat-row"><span>Angkutan</span> <strong id="val-angkut-org">0</strong></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stock-grid">
+            <div class="stock-card" style="border-top-color: #64748b;">
+                <h4>Stok Gudang</h4><h3 id="stok-gudang">0</h3><i data-lucide="package" class="absolute top-4 right-4 text-slate-300"></i>
+            </div>
+            <div class="stock-card" style="border-top-color: #0ea5e9;">
+                <h4>Stok Kimia</h4><h3 id="stok-kimia">0</h3><i data-lucide="flask-conical" class="absolute top-4 right-4 text-sky-200"></i>
+            </div>
+            <div class="stock-card" style="border-top-color: #f59e0b;">
+                <h4>Stok Alat</h4><h3 id="stok-alat">0</h3><i data-lucide="wrench" class="absolute top-4 right-4 text-amber-200"></i>
+            </div>
+            <div class="stock-card" style="border-top-color: #ef4444;">
+                <h4>Pakai BBM (L)</h4><h3 id="pakai-bbm">0</h3><i data-lucide="fuel" class="absolute top-4 right-4 text-red-200"></i>
+            </div>
+            <div class="stock-card" style="border-top-color: #8b5cf6;">
+                <h4>Pakai Kimia (Kg)</h4><h3 id="pakai-kimia">0</h3><i data-lucide="droplets" class="absolute top-4 right-4 text-violet-200"></i>
+            </div>
+        </div>
+
+        <div class="table-wrapper">
+            <div class="nav-tabs">
+                <button onclick="App.switchTab('produksi')" class="nav-btn active" id="btn-tab-produksi">Produksi</button>
+                <button onclick="App.switchTab('gudang')" class="nav-btn" id="btn-tab-gudang">Gudang</button>
+            </div>
+            <div class="bg-white min-h-[300px]">
+                <div id="tab-produksi" class="tab-pane active">
+                    <div class="overflow-x-auto">
+                        <table class="modern-table">
+                            <thead><tr><th>Bulan</th><th>Unit</th><th>TT</th><th>Luas(Ha)</th><th>Pkk</th><th class="text-right">Tandan/Pkk</th><th class="text-right">Protas</th><th class="text-right">Kg/HK</th></tr></thead>
+                            <tbody id="tbl-prod-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="p-4 flex justify-between" id="pag-prod-ctl"></div>
+                </div>
+
+                <div id="tab-gudang" class="tab-pane">
+                    <div class="overflow-x-auto"><table class="modern-table">
+                        <thead><tr><th>Kebun</th><th>Bahan</th><th>Satuan</th><th class="text-right">Stok Awal</th><th class="text-right">Masuk</th><th class="text-right">Keluar</th><th class="text-right">Akhir</th></tr></thead>
+                        <tbody id="tbl-gudang-body"></tbody>
+                    </table></div>
+                    <div class="p-4 flex justify-between" id="pag-gudang-ctl"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+</div>
+
+<script>
+const CSRF_TOKEN = '<?= $CSRF ?>';
+
+function logDebug(msg) {
+    console.log(msg);
+}
+
+class Paginator {
+    constructor(data, itemsPerPage, tbodyId, ctlId, renderRowFn) {
+        this.data = data || [];
+        this.perPage = itemsPerPage;
+        this.currentPage = 1;
+        this.tbody = document.getElementById(tbodyId);
+        this.ctl = document.getElementById(ctlId);
+        this.renderRow = renderRowFn;
+        this.init();
     }
+    init() {
+        if(this.data.length === 0) {
+            this.tbody.innerHTML = '<tr><td colspan="10" class="text-center py-8 text-slate-400 italic">Tidak ada data.</td></tr>';
+            this.ctl.innerHTML = ''; return;
+        }
+        this.render();
+    }
+    render() {
+        const total = Math.ceil(this.data.length / this.perPage);
+        if(this.currentPage > total) this.currentPage = total;
+        const start = (this.currentPage - 1) * this.perPage;
+        const chunk = this.data.slice(start, start + this.perPage);
+        this.tbody.innerHTML = chunk.map(this.renderRow).join('');
+        this.ctl.innerHTML = `
+            <span class="text-sm text-slate-500">Hal ${this.currentPage} dari ${total}</span>
+            <div class="flex gap-2">
+                <button class="px-3 py-1 border rounded hover:bg-slate-100" id="prev-${this.ctl.id}" ${this.currentPage===1?'disabled':''}>Prev</button>
+                <button class="px-3 py-1 border rounded hover:bg-slate-100" id="next-${this.ctl.id}" ${this.currentPage===total?'disabled':''}>Next</button>
+            </div>`;
+        document.getElementById(`prev-${this.ctl.id}`).onclick = () => { this.currentPage--; this.render(); };
+        document.getElementById(`next-${this.ctl.id}`).onclick = () => { this.currentPage++; this.render(); };
+    }
+}
 
-    async function refreshDashboard(showLoading=true){
-      if (showLoading) Object.values(KPI).forEach(el => el && (el.textContent = '…'));
-
-      const [
-        rowsG, rowsMix, rowsPkj, rowsPml, rowsPpkK, rowsPpkO, rowsAngK, rowsAngO,
-        pemKPI, lm76, lm77
-      ] = await Promise.all([
-        fetchGudang(), fetchMixPem(), fetchPkj(), fetchPml(), fetchPpkK(), fetchPpkO(), fetchAngK(), fetchAngO(),
-        fetchPemKPI(), fetchLM76(), fetchLM77()
-      ]);
-
-      /* === KPI Utama Gudang === */
-      const distinctItems = new Set(rowsG.map(r => r.nama_bahan || '-'));
-      if (KPI.total) KPI.total.textContent = fmt(distinctItems.size);
-      if (KPI.stok)  KPI.stok.textContent  = fmt(rowsG.reduce((a,r)=> a + sisaStok(r), 0));
-      if (KPI.pakai) KPI.pakai.textContent = fmt(rowsMix.reduce((a,r)=> a + (+r.jlh_fisik||0), 0));
-      if (KPI.doc)   KPI.doc.textContent   = fmt(rowsMix.length);
-
-      // === Angka pemupukan & angkutan ===
-      document.getElementById('kpi-ppk-kimia').textContent   = fmt(rowsPpkK.reduce((a,r)=> a + (+r.jumlah||0), 0));
-      document.getElementById('kpi-ppk-organik').textContent = fmt(rowsPpkO.reduce((a,r)=> a + (+r.jumlah||0), 0));
-      document.getElementById('kpi-ang-kimia').textContent   = fmt(rowsAngK.reduce((a,r)=> a + (+r.jumlah||0), 0));
-      document.getElementById('kpi-ang-organik').textContent = fmt(rowsAngO.reduce((a,r)=> a + (+r.jumlah||0), 0));
-
-      /* === Donut Pemeliharaan (5) === */
-      const map = {}; (pemKPI||[]).forEach(r => { map[r.label] = {rencana:+r.rencana||0, realisasi:+r.realisasi||0}; });
-      setPemCard('TU',  map.TU?.rencana||0,  map.TU?.realisasi||0);
-      setPemCard('TBM', map.TBM?.rencana||0, map.TBM?.realisasi||0);
-      setPemCard('TM',  map.TM?.rencana||0,  map.TM?.realisasi||0);
-      setPemCard('PN',  map.PN?.rencana||0,  map.PN?.realisasi||0);
-      setPemCard('MN',  map.MN?.rencana||0,  map.MN?.realisasi||0);
-
-      /* === Kartu Biaya/HPP — grouping by text === */
-      const tot = rowsPkj.reduce((o,r)=>{ o.R+=(+r.rencana_bi||0); o.X+=(+r.realisasi_bi||0); return o; }, {R:0,X:0});
-      const match = (r,kw)=> ((r.alokasi||'').toLowerCase().includes(kw) || (r.uraian_pekerjaan||'').toLowerCase().includes(kw));
-      const incPem = rowsPkj.filter(r=> match(r,'pupuk')).reduce((o,r)=>{ o.R+=+r.rencana_bi||0; o.X+=+r.realisasi_bi||0; return o; }, {R:0,X:0});
-      const exclPem = {R: tot.R - incPem.R, X: tot.X - incPem.X};
-      const gajiKarpim = rowsPkj.filter(r=> match(r,'gaji') || match(r,'karpim')).reduce((o,r)=>{ o.R+=+r.rencana_bi||0; o.X+=+r.realisasi_bi||0; return o; }, {R:0,X:0});
-      const biayaPemel = rowsPkj.filter(r=> match(r,'pemel')).reduce((o,r)=>{ o.R+=+r.rencana_bi||0; o.X+=+r.realisasi_bi||0; return o; }, {R:0,X:0});
-      const panenPengumpul = rowsPkj.filter(r=> match(r,'panen') || match(r,'pengumpul')).reduce((o,r)=>{ o.R+=+r.rencana_bi||0; o.X+=+r.realisasi_bi||0; return o; }, {R:0,X:0});
-      const biayaUmum = rowsPkj.filter(r=> match(r,'umum') || match(r,'alokasi')).reduce((o,r)=>{ o.R+=+r.rencana_bi||0; o.X+=+r.realisasi_bi||0; return o; }, {R:0,X:0});
-
-      renderBiayaCards([
-        {key:'inc',    title:'Biaya incl. Pemupukan',    anggaran:incPem.R,        realisasi:incPem.X},
-        {key:'excl',   title:'Biaya excl. Pemupukan',    anggaran:exclPem.R,       realisasi:exclPem.X},
-        {key:'hppinc', title:'HPP Incl Pemupukan',       anggaran:incPem.R,        realisasi:incPem.X},
-        {key:'hppexc', title:'HPP Excl Pemupukan',       anggaran:exclPem.R,       realisasi:exclPem.X},
-        {key:'gaji',   title:'Gaji & Bisos Karpim',      anggaran:gajiKarpim.R,    realisasi:gajiKarpim.X},
-        {key:'tm',     title:'Biaya Pemeliharaan',       anggaran:biayaPemel.R,    realisasi:biayaPemel.X},
-        {key:'panen',  title:'Biaya Panen/Pengumpul',    anggaran:panenPengumpul.R, realisasi:panenPengumpul.X},
-        {key:'umum',   title:'Alokasi Biaya Umum',       anggaran:biayaUmum.R,     realisasi:biayaUmum.X},
-      ]);
-
-      /* === STOK: Top sisa === */
-      const aggStok = {};
-      rowsG.forEach(r => { const k=r.nama_bahan||'-'; aggStok[k]=(aggStok[k]||0)+sisaStok(r); });
-      const top = Object.entries(aggStok).sort((a,b)=>b[1]-a[1]).slice(0, parseInt((limitStok?.value)||10,10));
-      renderOrUpdate('ch-stok-top',
-        barCfg(top.map(x=>x[0]), [{label:'Sisa Stok', data: top.map(x=>x[1]), backgroundColor: palette(top.length)}], false, true),
-        {get value(){return chStokTop}, set value(v){chStokTop=v}}
-      );
-
-      /* === PRODUKSI charts & KPI berbasis field sebenarnya === */
-      // Map bulan → nilai dari lm76 (rkap/real)
-      const lm76Rkap = new Map(bulanOrder.map(b=>[b,0]));
-      const lm76Real = new Map(bulanOrder.map(b=>[b,0]));
-      (lm76||[]).forEach(r=>{
-        lm76Rkap.set(r.bulan, (+lm76Rkap.get(r.bulan)||0) + (+r.rkap||0));
-        lm76Real.set(r.bulan, (+lm76Real.get(r.bulan)||0) + (+r.real||0));
-      });
-
-      // lm77: avg tandan/pokok, protas, btr; sum prestasi
-      const lm77Tandan = new Map(bulanOrder.map(b=>[b,0]));
-      const lm77Protas = new Map(bulanOrder.map(b=>[b,0]));
-      const lm77Btr    = new Map(bulanOrder.map(b=>[b,0]));
-      const lm77PrestHk= new Map(bulanOrder.map(b=>[b,0]));
-      (lm77||[]).forEach(r=>{
-        lm77Tandan.set(r.bulan, (+r.tandan_pokok_bi||0));
-        lm77Protas.set(r.bulan, (+r.prod_tonha_bi||0));
-        lm77Btr.set(r.bulan,    (+r.btr_bi||0));
-        lm77PrestHk.set(r.bulan,(+r.prestasi_kg_hk_bi||0));
-      });
-
-      // Render 3 chart bawah
-      renderOrUpdate(
-        'ch-prod',
-        lineCfg(
-          bulanOrder,
-          { label:'Realisasi TBS (Kg)', data: bulanOrder.map(b=> lm76Real.get(b)||0),
-            borderColor:'#16a34a', backgroundColor:'#16a34a20', fill:true }
-        ),
-        { get value(){return chProd}, set value(v){chProd=v} }
-      );
-
-      renderOrUpdate(
-        'ch-tdn',
-        lineCfg(
-          bulanOrder,
-          { label:'Tandan/Pokok (BI)', data: bulanOrder.map(b=> lm77Tandan.get(b)||0),
-            borderColor:'#f97316', backgroundColor:'#f9731620', fill:true }
-        ),
-        { get value(){return chTDN}, set value(v){chTDN=v} }
-      );
-
-      renderOrUpdate(
-        'ch-protas',
-        lineCfg(
-          bulanOrder,
-          { label:'PROTAS (Ton/Ha, BI)', data: bulanOrder.map(b=> lm77Protas.get(b)||0),
-            borderColor:'#6366f1', backgroundColor:'#6366f120', fill:true }
-        ),
-        { get value(){return chProtas}, set value(v){chProtas=v} }
-      );
-
-      // ==== PRODUKSI TBS (RKAP vs REAL) + DONUT ====
-      const selBulan = fBulan.value || null;
-      const totalRkap = [...lm76Rkap.values()].reduce((a,b)=>a+(+b||0),0);
-      const totalReal = [...lm76Real.values()].reduce((a,b)=>a+(+b||0),0);
-      const rkap  = selBulan ? (+lm76Rkap.get(selBulan)||0) : totalRkap;
-      const real  = selBulan ? (+lm76Real.get(selBulan)||0) : totalReal;
-      $('#prd-tbs-rkap').textContent  = fmt(rkap);
-      $('#prd-tbs-real').textContent  = fmt(real);
-      renderOrUpdate('donut-tbs', (()=>{
-        const pct = rkap>0 ? Math.min(100, (real/rkap)*100) : 0;
-        return donutCfg(pct);
-      })(), {get value(){return donut.TBS}, set value(v){donut.TBS=v}});
-
-      // ==== Angka ringkas akurat (ikut filter) ====
-      if (fBulan.value) {
-        $('#prd-tandan').textContent = fmt(lm77Tandan.get(fBulan.value) || 0);
-        $('#prd-protas').textContent = fmt(lm77Protas.get(fBulan.value) || 0);
-        $('#prd-btr').textContent    = fmt(lm77Btr.get(fBulan.value)    || 0);
-        $('#prd-hk').textContent     = fmt(lm77PrestHk.get(fBulan.value)|| 0);
-      } else {
-        const avg = map => {
-          const arr = [...map.values()].filter(v=>Number.isFinite(+v) && +v>0);
-          return arr.length ? (arr.reduce((a,b)=>a+ +b,0) / arr.length) : 0;
+const App = {
+    filters: {
+        kebun: document.getElementById('f-kebun'),
+        afdeling: document.getElementById('f-afdeling'),
+        bulan: document.getElementById('f-bulan'),
+        tahun: document.getElementById('f-tahun')
+    },
+    init() {
+        document.getElementById('btn-refresh').addEventListener('click', () => this.loadAll());
+        this.loadAll();
+        this.initWeather();
+    },
+    getPayload(section) {
+        const fd = new FormData();
+        fd.append('ajax', 'dashboard');
+        fd.append('csrf_token', CSRF_TOKEN);
+        fd.append('section', section);
+        fd.append('kebun', this.filters.kebun.value);
+        fd.append('afdeling', this.filters.afdeling.value);
+        fd.append('bulan', this.filters.bulan.value);
+        fd.append('tahun', this.filters.tahun.value);
+        return fd;
+    },
+    loadAll() {
+        document.getElementById('loading').classList.add('active');
+        
+        Promise.all([ this.loadKPI(), this.loadProduksi(), this.loadGudangOps() ])
+        .finally(() => {
+            document.getElementById('loading').classList.remove('active');
+            if(window.lucide) lucide.createIcons();
+        });
+    },
+    
+    // --- FITUR BARU: CUACA REAL-TIME ---
+    // --- FITUR CUACA REAL-TIME (FIXED) ---
+    async initWeather() {
+        // 1. Update Sapaan Waktu
+        const updateGreeting = () => {
+            const h = new Date().getHours();
+            let s = "Selamat Malam";
+            if(h >= 3 && h < 11) s = "Selamat Pagi";
+            else if(h >= 11 && h < 15) s = "Selamat Siang";
+            else if(h >= 15 && h < 19) s = "Selamat Sore";
+            
+            const el = document.getElementById('sapaan-waktu');
+            if(el) el.innerText = s;
         };
-        $('#prd-tandan').textContent = fmt(avg(lm77Tandan));
-        $('#prd-protas').textContent = fmt(avg(lm77Protas));
-        $('#prd-btr').textContent    = fmt(avg(lm77Btr));
-        $('#prd-hk').textContent     = fmt([...lm77PrestHk.values()].reduce((a,b)=>a+(+b||0),0));
-      }
+        updateGreeting();
+        
+        // 2. Ambil Data Cuaca (Open-Meteo API)
+        try {
+            // KOORDINAT MEDAN (Ganti sesuai lokasi Kebun PTPN 4 Regional 3)
+            const lat = 3.5833; 
+            const lon = 98.6667;
 
-      /* === Pemakaian (gabungan) chart tren === */
-      const mapTren = new Map(bulanOrder.map(b=>[b,0]));
-      rowsMix.forEach(r=> mapTren.set(r.bulan, (mapTren.get(r.bulan)||0) + (+r.jlh_fisik||0)));
-      renderOrUpdate('ch-pemakaian-tren',
-        lineCfg(bulanOrder, {label:`Pemakaian Total (${fTahun.value||'Tahun ini'})`, data: bulanOrder.map(b=>mapTren.get(b)||0), borderColor:'#0ea5e9', backgroundColor:'#0ea5e920', fill:true}),
-        {get value(){return chPemTren}, set value(v){chPemTren=v}}
-      );
+            // Langsung fetch tanpa minta izin lokasi user (Lebih Cepat)
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code&timezone=auto`;
+            
+            const res = await fetch(url);
+            if (!res.ok) throw new Error("Gagal mengambil data cuaca");
+            
+            const data = await res.json();
 
-      /* === Pemeliharaan: Realisasi per Jenis === */
-      const pmlJenis = {};
-      rowsPml.forEach(r=>{ const k=r.jenis_pekerjaan || '-'; pmlJenis[k] = (pmlJenis[k]||0) + (+r.realisasi||0); });
-      const pmlJenisArr = Object.entries(pmlJenis).sort((a,b)=>b[1]-a[1]).slice(0,12);
-      renderOrUpdate('ch-pemeliharaan-jenis',
-        barCfg(pmlJenisArr.map(x=>x[0]), [{label:'Realisasi', data:pmlJenisArr.map(x=>x[1]), backgroundColor: palette(pmlJenisArr.length)}], false, true),
-        {get value(){return chPmlJenis}, set value(v){chPmlJenis=v}}
-      );
+            if (data.current) {
+                const temp = Math.round(data.current.temperature_2m);
+                const code = data.current.weather_code;
+                
+                // Mapping kode cuaca WMO ke Bahasa Indonesia
+                let desc = "Cerah";
+                let icon = "sun"; // Default icon
+                
+                // 0: Cerah
+                // 1-3: Berawan
+                if (code >= 1 && code <= 3) { desc = "Berawan"; icon = "cloud-sun"; }
+                // 45-48: Kabut
+                else if (code >= 45 && code <= 48) { desc = "Berkabut"; icon = "cloud-fog"; }
+                // 51-67: Gerimis/Hujan Ringan
+                else if (code >= 51 && code <= 67) { desc = "Hujan Ringan"; icon = "cloud-drizzle"; }
+                // 80-99: Hujan Deras
+                else if (code >= 80 && code <= 99) { desc = "Hujan Deras"; icon = "cloud-rain"; }
+                // 95+: Badai
+                else if (code >= 95) { desc = "Badai Petir"; icon = "cloud-lightning"; }
+
+                // Update UI
+                const elTemp = document.getElementById('weather-temp');
+                const elDesc = document.getElementById('weather-desc');
+                const elIcon = document.getElementById('weather-icon');
+
+                if(elTemp) elTemp.innerText = `${temp}°C`;
+                if(elDesc) elDesc.innerText = desc;
+                
+                // Update Icon Lucide
+                if(elIcon) {
+                    elIcon.setAttribute('data-lucide', icon);
+                    // Refresh icon render agar gambar berubah
+                    if(window.lucide) lucide.createIcons();
+                }
+            }
+        } catch(e) {
+            console.error("Weather Error:", e);
+            const elDesc = document.getElementById('weather-desc');
+            if(elDesc) elDesc.innerText = "Offline";
+        }
+    },
+
+    async loadKPI() {
+        try {
+            const res = await fetch('', { method:'POST', body: this.getPayload('pemeliharaan_data') }).then(r=>r.json());
+            if(res.debug) logDebug({ section: 'KPI', debug: res.debug });
+            if(res.success) {
+                document.getElementById('kpi-container').innerHTML = res.kpi.map(k => `
+                    <div class="mini-card">
+                        <div class="mini-lbl">% ${k.label}</div>
+                        <div class="mini-val ${k.color_class}">${k.persen}%</div>
+                        <div class="mini-sub">Real: ${Number(k.realisasi).toLocaleString('id-ID')}</div>
+                    </div>`).join('');
+            }
+        } catch(e) { logDebug({ error_js_kpi: e.message }); console.error(e); }
+    },
+    async loadProduksi() {
+        try {
+            const res = await fetch('', { method:'POST', body: this.getPayload('produksi_data') }).then(r=>r.json());
+            if(res.debug) logDebug({ section: 'PRODUKSI', debug: res.debug });
+            
+            if(res.success) {
+                const ctx = document.getElementById('chart-produksi').getContext('2d');
+                if(window.prodChart) window.prodChart.destroy();
+                window.prodChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: res.chart_data.map(x => x.bulan),
+                        datasets: [
+                            { label: 'Realisasi (Ton)', data: res.chart_data.map(x => Number(x.real)/1000), backgroundColor: '#06b6d4', borderRadius: 4, order: 2 },
+                            { label: 'RKAP (Ton)', type: 'line', data: res.chart_data.map(x => Number(x.rkap)/1000), borderColor: '#ec4899', borderWidth: 2, tension: 0.3, pointRadius: 3, order: 1 }
+                        ]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position:'bottom' } }, interaction: { mode: 'index', intersect: false } }
+                });
+
+                new Paginator(res.table_data, 10, 'tbl-prod-body', 'pag-prod-ctl', (r) => `
+                    <tr>
+                        <td class="font-bold text-xs text-slate-500">${r.bulan} ${r.tahun}</td>
+                        <td class="font-medium">${r.nama_unit||'-'}</td>
+                        <td class="text-center text-xs text-slate-600 font-mono">${r.tt||'-'}</td>
+                        <td class="text-center text-xs text-slate-600 font-mono">${Number(r.luas_ha).toFixed(2)}</td>
+                        <td class="text-center text-xs text-slate-600 font-mono">${Number(r.jumlah_pohon).toLocaleString()}</td>
+                        <td class="text-right font-mono text-xs text-orange-500">${Number(r.tdn_pkk).toFixed(2)}</td>
+                        <td class="text-right font-mono text-xs font-bold text-cyan-600">${Number(r.protas).toFixed(2)}</td>
+                        <td class="text-right font-mono text-xs font-bold text-green-600">${Number(r.kg_hk).toFixed(2)}</td>
+                    </tr>`);
+            }
+        } catch(e) { logDebug({ error_js_produksi: e.message }); console.error(e); }
+    },
+    async loadGudangOps() {
+        try {
+            const res = await fetch('', { method:'POST', body: this.getPayload('gudang_ops') }).then(r=>r.json());
+            if(res.debug) logDebug({ section: 'GUDANG', debug: res.debug });
+            if(res.success) {
+                const fmt = (n) => Number(n).toLocaleString('id-ID');
+                ['stok_gudang','stok_kimia','stok_alat'].forEach(k => document.getElementById(k.replace('_','-')).innerText = fmt(res.stock_stats[k]));
+                ['bbm','kimia'].forEach(k => document.getElementById('pakai-'+k).innerText = fmt(res.usage_stats[k]));
+                document.getElementById('val-tabur-kimia').innerText = fmt(res.pupuk_stats.tabur_kimia);
+                document.getElementById('val-angkut-kimia').innerText = fmt(res.pupuk_stats.angkut_kimia);
+                document.getElementById('val-tabur-org').innerText = fmt(res.pupuk_stats.tabur_org);
+                document.getElementById('val-angkut-org').innerText = fmt(res.pupuk_stats.angkut_org);
+
+                new Paginator(res.gudang_rows, 10, 'tbl-gudang-body', 'pag-gudang-ctl', (r) => `
+                    <tr>
+                        <td class="font-bold text-xs">${r.nama_kebun}</td>
+                        <td class="text-xs font-medium">${r.nama_bahan}</td>
+                        <td class="text-xs text-slate-400">${r.satuan||'-'}</td>
+                        <td class="text-right font-mono text-xs text-slate-500">${fmt(r.stok_awal)}</td>
+                        <td class="text-right font-mono text-xs text-green-600">+${fmt(r.mutasi_masuk)}</td>
+                        <td class="text-right font-mono text-xs text-red-500">-${fmt(r.mutasi_keluar)}</td>
+                        <td class="text-right font-mono text-xs font-black bg-slate-50">${fmt(r.stok_akhir)}</td>
+                    </tr>`);
+            }
+        } catch(e) { logDebug({ error_js_gudang: e.message }); console.error(e); }
+    },
+    switchTab(tab) {
+        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+        document.getElementById('tab-'+tab).classList.add('active');
+        document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById('btn-tab-'+tab).classList.add('active');
     }
+};
 
-    [fKebun, fAfd, fBulan, fTahun].forEach(el => el.addEventListener('change', () => refreshDashboard(false)));
-    if (limitStok) limitStok.addEventListener('change', ()=>refreshDashboard(false));
-
-    // Render awal & auto refresh
-    refreshDashboard(true);
-    setInterval(()=>refreshDashboard(false), 30000);
-  });
-  </script>
-  </body>
-  </html>
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>

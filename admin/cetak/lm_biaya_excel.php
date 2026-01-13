@@ -1,25 +1,22 @@
 <?php
 // admin/cetak/lm_biaya_excel.php
-// Export Excel LM Biaya (PhpSpreadsheet) — tema hijau + ikut filter
-// Versi aman stream: bersihkan output buffer, matikan zlib.output_compression, tanpa echo/var_dump
+// MODIFIKASI FINAL: Sinkron dengan Web (Volume LM76, HPP, Incl/Excl)
+// Output: XLSX Binary Stream (Clean Buffer)
 
 declare(strict_types=1);
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-  http_response_code(403);
-  exit('Unauthorized');
+    http_response_code(403);
+    exit('Unauthorized');
 }
 
-/* ==== Hardening output agar XLSX bisa dibuka ==== */
-@ini_set('zlib.output_compression', 'Off'); // penting untuk stream binary
+/* ==== 1. CLEAN OUTPUT BUFFER (CRITICAL FOR EXCEL) ==== */
+@ini_set('zlib.output_compression', 'Off');
 @ini_set('output_buffering', '0');
 @ini_set('implicit_flush', '1');
-while (ob_get_level() > 0) { @ob_end_clean(); } // bersihkan buffer apapun
+while (ob_get_level() > 0) { @ob_end_clean(); }
+error_reporting(E_ALL & ~E_NOTICE & ~E_WARNING); // Suppress warnings in binary output
 
-// Hindari notice/warning tampil di output (bisa merusak file biner)
-error_reporting(E_ERROR | E_PARSE);
-
-// ==== Dependencies ====
 require_once '../../config/database.php';
 require_once '../../vendor/autoload.php';
 
@@ -32,211 +29,252 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 
 try {
-  $db  = new Database();
-  $pdo = $db->getConnection();
+    $db  = new Database();
+    $pdo = $db->getConnection();
 
-  /* ===== Filters (ikut dari lm_biaya.php) ===== */
-  $unit_id  = $_GET['unit_id']  ?? '';
-  $tahun    = $_GET['tahun']    ?? '';
-  $bulan    = $_GET['bulan']    ?? '';
-  $kebun_id = $_GET['kebun_id'] ?? '';
-  $q        = trim($_GET['q'] ?? '');
-
-  /* ===== Query ===== */
-  $where = " WHERE 1=1 ";
-  $bind  = [];
-  if ($unit_id  !== '') { $where .= " AND b.unit_id=:uid";  $bind[':uid'] = $unit_id; }
-  if ($tahun    !== '') { $where .= " AND b.tahun=:thn";    $bind[':thn'] = $tahun; }
-  if ($bulan    !== '') { $where .= " AND b.bulan=:bln";    $bind[':bln'] = $bulan; }
-  if ($kebun_id !== '') { $where .= " AND b.kebun_id=:kid"; $bind[':kid'] = $kebun_id; }
-  if ($q !== '') {
-    $where .= " AND (b.alokasi LIKE :kw OR b.uraian_pekerjaan LIKE :kw)";
-    $bind[':kw'] = "%$q%";
-  }
-
-  $sql = "SELECT b.*, u.nama_unit, kb.nama_kebun
-          FROM lm_biaya b
-          LEFT JOIN units u     ON u.id  = b.unit_id
-          LEFT JOIN md_kebun kb ON kb.id = b.kebun_id
-          $where
-          ORDER BY b.tahun DESC,
-            FIELD(b.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
-            b.id DESC";
-  $st = $pdo->prepare($sql);
-  foreach($bind as $k=>$v) $st->bindValue($k,$v);
-  $st->execute();
-  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
-  $first = $rows[0] ?? [];
-
-  /* ===== Build Spreadsheet ===== */
-  $ss    = new Spreadsheet();
-  $ss->getProperties()
-     ->setCreator('PTPN 4 Regional 3')
-     ->setTitle('LM BIAYA — REKAP')
-     ->setSubject('LM Biaya Export')
-     ->setDescription('Export LM Biaya dengan filter aktif');
-
-  $sheet = $ss->getActiveSheet();
-  $A = fn(int $col,int $row) => Coordinate::stringFromColumnIndex($col).$row;
-
-  $headers = [
-    'Kebun','Unit/Defisi','Alokasi','Uraian Pekerjaan','Bulan','Tahun',
-    'Anggaran','Realisasi','+/- Biaya','%'
-  ];
-  $lastCol = Coordinate::stringFromColumnIndex(count($headers));
-
-  // Brand bar
-  $sheet->setCellValue($A(1,1), 'LM BIAYA — REKAP');
-  $sheet->mergeCells($A(1,1).':'.$lastCol.'1');
-  $sheet->getStyle($A(1,1))->getFont()->setBold(true)->setSize(15)->getColor()->setARGB('FFFFFFFF');
-  $sheet->getStyle($A(1,1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER);
-  $sheet->getRowDimension(1)->setRowHeight(28);
-  $sheet->getStyle($A(1,1))->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF059669');
-
-  // Subtitle (filter ringkas)
-  $subtitle = [];
-  if ($kebun_id!=='') $subtitle[]='Kebun='.($first['nama_kebun']??'');
-  if ($unit_id!=='')  $subtitle[]='Unit='.($first['nama_unit']??'');
-  if ($bulan!=='')    $subtitle[]='Bulan='.$bulan;
-  if ($tahun!=='')    $subtitle[]='Tahun='.$tahun;
-  $sheet->setCellValue($A(1,2), $subtitle ? implode('  •  ', $subtitle) : 'Tanpa filter');
-  $sheet->mergeCells($A(1,2).':'.$lastCol.'2');
-  $sheet->getStyle($A(1,2))->getFont()->setBold(true)->getColor()->setARGB('FF065F46');
-  $sheet->getStyle($A(1,2))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-  // Table header
-  $row = 4;
-  for ($i=0; $i<count($headers); $i++) {
-    $sheet->setCellValue($A($i+1,$row), $headers[$i]);
-  }
-  $hdrRange = $A(1,$row).':'.$lastCol.$row;
-  $sheet->getStyle($hdrRange)->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
-  $sheet->getStyle($hdrRange)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF10B981');
-  $sheet->getStyle($hdrRange)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-
-  // Data rows
-  $row++;
-  $totalAnggaran=0; $totalRealisasi=0;
-  $totalAnggaranIncl=0; $totalRealisasiIncl=0;
-  $totalAnggaranExcl=0; $totalRealisasiExcl=0;
-
-  if ($rows) {
-    foreach ($rows as $r) {
-      $rencana = (float)($r['rencana_bi'] ?? 0);
-      $realis  = (float)($r['realisasi_bi'] ?? 0);
-      $pct  = $rencana>0 ? ($realis/$rencana - 1) : null; // fraction, Excel format %
-      $diff = $realis - $rencana;
-
-      $sheet->setCellValue($A(1,$row),  $r['nama_kebun'] ?? '-');
-      $sheet->setCellValue($A(2,$row),  $r['nama_unit'] ?? '-');
-      $sheet->setCellValue($A(3,$row),  $r['alokasi'] ?? '');
-      $sheet->setCellValue($A(4,$row),  $r['uraian_pekerjaan'] ?? '');
-      $sheet->setCellValue($A(5,$row),  $r['bulan'] ?? '');
-      $sheet->setCellValueExplicit($A(6,$row), (string)($r['tahun'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-      $sheet->setCellValue($A(7,$row),  $rencana);
-      $sheet->setCellValue($A(8,$row),  $realis);
-      $sheet->setCellValue($A(9,$row),  $diff);
-      if ($pct !== null) $sheet->setCellValue($A(10,$row), $pct);
-
-      // zebra
-      if ((($row-4) % 2)===1) {
-        $sheet->getStyle($A(1,$row).':'.$lastCol.$row)
-              ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF8FAFC');
-      }
-
-      $totalAnggaran  += $rencana;
-      $totalRealisasi += $realis;
-
-      $isPemupukan = (stripos($r['alokasi'] ?? '', 'pupuk') !== false) ||
-                     (stripos($r['uraian_pekerjaan'] ?? '', 'pupuk') !== false);
-      if ($isPemupukan) {
-        $totalAnggaranIncl  += $rencana;
-        $totalRealisasiIncl += $realis;
-      } else {
-        $totalAnggaranExcl  += $rencana;
-        $totalRealisasiExcl += $realis;
-      }
-      $row++;
+    // --- HELPER UNTUK CEK KOLOM ---
+    function col_exists($pdo, $table, $col){
+        $st = $pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
+        $st->execute([':t'=>$table, ':c'=>$col]);
+        return (bool)$st->fetchColumn();
     }
-  } else {
-    // Tampilkan 1 baris info jika tidak ada data
-    $sheet->setCellValue($A(1,$row), 'Tidak ada data untuk filter yang dipilih.');
-    $sheet->mergeCells($A(1,$row).':'.$lastCol.$row);
-    $sheet->getStyle($A(1,$row))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle($A(1,$row))->getFont()->getColor()->setARGB('FF6B7280');
+    function find_col($pdo, $table, $candidates, $default='0') {
+        foreach ($candidates as $col) { if (col_exists($pdo, $table, $col)) return $col; }
+        return $default;
+    }
+
+    /* ===== 2. FILTER PARAMETERS ===== */
+    $unit_id  = $_GET['unit_id']  ?? '';
+    $tahun    = $_GET['tahun']    ?? date('Y');
+    $bulan    = $_GET['bulan']    ?? 'Semua Bulan';
+    $kebun_id = $_GET['kebun_id'] ?? '';
+    $q        = trim($_GET['q'] ?? '');
+
+    /* ===== 3. LOGIKA VOLUME TBS (LM76) ===== */
+    $vol_real = 0; $vol_ang = 0;
+    if (col_exists($pdo, 'lm76', 'id')) {
+        $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi']);
+        $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap']);
+
+        $wh76 = " WHERE 1=1 "; $bd76 = [];
+        if ($tahun !== '')        { $wh76 .= " AND tahun=:t"; $bd76[':t'] = $tahun; }
+        if ($bulan !== 'Semua Bulan' && $bulan !== '') { $wh76 .= " AND bulan=:b"; $bd76[':b'] = $bulan; }
+        if ($unit_id !== '')      { $wh76 .= " AND unit_id=:u"; $bd76[':u'] = $unit_id; }
+        if ($kebun_id !== '')     { $wh76 .= " AND kebun_id=:k"; $bd76[':k'] = $kebun_id; }
+
+        $sqlVol = "SELECT SUM(COALESCE($col_r,0)) as v_real, SUM(COALESCE($col_a,0)) as v_ang FROM lm76 $wh76";
+        $stVol = $pdo->prepare($sqlVol);
+        $stVol->execute($bd76);
+        $dVol = $stVol->fetch(PDO::FETCH_ASSOC);
+        $vol_real = (float)($dVol['v_real'] ?? 0);
+        $vol_ang  = (float)($dVol['v_ang'] ?? 0);
+    }
+
+    /* ===== 4. QUERY DATA BIAYA ===== */
+    $where = " WHERE 1=1 "; $bind = [];
+    if ($unit_id !== '')  { $where .= " AND b.unit_id=:uid"; $bind[':uid'] = $unit_id; }
+    if ($tahun !== '')    { $where .= " AND b.tahun=:thn";  $bind[':thn'] = $tahun; }
+    if ($bulan !== 'Semua Bulan' && $bulan !== '') { $where .= " AND b.bulan=:bln";  $bind[':bln'] = $bulan; }
+    if ($kebun_id !== '') { $where .= " AND b.kebun_id=:kid"; $bind[':kid'] = $kebun_id; }
+    if ($q !== '') {
+        $where .= " AND (b.alokasi LIKE :kw OR b.uraian_pekerjaan LIKE :kw)";
+        $bind[':kw'] = "%$q%";
+    }
+
+    $sql = "SELECT b.*, u.nama_unit, kb.nama_kebun
+            FROM lm_biaya b
+            LEFT JOIN units u ON u.id=b.unit_id
+            LEFT JOIN md_kebun kb ON kb.id=b.kebun_id
+            $where
+            ORDER BY b.tahun DESC,
+             FIELD(b.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
+             b.alokasi ASC";
+    $st = $pdo->prepare($sql);
+    foreach($bind as $k=>$v) $st->bindValue($k,$v);
+    $st->execute();
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    $first = $rows[0] ?? [];
+
+    /* ===== 5. START SPREADSHEET ===== */
+    $ss = new Spreadsheet();
+    $ss->getProperties()->setTitle('Laporan Biaya & HPP');
+    $sheet = $ss->getActiveSheet();
+    $A = fn($c,$r) => Coordinate::stringFromColumnIndex($c).$r;
+
+    // --- Judul ---
+    $sheet->setCellValue('A1', 'LAPORAN BIAYA & HARGA POKOK');
+    $sheet->mergeCells('A1:J1'); // Asumsi kolom sampai J
+    $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setARGB('FFFFFFFF');
+    $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF059669'); // Emerald Green
+    $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getRowDimension(1)->setRowHeight(30);
+
+    // --- Subtitle Filters ---
+    $info = [];
+    if($kebun_id) $info[] = 'Kebun: '.($first['nama_kebun']??'');
+    if($unit_id)  $info[] = 'Unit: '.($first['nama_unit']??'');
+    $info[] = 'Bulan: '.($bulan?:'Semua');
+    $info[] = 'Tahun: '.$tahun;
+    $sheet->setCellValue('A2', implode(' | ', $info));
+    $sheet->mergeCells('A2:J2');
+    $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('A2')->getFont()->setBold(true)->getColor()->setARGB('FF065F46');
+
+    // --- Table Headers ---
+    $headers = ['Kebun','Unit/Defisi','No. Alokasi','Uraian Pekerjaan','Bulan','Tahun','Anggaran','Realisasi','+/- Biaya','%'];
+    $row = 4;
+    foreach($headers as $k=>$v) $sheet->setCellValue($A($k+1, $row), $v);
+    
+    // Style Header (Biru Cyan seperti Web)
+    $sheet->getStyle("A$row:J$row")->getFont()->setBold(true)->getColor()->setARGB('FFFFFFFF');
+    $sheet->getStyle("A$row:J$row")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF0097E6'); // Cyan Blue
+    $sheet->getStyle("A$row:J$row")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    
+    // --- Data Variables ---
+    $sumAnggaran = 0; $sumRealisasi = 0;
+    $pupukAng = 0;    $pupukReal = 0;
+
+    $row++; 
+
+    // --- BARIS 1: VOLUME TBS (Grey) ---
+    $diffVol = $vol_real - $vol_ang;
+    $pctVol  = ($vol_ang!=0) ? ($diffVol/$vol_ang) : 0; // Excel pake fraction 0.xx
+
+    $sheet->setCellValue("B$row", "- Produksi TBS (KG)");
+    $sheet->setCellValue("G$row", $vol_ang);
+    $sheet->setCellValue("H$row", $vol_real);
+    $sheet->setCellValue("I$row", $diffVol);
+    $sheet->setCellValue("J$row", $pctVol);
+    
+    // Style Baris Volume
+    $sheet->getStyle("A$row:J$row")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFE5E7EB'); // Grey
+    $sheet->getStyle("A$row:J$row")->getFont()->setBold(true)->setItalic(true);
     $row++;
-  }
 
-  // Number formats & alignment
-  if ($row > 5) {
-    $sheet->getStyle($A(7,5).':'.$A(9,$row-1))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
-    $sheet->getStyle($A(10,5).':'.$A(10,$row-1))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_PERCENTAGE_00);
-    $sheet->getStyle($A(7,5).':'.$A(10,$row-1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-  }
+    // --- LOOP DATA BIAYA ---
+    if(empty($rows)){
+        $sheet->setCellValue("A$row", "Tidak ada data.");
+        $sheet->mergeCells("A$row:J$row");
+        $sheet->getStyle("A$row")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $row++;
+    } else {
+        foreach($rows as $r){
+            $ang = (float)$r['rencana_bi'];
+            $rea = (float)$r['realisasi_bi'];
+            $d   = $rea - $ang;
+            $p   = ($ang!=0) ? ($d/$ang) : 0;
 
-  // Table border
-  $sheet->getStyle($A(1,4).':'.$lastCol.($row-1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+            // Isi Data
+            $sheet->setCellValue("A$row", $r['nama_kebun']??'-');
+            $sheet->setCellValue("B$row", $r['nama_unit']??'-');
+            $sheet->setCellValue("C$row", $r['alokasi']??'-');
+            $sheet->setCellValue("D$row", $r['uraian_pekerjaan']??'-');
+            $sheet->setCellValue("E$row", $r['bulan']);
+            $sheet->setCellValue("F$row", $r['tahun']);
+            $sheet->setCellValue("G$row", $ang);
+            $sheet->setCellValue("H$row", $rea);
+            $sheet->setCellValue("I$row", $d);
+            $sheet->setCellValue("J$row", $p);
 
-  // ===== Footer totals =====
-  $makeFooter = function(string $title, float $anggaran, float $realisasi, int $rowIdx, string $bg, string $fg='FF111827') use ($sheet, $A, $lastCol) {
-    $diff = $realisasi - $anggaran;
-    $pct  = $anggaran>0 ? ($realisasi/$anggaran - 1) : null; // fraction
+            // Warna Text Variance
+            if($d < 0) $sheet->getStyle("I$row")->getFont()->getColor()->setARGB('FF16A34A'); // Green text
+            else       $sheet->getStyle("I$row")->getFont()->getColor()->setARGB('FFDC2626'); // Red text
+            
+            // Logika Summary
+            $sumAnggaran  += $ang;
+            $sumRealisasi += $rea;
+            
+            $txt = strtolower(($r['alokasi']??'').' '.($r['uraian_pekerjaan']??''));
+            if (strpos($txt, 'pupuk') !== false){
+                $pupukAng  += $ang;
+                $pupukReal += $rea;
+            }
 
-    $sheet->setCellValue($A(1,$rowIdx), $title);
-    $sheet->mergeCells($A(1,$rowIdx).':'.$A(6,$rowIdx));
-    $sheet->setCellValue($A(7,$rowIdx), $anggaran);
-    $sheet->setCellValue($A(8,$rowIdx), $realisasi);
-    $sheet->setCellValue($A(9,$rowIdx), $diff);
-    if ($pct !== null) $sheet->setCellValue($A(10,$rowIdx), $pct);
+            $row++;
+        }
+    }
 
-    $sheet->getStyle($A(1,$rowIdx).':'.$lastCol.$rowIdx)->getFont()->setBold(true)->getColor()->setARGB($fg);
-    $sheet->getStyle($A(1,$rowIdx).':'.$lastCol.$rowIdx)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($bg);
-    $sheet->getStyle($A(1,$rowIdx).':'.$lastCol.$rowIdx)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $sheet->getStyle($A(7,$rowIdx).':'.$A(9,$rowIdx))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_NUMBER_00);
-    $sheet->getStyle($A(10,$rowIdx))->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_PERCENTAGE_00);
-    $sheet->getStyle($A(7,$rowIdx).':'.$A(10,$rowIdx))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-  };
+    // --- CALCULATE EXCL & HPP ---
+    $exclAng  = $sumAnggaran - $pupukAng;
+    $exclReal = $sumRealisasi - $pupukReal;
 
-  // Footer hanya jika ada data
-  if ($rows) {
-    $makeFooter('Jlh By Tanaman Incl. Pemupukan', $totalAnggaranIncl, $totalRealisasiIncl, $row++, 'FFF3F4F6');
-    $makeFooter('Jlh By Tanaman Excl. Pemupukan', $totalAnggaranExcl, $totalRealisasiExcl, $row++, 'FFF3F4F6');
-    $makeFooter('Harga Pokok Incl. Pemupukan',     $totalAnggaranIncl, $totalRealisasiIncl, $row++, 'FFBBF7D0', 'FF065F46');
-    $makeFooter('Harga Pokok Excl. Pemupukan',     $totalAnggaranExcl, $totalRealisasiExcl, $row++, 'FFFDE68A', 'FF7C2D12');
-    $makeFooter('TOTAL',                            $totalAnggaran,     $totalRealisasi,     $row++, 'FFECFDF5', 'FF065F46');
-  }
+    $hppInclA = ($vol_ang > 0) ? ($sumAnggaran / $vol_ang) : 0;
+    $hppInclR = ($vol_real > 0)? ($sumRealisasi / $vol_real) : 0;
+    $hppExclA = ($vol_ang > 0) ? ($exclAng / $vol_ang) : 0;
+    $hppExclR = ($vol_real > 0)? ($exclReal / $vol_real) : 0;
 
-  // Autosize columns
-  for ($c=1; $c<=count($headers); $c++) {
-    $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setAutoSize(true);
-  }
+    // --- FOOTER SECTION ---
+    
+    // Helper Footer
+    $printFooter = function($title, $a, $r, $bg, $isHPP=false) use ($sheet, &$row) {
+        $d = $r - $a;
+        $p = ($a!=0) ? ($d/$a) : 0;
 
-  // ==== Output stream XLSX ====
-  $fname = 'lm_biaya_'.date('Ymd_His').'.xlsx';
+        $sheet->setCellValue("F$row", $title); 
+        $sheet->mergeCells("A$row:F$row"); // Merge label sampai kolom F
+        $sheet->getStyle("F$row")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-  // Pastikan tidak ada output sama sekali sebelum header di bawah ini
-  while (ob_get_level() > 0) { @ob_end_clean(); }
+        $sheet->setCellValue("G$row", $a);
+        $sheet->setCellValue("H$row", $r);
+        $sheet->setCellValue("I$row", $d);
+        $sheet->setCellValue("J$row", $p);
 
-  header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  header('Content-Disposition: attachment; filename="'.$fname.'"');
-  header('Cache-Control: max-age=0, must-revalidate');
-  header('Pragma: public');
+        // Style Row
+        $style = $sheet->getStyle("A$row:J$row");
+        $style->getFont()->setBold(true);
+        $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($bg);
+        
+        // HPP Formatting (2 desimal)
+        if($isHPP){
+             $sheet->getStyle("G$row:I$row")->getNumberFormat()->setFormatCode('#,##0.00');
+        }
 
-  $writer = new Xlsx($ss);
-  // Opsi: percepat jika banyak formula
-  // $writer->setPreCalculateFormulas(false);
+        $row++;
+    };
 
-  $writer->save('php://output');
-  exit;
+    // 1. Total Incl (Grey Light)
+    $printFooter('Jlh By Tanaman Incl. Pemupukan', $sumAnggaran, $sumRealisasi, 'FFF3F4F6');
 
-} catch (Throwable $e) {
-  // Jika terjadi error, kirim respon JSON (bukan biner) agar tidak merusak stream Excel
-  http_response_code(500);
-  header('Content-Type: application/json; charset=utf-8');
-  echo json_encode([
-    'status' => 'error',
-    'message' => 'Gagal membuat file Excel.',
-    'detail' => $e->getMessage()
-  ]);
-  exit;
+    // 2. Total Excl (Grey Light)
+    $printFooter('Jlh By Tanaman Excl. Pemupukan', $exclAng, $exclReal, 'FFF3F4F6');
+
+    // 3. HPP Incl (Green - HIJAU)
+    $printFooter('Harga Pokok Incl. Pemupukan', $hppInclA, $hppInclR, 'FF86EFAC', true);
+
+    // 4. HPP Excl (Green - HIJAU)
+    $printFooter('Harga Pokok Excl. Pemupukan', $hppExclA, $hppExclR, 'FF86EFAC', true);
+
+    // --- FINISHING STYLES ---
+    $lastRow = $row - 1;
+    
+    // Border All
+    $sheet->getStyle("A4:J$lastRow")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+    // Number Format (Accounting)
+    $sheet->getStyle("G5:I$lastRow")->getNumberFormat()->setFormatCode('#,##0');
+    // Percent Format
+    $sheet->getStyle("J5:J$lastRow")->getNumberFormat()->setFormatCode('0.00%');
+    
+    // Alignment
+    $sheet->getStyle("E5:F$lastRow")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    
+    // Auto Size Column
+    foreach(range('A','J') as $col) {
+        $sheet->getColumnDimension($col)->setAutoSize(true);
+    }
+
+    // --- OUTPUT ---
+    $filename = 'Laporan_Biaya_HPP_'.date('YmdHis').'.xlsx';
+    
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment;filename="'.$filename.'"');
+    header('Cache-Control: max-age=0');
+
+    $writer = new Xlsx($ss);
+    $writer->save('php://output');
+    exit;
+
+} catch (Exception $e) {
+    http_response_code(500);
+    echo "Error generating Excel: " . $e->getMessage();
 }

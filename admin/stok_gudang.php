@@ -1,14 +1,13 @@
 <?php
-// stok_gudang.php (FINAL REV-HEADER-GREEN, NO ITEM CODE, MONO TEXT)
-// MOD: Role 'staf' tidak bisa edit/hapus
+// stok_gudang.php
+// MODIFIKASI FULL: Desain Sticky, Satuan Terpisah, Angka 0 jadi Strip (-)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
-// --- MODIFIKASI: Dapatkan role user ---
+// --- Role User ---
 $userRole = $_SESSION['user_role'] ?? 'staf';
 $isStaf = ($userRole === 'staf');
-// ------------------------------------
 
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
@@ -17,7 +16,7 @@ require_once '../config/database.php';
 $db   = new Database();
 $conn = $db->getConnection();
 
-// ===== master untuk opsi =====
+// ===== Master Data =====
 $kebun = $conn->query("SELECT id, kode, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
 $bahan = $conn->query("
   SELECT b.id, b.kode, b.nama_bahan, s.nama AS satuan
@@ -26,51 +25,127 @@ $bahan = $conn->query("
   ORDER BY b.nama_bahan
 ")->fetchAll(PDO::FETCH_ASSOC);
 
+// --- Logika Waktu Default ---
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $tahunNow = (int)date('Y');
-$currentPage = 'stok_gudang';
+$bulanIndex = (int)date('n') - 1; 
+$bulanNowName = $bulanList[$bulanIndex]; 
 
+$currentPage = 'stok_gudang';
 include_once '../layouts/header.php';
 ?>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+
 <style>
-  /* Header sticky dengan latar hijau */
-  .table-sticky thead th {
-    position: sticky; top: 0; z-index: 10;
-    background-color: #16a34a; /* Tailwind green-600 */
-    color: #ffffff;
-    box-shadow: inset 0 -1px 0 rgba(0,0,0,0.15);
+  /* --- CONTAINER UTAMA STICKY (Style TM) --- */
+  .sticky-container {
+    max-height: 72vh;
+    overflow: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    position: relative;
   }
-  .table-scroll { max-height: 60vh; overflow: auto; }
-  .scrollbar-gutter-stable { scrollbar-gutter: stable both-edges; }
-  /* --- MODIFIKASI: Style untuk tombol disabled --- */
+
+  /* Tabel Styling */
+  table.rekap {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    min-width: 1200px;
+  }
+
+  /* --- GARIS (BORDER) FULL TIDAK PUTUS --- */
+  table.rekap th, table.rekap td {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0; 
+  }
+
+  table.rekap th:last-child, 
+  table.rekap td:last-child {
+    border-right: none;
+  }
+
+  /* --- STICKY HEADER --- */
+  table.rekap thead th {
+    position: sticky;
+    top: 0;
+    background: #059fd3; /* Warna Biru Header */
+    color: #fff;
+    z-index: 10;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 0.75rem;
+    height: 45px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  table.rekap tbody tr:hover td {
+    background-color: #f8fafc;
+  }
+
+  /* Utility */
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .text-left { text-align: left; }
+  
+  /* Badge Satuan Style */
+  .badge-satuan {
+      background-color: #f1f5f9;
+      color: #475569;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
+  }
+
   button:disabled { opacity: 0.5; cursor: not-allowed !important; text-decoration: none !important; }
+  
+  /* Action Buttons in Table */
+  .btn-action {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 4px; 
+      transition: all 0.2s; border: 1px solid transparent;
+  }
+  .btn-action:hover { background-color: #f1f5f9; border-color: #cbd5e1; }
 </style>
 
 <div class="space-y-6">
   <div class="flex items-center justify-between">
     <div>
-      <h1 class="text-3xl font-bold text-gray-800">📦 Stok Gudang</h1>
-      <p class="text-gray-500 mt-1">Rekap stok bahan kimia per kebun & periode</p>
+      <h1 class="text-2xl font-bold text-gray-800">Bahan Kimia</h1>
+      <p class="text-gray-500 text-sm mt-1">Rekap stok bahan kimia per kebun & periode</p>
     </div>
-    <div class="flex gap-3">
-      <button id="btn-export-excel" class="flex items-center gap-2 border px-4 py-2 rounded-lg bg-white hover:bg-gray-50">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 2H8a2 2 0 0 0-2 2v3h2V4h11v16H8v-3H6v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/><path d="M3 8h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zm2.4 1.8L7.2 12l-1.8 2.2h1.6l1.1-1.5 1.1 1.5H11L9.2 12l1.8-2.2H9.4L8.3 11 7.2 9.8H5.4z"/></svg>
-        <span>Export Excel</span>
+    <div class="flex gap-2">
+      <button id="btn-export-excel" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition" title="Export Excel">
+        <i class="ti ti-file-spreadsheet"></i> Excel
       </button>
-      <button id="btn-export-pdf" class="flex items-center gap-2 border px-4 py-2 rounded-lg bg-white hover:bg-gray-50">
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/><path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/></svg>
-        <span>Cetak PDF</span>
+      <button id="btn-export-pdf" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition" title="Cetak PDF">
+        <i class="ti ti-file-type-pdf"></i> PDF
       </button>
-      <button id="btn-add" class="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600">+ Input Stok</button>
+      
+      <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition ml-2">
+        <i class="ti ti-plus"></i> Input Stok
+      </button>
     </div>
   </div>
 
-  <div class="bg-white p-4 rounded-xl shadow-sm">
-    <div class="flex items-center gap-2 text-gray-600 mb-3"><span>🧰</span><span class="font-semibold">Filter Data</span></div>
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center gap-2 text-gray-700 mb-3">
+        <i class="ti ti-filter text-cyan-600"></i><span class="font-bold text-sm uppercase">Filter Data</span>
+    </div>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <div>
-        <label class="block text-sm text-gray-600 mb-1">Nama Kebun</label>
-        <select id="filter-kebun" class="w-full border rounded-lg px-3 py-2">
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Kebun</label>
+        <select id="filter-kebun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-100 outline-none">
           <option value="">Semua Kebun</option>
           <?php foreach($kebun as $k): ?>
             <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['kode'].' — '.$k['nama_kebun']) ?></option>
@@ -78,26 +153,30 @@ include_once '../layouts/header.php';
         </select>
       </div>
       <div>
-        <label class="block text-sm text-gray-600 mb-1">Nama Bahan Kimia</label>
-        <select id="filter-bahan" class="w-full border rounded-lg px-3 py-2">
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Bahan Kimia</label>
+        <select id="filter-bahan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-100 outline-none">
           <option value="">Semua Bahan</option>
           <?php foreach($bahan as $b): ?>
             <option value="<?= (int)$b['id'] ?>"><?= htmlspecialchars($b['nama_bahan'].' ('.$b['satuan'].')') ?></option>
           <?php endforeach; ?>
         </select>
       </div>
+      
       <div>
-        <label class="block text-sm text-gray-600 mb-1">Bulan</label>
-        <select id="filter-bulan" class="w-full border rounded-lg px-3 py-2">
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
+        <select id="filter-bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:ring-2 focus:ring-cyan-100 outline-none">
           <option value="">Semua Bulan</option>
           <?php foreach ($bulanList as $bl): ?>
-            <option value="<?= $bl ?>"><?= $bl ?></option>
+            <option value="<?= $bl ?>" <?= $bl === $bulanNowName ? 'selected' : '' ?>>
+                <?= $bl ?>
+            </option>
           <?php endforeach; ?>
         </select>
       </div>
+
       <div>
-        <label class="block text-sm text-gray-600 mb-1">Tahun</label>
-        <select id="filter-tahun" class="w-full border rounded-lg px-3 py-2">
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
+        <select id="filter-tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 focus:ring-2 focus:ring-cyan-100 outline-none">
           <?php for ($y=$tahunNow-3; $y<=$tahunNow+2; $y++): ?>
             <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
           <?php endfor; ?>
@@ -106,59 +185,60 @@ include_once '../layouts/header.php';
     </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm">
-    <div class="flex items-center justify-between px-4 py-3 border-b">
-      <div class="flex items-center gap-2 text-sm text-gray-600">
-        <span>Tampilkan</span>
-        <select id="page-size" class="border rounded px-2 py-1">
+  <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-1">
+     <div class="text-sm text-gray-600 font-medium" id="range-label">Menampilkan 0–0 data</div>
+     <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-600">Tampilkan</span>
+        <select id="page-size" class="border rounded px-2 py-1 text-sm">
           <option value="10" selected>10</option>
           <option value="25">25</option>
           <option value="50">50</option>
           <option value="100">100</option>
         </select>
-        <span>baris</span>
-      </div>
-      <div id="range-label" class="text-sm text-gray-500">—</div>
-    </div>
-    <div class="table-scroll scrollbar-gutter-stable">
-      <table class="min-w-full text-sm table-sticky">
+        <span class="text-sm text-gray-600">baris</span>
+     </div>
+  </div>
+
+  <div class="sticky-container">
+      <table class="rekap">
         <thead>
           <tr>
-            <th class="py-3 px-4 text-left font-semibold">Kebun</th>
-            <th class="py-3 px-4 text-left font-semibold">Bahan (Satuan)</th>
-            <th class="py-3 px-4 text-right font-semibold">Stok Awal</th>
-            <th class="py-3 px-4 text-right font-semibold">Mutasi Masuk</th>
-            <th class="py-3 px-4 text-right font-semibold">Mutasi Keluar</th>
-            <th class="py-3 px-4 text-right font-semibold">Pasokan</th>
-            <th class="py-3 px-4 text-right font-semibold">Dipakai</th>
-            <th class="py-3 px-4 text-right font-semibold">Net Mutasi</th>
-            <th class="py-3 px-4 text-right font-semibold">Sisa Stok</th>
-            <th class="py-3 px-4 text-left font-semibold">Aksi</th>
+            <th class="text-left">Kebun</th>
+            <th class="text-left">Nama Bahan</th> 
+            <th class="text-center">Satuan</th>   
+            <th class="text-right">Stok Awal</th>
+            <th class="text-right">Mutasi Masuk</th>
+            <th class="text-right">Mutasi Keluar</th>
+            <th class="text-right">Pasokan</th>
+            <th class="text-right">Dipakai</th>
+            <th class="text-right">Net Mutasi</th>
+            <th class="text-right">Sisa Stok</th>
+            <th class="text-center" style="width: 100px;">Aksi</th>
           </tr>
         </thead>
         <tbody id="tbody-stok" class="text-gray-800">
-          <tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>
+          <tr><td colspan="11" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
         </tbody>
       </table>
-    </div>
-    <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-4 py-3 border-t">
-      <div id="total-label" class="text-sm text-gray-600">—</div>
+  </div>
+
+  <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-1 border-t pt-4">
+      <div id="total-label" class="text-sm text-gray-600 font-medium">Total data: 0</div>
       <div class="flex items-center gap-1">
-        <button id="btn-first" class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">&laquo; First</button>
-        <button id="btn-prev"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">&lsaquo; Prev</button>
-        <span id="page-info" class="px-3 text-sm text-gray-600">Page 1/1</span>
-        <button id="btn-next"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">Next &rsaquo;</button>
-        <button id="btn-last"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm">Last &raquo;</button>
+        <button id="btn-first" class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">&laquo; First</button>
+        <button id="btn-prev"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">&lsaquo; Prev</button>
+        <span id="page-info" class="px-3 text-sm text-gray-600 font-medium">Page 1/1</span>
+        <button id="btn-next"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">Next &rsaquo;</button>
+        <button id="btn-last"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">Last &raquo;</button>
       </div>
-    </div>
   </div>
 </div>
 
-<div id="crud-modal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
-  <div class="bg-white p-6 md:p-8 rounded-xl shadow-xl w-full max-w-3xl">
-    <div class="flex items-center justify-between mb-4">
-      <h3 id="modal-title" class="text-xl font-bold">Input Rekap Stok</h3>
-      <button id="btn-close" class="text-2xl text-gray-500 hover:text-gray-800">&times;</button>
+<div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
+  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-3xl transform scale-100 transition-transform">
+    <div class="flex items-center justify-between mb-6 border-b pb-4">
+      <h3 id="modal-title" class="text-xl font-bold text-gray-800">Input Rekap Stok</h3>
+      <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
     </div>
     <form id="crud-form" novalidate>
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
@@ -166,8 +246,8 @@ include_once '../layouts/header.php';
       <input type="hidden" name="id" id="form-id">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="md:col-span-1">
-          <label class="block text-sm mb-1">Nama Kebun</label>
-          <select name="kebun_id" id="kebun_id" class="w-full border rounded px-3 py-2" required>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Kebun</label>
+          <select name="kebun_id" id="kebun_id" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <option value="">— Pilih Kebun —</option>
             <?php foreach($kebun as $k): ?>
               <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['kode'].' — '.$k['nama_kebun']) ?></option>
@@ -175,8 +255,8 @@ include_once '../layouts/header.php';
           </select>
         </div>
         <div class="md:col-span-2">
-          <label class="block text-sm mb-1">Nama Bahan Kimia</label>
-          <select name="bahan_id" id="bahan_id" class="w-full border rounded px-3 py-2" required>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Bahan Kimia</label>
+          <select name="bahan_id" id="bahan_id" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <option value="">— Pilih Bahan —</option>
             <?php foreach($bahan as $b): ?>
               <option value="<?= (int)$b['id'] ?>" data-satuan="<?= htmlspecialchars($b['satuan']) ?>">
@@ -184,46 +264,47 @@ include_once '../layouts/header.php';
               </option>
             <?php endforeach; ?>
           </select>
-          <p class="text-xs text-gray-500 mt-1">Satuan: <span id="hint-satuan" class="font-semibold">-</span></p>
+          <p class="text-xs text-gray-500 mt-1">Satuan: <span id="hint-satuan" class="font-semibold text-gray-800">-</span></p>
         </div>
         <div>
-          <label class="block text-sm mb-1">Bulan</label>
-          <select name="bulan" id="bulan" class="w-full border rounded px-3 py-2" required>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
+          <select name="bulan" id="bulan" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <?php foreach ($bulanList as $bl): ?><option value="<?= $bl ?>"><?= $bl ?></option><?php endforeach; ?>
           </select>
         </div>
         <div>
-          <label class="block text-sm mb-1">Tahun</label>
-          <select name="tahun" id="tahun" class="w-full border rounded px-3 py-2" required>
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
+          <select name="tahun" id="tahun" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <?php for ($y = $tahunNow-1; $y <= $tahunNow+3; $y++): ?>
               <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
             <?php endfor; ?>
           </select>
         </div>
+        
         <div>
-          <label class="block text-sm mb-1">Stok Awal</label>
-          <input type="number" step="0.01" name="stok_awal" id="stok_awal" class="w-full border rounded px-3 py-2" min="0" value="0">
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Stok Awal</label>
+          <input type="number" step="0.01" name="stok_awal" id="stok_awal" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0">
         </div>
         <div>
-          <label class="block text-sm mb-1">Mutasi Masuk</label>
-          <input type="number" step="0.01" name="mutasi_masuk" id="mutasi_masuk" class="w-full border rounded px-3 py-2" min="0" value="0">
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Masuk</label>
+          <input type="number" step="0.01" name="mutasi_masuk" id="mutasi_masuk" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0">
         </div>
         <div>
-          <label class="block text-sm mb-1">Mutasi Keluar</label>
-          <input type="number" step="0.01" name="mutasi_keluar" id="mutasi_keluar" class="w-full border rounded px-3 py-2" min="0" value="0">
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Keluar</label>
+          <input type="number" step="0.01" name="mutasi_keluar" id="mutasi_keluar" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0">
         </div>
         <div>
-          <label class="block text-sm mb-1">Pasokan</label>
-          <input type="number" step="0.01" name="pasokan" id="pasokan" class="w-full border rounded px-3 py-2" min="0" value="0">
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Pasokan</label>
+          <input type="number" step="0.01" name="pasokan" id="pasokan" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0">
         </div>
         <div>
-          <label class="block text-sm mb-1">Dipakai</label>
-          <input type="number" step="0.01" name="dipakai" id="dipakai" class="w-full border rounded px-3 py-2" min="0" value="0">
+          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Dipakai</label>
+          <input type="number" step="0.01" name="dipakai" id="dipakai" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0">
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-6">
-        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200">Batal</button>
-        <button type="submit" class="px-5 py-2 rounded-lg bg-green-500 text-white hover:bg-green-600">Simpan</button>
+      <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
+        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 text-sm font-medium">Batal</button>
+        <button type="submit" class="px-5 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 text-sm font-medium shadow-lg shadow-cyan-500/30">Simpan Data</button>
       </div>
     </form>
   </div>
@@ -233,7 +314,6 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  // --- Role ke JS ---
   const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
 
   const $ = s => document.querySelector(s);
@@ -249,7 +329,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let allRows = [], currentPage = 1, pageSize = parseInt(pageSizeEl.value || '10', 10);
 
-  // ====== UTIL: Sort Terbaru (created_at -> tanggal -> tahun+bulan -> id) ======
+  // ====== UTIL: Sort Terbaru ======
   const MONTH_IDX = {
     'januari':1,'februari':2,'maret':3,'april':4,'mei':5,'juni':6,
     'juli':7,'agustus':8,'september':9,'oktober':10,'november':11,'desember':12
@@ -257,38 +337,39 @@ document.addEventListener('DOMContentLoaded', () => {
   const norm = v => (v||'').toString().trim().toLowerCase();
 
   function parseRowTimestamp(r){
-    // 1) created_at (ISO / Y-m-d H:i:s)
     if (r.created_at) {
       const d = new Date(r.created_at);
       if (!isNaN(d)) return d.getTime();
     }
-    // 2) tanggal (Y-m-d)
     if (r.tanggal) {
       const d = new Date(r.tanggal);
       if (!isNaN(d)) return d.getTime();
     }
-    // 3) tahun + bulan (teks Indonesia)
     const th = parseInt(r.tahun,10);
     const bln = MONTH_IDX[norm(r.bulan)];
     if (!isNaN(th) && bln>=1 && bln<=12) {
-      // akhir bulan sebagai representasi
       return new Date(th, bln-1, 28, 23, 59, 59).getTime();
     }
-    // 4) fallback id (angka lebih besar = lebih baru)
     if (r.id && !isNaN(+r.id)) return +r.id;
     return 0;
   }
 
   function compareDescByLatest(a,b){
     const ta = parseRowTimestamp(a), tb = parseRowTimestamp(b);
-    if (tb !== ta) return tb - ta;       // terbaru duluan
+    if (tb !== ta) return tb - ta; 
     const ia = (a.id!==undefined && !isNaN(+a.id)) ? +a.id : -1;
     const ib = (b.id!==undefined && !isNaN(+b.id)) ? +b.id : -1;
-    return ib - ia;                       // tie-break pakai id
+    return ib - ia; 
   }
-  // ============================================================================
-
-  function numberFmt(x){ return Number(x ?? 0).toLocaleString(undefined,{maximumFractionDigits:2}); }
+  
+  // ====== MODIFIKASI: Format Angka 0 jadi '-' ======
+  function numberFmt(x) {
+    const val = parseFloat(x ?? 0);
+    // Jika nilai 0, kembalikan strip
+    if (val === 0) return '-';
+    // Jika tidak, format desimal 2 digit
+    return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
 
   function renderPage(){
     const total = allRows.length;
@@ -301,29 +382,32 @@ document.addEventListener('DOMContentLoaded', () => {
     const pageRows = allRows.slice(startIdx, endIdx);
 
     if (total === 0){
-      tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Belum ada data.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-gray-400 italic">Belum ada data untuk filter ini.</td></tr>`;
     } else {
       tbody.innerHTML = pageRows.map(row => `
-        <tr class="border-b hover:bg-gray-50">
-          <td class="py-3 px-4">
+        <tr class="hover:bg-blue-50 transition-colors">
+          <td>
             <div class="font-semibold text-gray-800">${row.kebun_kode || ''}</div>
             <div class="text-xs text-gray-500">${row.nama_kebun || ''}</div>
           </td>
-          <td class="py-3 px-4">
+          <td>
             <div class="font-semibold text-gray-800">${row.nama_bahan || ''}</div>
-            <div class="text-xs text-gray-500">(${row.satuan||''})</div>
           </td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.stok_awal)}</td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.mutasi_masuk)}</td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.mutasi_keluar)}</td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.pasokan)}</td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.dipakai)}</td>
-          <td class="py-3 px-4 text-right text-gray-800">${numberFmt(row.net_mutasi)}</td>
-          <td class="py-3 px-4 text-right font-semibold text-gray-900">${numberFmt(row.sisa_stok)}</td>
-          <td class="py-3 px-4">
-            <div class="flex items-center gap-3">
-              <button class="btn-edit text-blue-600 underline" data-json='${encodeURIComponent(JSON.stringify(row))}' ${IS_STAF ? 'disabled' : ''}>✏️</button>
-              <button class="btn-delete text-red-600 underline" data-id="${row.id}" ${IS_STAF ? 'disabled' : ''}>🗑️</button>
+          <td class="text-center">
+             <span class="badge-satuan">${row.satuan||'-'}</span>
+          </td>
+          
+          <td class="text-right text-gray-600">${numberFmt(row.stok_awal)}</td>
+          <td class="text-right text-gray-600">${numberFmt(row.mutasi_masuk)}</td>
+          <td class="text-right text-gray-600">${numberFmt(row.mutasi_keluar)}</td>
+          <td class="text-right text-gray-600">${numberFmt(row.pasokan)}</td>
+          <td class="text-right text-gray-600">${numberFmt(row.dipakai)}</td>
+          <td class="text-right text-gray-600">${numberFmt(row.net_mutasi)}</td>
+          <td class="text-right font-bold text-gray-900">${numberFmt(row.sisa_stok)}</td>
+          <td class="text-center">
+            <div class="flex justify-center gap-1">
+              <button class="btn-action text-cyan-600 hover:text-cyan-800" title="Edit" data-json='${encodeURIComponent(JSON.stringify(row))}' ${IS_STAF ? 'disabled' : ''}><i class="ti ti-pencil"></i></button>
+              <button class="btn-action text-red-600 hover:text-red-800" title="Hapus" data-id="${row.id}" ${IS_STAF ? 'disabled' : ''}><i class="ti ti-trash"></i></button>
             </div>
           </td>
         </tr>
@@ -355,17 +439,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selBulan.value) fd.append('bulan', selBulan.value);
     fd.append('tahun', selTahun.value || '<?= (int)date('Y') ?>');
 
-    tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-gray-500">Memuat data…</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin"></i> Memuat data...</td></tr>`;
     fetch('stok_gudang_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
       .then(j=>{
         if (!j.success) {
           allRows = [];
           renderPage();
-          tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
           return;
         }
-        // === PENTING: sort terbaru di sini ===
         const arr = Array.isArray(j.data) ? j.data : [];
         allRows = arr.slice().sort(compareDescByLatest);
         currentPage = 1;
@@ -374,11 +457,12 @@ document.addEventListener('DOMContentLoaded', () => {
       .catch(err=>{
         allRows = [];
         renderPage();
-        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
       });
   }
 
   refreshList();
+  
   [selKebun, selBahan, selBulan, selTahun].forEach(el=> el.addEventListener('change', refreshList));
 
   pageSizeEl.addEventListener('change', ()=>{
@@ -423,7 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = e.target.closest('button');
     if (!btn) return;
 
-    if (btn.classList.contains('btn-edit') && !IS_STAF) {
+    if (btn.title === 'Edit' && !IS_STAF && btn.dataset.json) {
       const row = JSON.parse(decodeURIComponent(btn.dataset.json));
       form.reset();
       formAction.value='update';
@@ -436,7 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
       open();
     }
 
-    if (btn.classList.contains('btn-delete') && !IS_STAF) {
+    if (btn.title === 'Hapus' && !IS_STAF && btn.dataset.id) {
       const id = btn.dataset.id;
       Swal.fire({
         title:'Hapus data ini?', text:'Tindakan ini tidak dapat dibatalkan.',

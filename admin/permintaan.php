@@ -38,7 +38,7 @@ include_once '../layouts/header.php';
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V8l-6-6zM6 20V4h7v5h5v11H6z"/><path d="M8 12h2.5a2.5 2.5 0 1 1 0 5H8v-5zm1.5 1.5V15H10a1 1 0 0 0 0-2h-.5zM14 12h2a2 2 0 1 1 0 4h-1v1.5h-1V12zm2 1.5a.5.5 0 0 1 0 1H15v-1h1z"/></svg>
         <span>PDF</span>
       </button>
-      <button id="btn-add" class="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Tambah Pengajuan</button>
+      <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">+ Tambah Pengajuan</button>
     </div>
   </div>
 
@@ -46,7 +46,7 @@ include_once '../layouts/header.php';
     <div class="overflow-x-auto">
       <div class="max-h-[520px] overflow-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-green-500 sticky top-0 z-10">
+          <thead class="bg-cyan-500 sticky top-0 z-10">
             <tr class="text-gray-100">
               <th class="py-3 px-4 text-left">No. Dokumen</th><th class="py-3 px-4 text-left">Kebun</th>
               <th class="py-3 px-4 text-left">Unit/Devisi</th><th class="py-3 px-4 text-left">Tanggal</th>

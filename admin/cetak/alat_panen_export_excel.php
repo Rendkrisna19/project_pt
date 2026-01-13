@@ -66,7 +66,7 @@ $st=$pdo->prepare($sql); $st->execute($params); $rows=$st->fetchAll(PDO::FETCH_A
 // === Spreadsheet
 $ss = new Spreadsheet();
 $sheet = $ss->getActiveSheet();
-$sheet->setTitle('Alat Panen');
+$sheet->setTitle('Alat Pertanian');
 
 // Judul (tema hijau, tanpa tanggal/ nama)
 $sheet->mergeCells('A1:L1'); // Modifikasi: N -> L

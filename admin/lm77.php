@@ -1,6 +1,5 @@
 <?php
-// lm77.php — Rekap LM-77 (turunan dari LM-76 13 kolom)
-// Versi modifikasi: Group by Unit, style dari LM-76
+// lm77.php — Modifikasi Full: Auto Filter, Realtime, Sticky Header, Grid Table
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -14,100 +13,197 @@ $db = new Database(); $conn = $db->getConnection();
 $units  = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
 $kebuns = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
 
+// --- LOGIKA TANGGAL DEFAULT ---
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+$bulanIndex = (int)date('n') - 1; 
+$bulanNowName = $bulanList[$bulanIndex]; 
 $tahunNow = (int)date('Y');
+
+// Filter awal (jika ada di URL, pakai itu. Jika tidak, pakai default server time)
+$f_unit  = $_GET['unit_id'] ?? '';
+$f_kebun = $_GET['kebun_id'] ?? '';
+$f_bulan = $_GET['bulan'] ?? $bulanNowName;
+$f_tahun = $_GET['tahun'] ?? $tahunNow;
 
 $currentPage = 'lm77';
 include_once '../layouts/header.php';
 ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+
 <style>
-  .thead-sticky th{position:sticky;top:0;z-index:10}
-  /* Style grouping dari lm76 */
-  .unit-head { background:#d1fae5; color:#065f46; font-weight:700; }
-  .unit-sub { background:#ecfdf5; font-weight:700; }
+  /* --- STICKY CONTAINER & TABLE GRID --- */
+  .sticky-container {
+    max-height: 75vh; /* Tinggi area scroll */
+    overflow: auto;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.75rem;
+    background: #fff;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    position: relative;
+  }
+
+  table.table-grid {
+    width: 100%;
+    border-collapse: separate; /* Wajib separate untuk sticky */
+    border-spacing: 0;
+    min-width: 1600px; /* Lebar minimum agar tidak gepeng */
+  }
+
+  /* Garis Grid Penuh */
+  table.table-grid th, 
+  table.table-grid td {
+    padding: 0.65rem 0.75rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+    vertical-align: middle;
+    border-bottom: 1px solid #e2e8f0;
+    border-right: 1px solid #e2e8f0; /* Garis vertikal */
+  }
+
+  table.table-grid th:last-child, 
+  table.table-grid td:last-child {
+    border-right: none;
+  }
+
+  /* Header Sticky & Tinggi */
+  table.table-grid thead th {
+    position: sticky;
+    top: 0;
+    background: #059fd3; /* Warna Biru Standar */
+    color: #fff;
+    z-index: 10;
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    height: 55px; /* Header diperbesar ke bawah */
+    vertical-align: middle;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+
+  /* Footer Sticky di Bawah */
+  table.table-grid tfoot td {
+    position: sticky;
+    bottom: 0;
+    background: #059fd3; /* Warna Biru Footer */
+    color: #fff;
+    font-weight: 700;
+    z-index: 10;
+    border-top: 2px solid rgba(255,255,255,0.3);
+  }
+
+  /* Style Grouping Rows */
+  .unit-head td { 
+    background: #e0f2fe; /* Biru sangat muda */
+    color: #0369a1; 
+    font-weight: 800; 
+    border-top: 2px solid #bae6fd;
+  }
+  .unit-sub td { 
+    background: #f0f9ff; 
+    font-weight: 700; 
+    color: #0c4a6e;
+    border-top: 1px solid #e2e8f0;
+  }
+
+  /* Utilities */
+  .text-right { text-align: right; }
+  .text-center { text-align: center; }
+  .text-left { text-align: left; }
+  button:disabled { opacity: 0.5; cursor: not-allowed !important; }
 </style>
 
 <div class="space-y-6">
   <div class="flex justify-between items-center">
     <div>
-      <h1 class="text-2xl font-bold">LM-77 — Statistik Panen (Rekap)</h1>
-      <p class="text-gray-500">Rekap turunan dari LM-76. Dikelompokkan per Unit/AFD. Kolom 8–13 dihitung otomatis.</p>
+      <h1 class="text-2xl font-bold text-gray-800">LM-77 — Statistik Panen</h1>
+      <p class="text-gray-500 text-sm mt-1">Rekap turunan LM-76 • Grouping per Unit</p>
     </div>
 
     <div class="flex items-center gap-2">
-      <button id="btn-export-excel" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 flex items-center gap-2">
+      <button id="btn-export-excel" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition">
           <i class="ti ti-file-spreadsheet"></i><span>Excel</span>
       </button>
-      <button id="btn-export-pdf" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2">
+      <button id="btn-export-pdf" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition">
           <i class="ti ti-file-type-pdf"></i><span>PDF</span>
       </button>
     </div>
   </div>
 
-  <div class="bg-white p-4 rounded-xl shadow-sm grid grid-cols-1 md:grid-cols-4 gap-3">
-    <select id="filter-unit" class="border rounded px-3 py-2">
-      <option value="">Semua Unit</option>
-      <?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?>
-    </select>
-    <select id="filter-bulan" class="border rounded px-3 py-2">
-      <option value="">Semua Bulan</option>
-      <?php foreach ($bulanList as $b): ?><option value="<?= $b ?>"><?= $b ?></option><?php endforeach; ?>
-    </select>
-    <select id="filter-tahun" class="border rounded px-3 py-2">
-      <?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?>
-        <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-      <?php endfor; ?>
-    </select>
-    <select id="filter-kebun" class="border rounded px-3 py-2">
-      <option value="">Semua Kebun</option>
-      <?php foreach ($kebuns as $k): ?>
-        <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
-      <?php endforeach; ?>
-    </select>
+  <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-3">
+    <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit/Defisi</label>
+        <select id="filter-unit" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+            <option value="">Semua Unit</option>
+            <?php foreach ($units as $u): ?>
+                <option value="<?= (int)$u['id'] ?>" <?= ((string)$f_unit === (string)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
+        <select id="filter-bulan" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+            <option value="">Semua Bulan</option>
+            <?php foreach ($bulanList as $b): ?>
+                <option value="<?= $b ?>" <?= ($f_bulan === $b)?'selected':'' ?>><?= $b ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
+        <select id="filter-tahun" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+            <?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?>
+                <option value="<?= $y ?>" <?= ((int)$f_tahun === $y)?'selected':'' ?>><?= $y ?></option>
+            <?php endfor; ?>
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
+        <select id="filter-kebun" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+            <option value="">Semua Kebun</option>
+            <?php foreach ($kebuns as $k): ?>
+                <option value="<?= (int)$k['id'] ?>" <?= ((string)$f_kebun === (string)$k['id'])?'selected':'' ?>><?= htmlspecialchars($k['nama_kebun']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
   </div>
 
-  <div class="bg-white rounded-xl shadow-sm">
-    <div class="overflow-x-auto">
-      <div class="max-h-[70vh] overflow-auto">
-        <table class="min-w-full text-sm">
-          <thead class="thead-sticky bg-green-700 text-white">
-            <tr>
-              <th class="py-3 px-4 text-left">Tahun</th>
-              <th class="py-3 px-4 text-left">Kebun</th>
-              <th class="py-3 px-4 text-left">Unit/Defisi</th>
-              <th class="py-3 px-4 text-left">Periode</th>
-              <th class="py-3 px-4 text-left">T. Tanam</th>
-              <th class="py-3 px-4 text-right">Luas (Ha)</th>
-              <th class="py-3 px-4 text-right">Inv. Pokok</th>
-              <th class="py-3 px-4 text-right">Variance (%)</th>
-              <th class="py-3 px-4 text-right">Tandan/Pokok</th>
-              <th class="py-3 px-4 text-right">Protas (Ton)</th>
-              <th class="py-3 px-4 text-right">BTR</th>
-              <th class="py-3 px-4 text-right">Prestasi HK (Kg)</th>
-              <th class="py-3 px-4 text-right">Prestasi HK (Tandan)</th>
-            </tr>
-          </thead>
-          <tbody id="tbody-data">
-            <tr><td colspan="13" class="text-center py-10 text-gray-500">Memuat…</td></tr>
-          </tbody>
-          <tfoot class="bg-green-50 border-t-4 border-green-700 text-gray-900">
-            <tr class="bg-green-50 border-t-4 border-green-700 text-gray-900">
-              <td class="py-3 px-4 font-semibold" colspan="5">TOTAL</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-luas">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-pokok">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-var">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-tpp">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-protas">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-btr">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-kg-hk">0</td>
-              <td class="py-3 px-4 text-right font-semibold" id="tot-tdn-hk">0</td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-    </div>
-    </div>
+  <div class="sticky-container">
+    <table class="table-grid">
+      <thead>
+        <tr>
+          <th class="text-left">Tahun</th>
+          <th class="text-left">Kebun</th>
+          <th class="text-left">Unit/Defisi</th>
+          <th class="text-left">Periode</th>
+          <th class="text-left">T. Tanam</th>
+          <th class="text-right">Luas (Ha)</th>
+          <th class="text-right">Inv. Pokok</th>
+          <th class="text-right">Variance (%)</th>
+          <th class="text-right">Tandan/Pokok</th>
+          <th class="text-right">Protas (Ton)</th>
+          <th class="text-right">BTR</th>
+          <th class="text-right">Prestasi HK (Kg)</th>
+          <th class="text-right">Prestasi HK (Tandan)</th>
+        </tr>
+      </thead>
+      <tbody id="tbody-data" class="bg-white text-gray-800">
+        <tr><td colspan="13" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="text-right px-4" colspan="5">TOTAL</td>
+          <td class="text-right" id="tot-luas">0</td>
+          <td class="text-right" id="tot-pokok">0</td>
+          <td class="text-right" id="tot-var">0</td>
+          <td class="text-right" id="tot-tpp">0</td>
+          <td class="text-right" id="tot-protas">0</td>
+          <td class="text-right" id="tot-btr">0</td>
+          <td class="text-right" id="tot-kg-hk">0</td>
+          <td class="text-right" id="tot-tdn-hk">0</td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
 </div>
 
 <?php include_once '../layouts/footer.php'; ?>
@@ -121,11 +217,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const fTahun = $('#filter-tahun');
   const fKebun = $('#filter-kebun');
 
-  // Hapus DOM Pager
-  // const pageSizeSel = $('#page-size');
-  // const pagerEl     = $('#pager');
-  // const rangeInfoEl = $('#range-info');
-
   const T = {
     luas: $('#tot-luas'), pokok: $('#tot-pokok'),
     v: $('#tot-var'), tpp: $('#tot-tpp'), prot: $('#tot-protas'),
@@ -133,8 +224,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   };
 
   let allData = [];
-  // Hapus state Pager
-  // let currentPage = 1; 
   
   const bulanOrder = {
     'Januari':1,'Februari':2,'Maret':3,'April':4,'Mei':5,'Juni':6,
@@ -144,7 +233,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const fmt = (n, d=2) => Number(n ?? 0).toLocaleString(undefined,{maximumFractionDigits:d});
   const sum = (arr, getter) => arr.reduce((a,r)=> a + (getter(r)||0), 0);
 
-  /* ====== RUMUS (ambil dari LM-76 v13 kolom) ====== */
+  /* ====== RUMUS ====== */
   const toNum = v => { const x = parseFloat(v); return Number.isNaN(x) ? 0 : x; };
 
   function variancePct(r){
@@ -187,25 +276,24 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const td  = prestasiTandanHK(r);
 
     return `
-      <tr class="border-b hover:bg-gray-50">
-        <td class="py-2 px-3">${r.tahun ?? '-'}</td>
-        <td class="py-2 px-3">${r.nama_kebun ?? '-'}</td>
-        <td class="py-2 px-3">${r.nama_unit ?? '-'}</td>
-        <td class="py-2 px-3">${(r.bulan||'-')} ${(r.tahun||'-')}</td>
-        <td class="py-2 px-3">${r.tt ?? '-'}</td>
-        <td class="py-2 px-3 text-right">${fmt(r.luas_ha)}</td>
-        <td class="py-2 px-3 text-right">${fmt(r.jumlah_pohon,0)}</td>
-        <td class="py-2 px-3 text-right">${v!==null ? fmt(v) : '-'}</td>
-        <td class="py-2 px-3 text-right">${tpp!==null ? fmt(tpp,4) : '-'}</td>
-        <td class="py-2 px-3 text-right">${pt!==null ? fmt(pt,3) : '-'}</td>
-        <td class="py-2 px-3 text-right">${b!==null ? fmt(b,3) : '-'}</td>
-        <td class="py-2 px-3 text-right">${kg!==null ? fmt(kg,3) : '-'}</td>
-        <td class="py-2 px-3 text-right">${td!==null ? fmt(td,3) : '-'}</td>
+      <tr class="hover:bg-blue-50 transition-colors">
+        <td>${r.tahun ?? '-'}</td>
+        <td>${r.nama_kebun ?? '-'}</td>
+        <td>${r.nama_unit ?? '-'}</td>
+        <td>${(r.bulan||'-')} ${(r.tahun||'-')}</td>
+        <td>${r.tt ?? '-'}</td>
+        <td class="text-right">${fmt(r.luas_ha)}</td>
+        <td class="text-right">${fmt(r.jumlah_pohon,0)}</td>
+        <td class="text-right ${v!==null?(v<0?'text-red-600':'text-gray-800'):''}">${v!==null ? fmt(v) : '-'}</td>
+        <td class="text-right">${tpp!==null ? fmt(tpp,4) : '-'}</td>
+        <td class="text-right">${pt!==null ? fmt(pt,3) : '-'}</td>
+        <td class="text-right">${b!==null ? fmt(b,3) : '-'}</td>
+        <td class="text-right">${kg!==null ? fmt(kg,3) : '-'}</td>
+        <td class="text-right">${td!==null ? fmt(td,3) : '-'}</td>
       </tr>
     `;
   }
 
-  // Fungsi ini menghitung Grand Total (Footer)
   function renderGrandTotals(){
     const totalLuas  = sum(allData, r => toNum(r.luas_ha));
     const totalPokok = sum(allData, r => toNum(r.jumlah_pohon));
@@ -231,12 +319,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     T.tdnhk.textContent = TDN_HK!==null?fmt(TDN_HK,3):'-';
   }
 
-  // Hapus fungsi renderPager()
-  
-  // Ganti renderTable() menjadi groupAndRender() (dari lm76)
   function groupAndRender(){
     if (!allData.length){
-      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-10 text-gray-500">Belum ada data.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="text-center py-10 text-gray-500 italic">Belum ada data.</td></tr>`;
       renderGrandTotals();
       return;
     }
@@ -249,7 +334,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       unitBuckets.get(uKey).push(r);
     });
 
-    // Sort unit keys alphabetically
+    // Sort unit keys
     const unitKeys = Array.from(unitBuckets.keys()).sort((a,b)=>a.localeCompare(b));
 
     let html = '';
@@ -257,7 +342,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     unitKeys.forEach(uKey=>{
       const rowsU = unitBuckets.get(uKey) || [];
 
-      // Urutkan baris dalam Unit: Tahun ASC → Bulan ASC → TT ASC
       rowsU.sort((a,b)=>{
         const ty = (parseInt(a.tahun)||0) - (parseInt(b.tahun)||0);
         if (ty!==0) return ty;
@@ -266,13 +350,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
         return (a.tt||'').localeCompare(b.tt||'');
       });
 
-      // Unit header
-      html += `<tr class="unit-head"><td class="py-2 px-3" colspan="13">Unit/AFD: ${uKey}</td></tr>`;
+      // Unit header row
+      html += `<tr class="unit-head"><td class="px-3 py-2" colspan="13"><i class="ti ti-folder"></i> Unit: ${uKey}</td></tr>`;
 
-      // Rows
+      // Data Rows
       html += rowsU.map(buildRowHTML).join('');
 
-      // Subtotal Unit (logika kalkulasi sama seperti renderGrandTotals)
+      // Subtotal Unit
       const uLuas   = sum(rowsU, r => toNum(r.luas_ha));
       const uPokok  = sum(rowsU, r => toNum(r.jumlah_pohon));
       const uReal   = sum(rowsU, r => toNum(r.realisasi_kg));
@@ -289,24 +373,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       html += `
         <tr class="unit-sub">
-          <td class="py-2 px-3" colspan="5">Jumlah (${uKey})</td>
-          <td class="py-2 px-3 text-right">${fmt(uLuas)}</td>
-          <td class="py-2 px-3 text-right">${fmt(uPokok,0)}</td>
-          <td class="py-2 px-3 text-right">${uVtot!==null?fmt(uVtot):'-'}</td>
-          <td class="py-2 px-3 text-right">${uTPP!==null?fmt(uTPP,4):'-'}</td>
-          <td class="py-2 px-3 text-right">${uPROT!==null?fmt(uPROT,3):'-'}</td>
-          <td class="py-2 px-3 text-right">${uBTR!==null?fmt(uBTR,3):'-'}</td>
-          <td class="py-2 px-3 text-right">${uKG_HK!==null?fmt(uKG_HK,3):'-'}</td>
-          <td class="py-2 px-3 text-right">${uTDN_HK!==null?fmt(uTDN_HK,3):'-'}</td>
+          <td class="px-3 py-2 text-right font-bold text-gray-600" colspan="5">Subtotal (${uKey})</td>
+          <td class="text-right">${fmt(uLuas)}</td>
+          <td class="text-right">${fmt(uPokok,0)}</td>
+          <td class="text-right">${uVtot!==null?fmt(uVtot):'-'}</td>
+          <td class="text-right">${uTPP!==null?fmt(uTPP,4):'-'}</td>
+          <td class="text-right">${uPROT!==null?fmt(uPROT,3):'-'}</td>
+          <td class="text-right">${uBTR!==null?fmt(uBTR,3):'-'}</td>
+          <td class="text-right">${uKG_HK!==null?fmt(uKG_HK,3):'-'}</td>
+          <td class="text-right">${uTDN_HK!==null?fmt(uTDN_HK,3):'-'}</td>
         </tr>`;
     });
 
     tbody.innerHTML = html;
-    renderGrandTotals(); // Render Grand Total di footer
+    renderGrandTotals();
   }
 
   function refresh(){
-    // ambil data LM-76 (turunan)
     const fd = new FormData();
     fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
     fd.append('action','list');
@@ -314,13 +397,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('unit_id',  fUnit.value);
     fd.append('bulan',    fBulan.value);
     fd.append('tahun',    fTahun.value);
-    // Kita tidak filter 'tt' di LM-77, jadi tidak perlu dikirim
-    // fd.append('tt', fTT.value); 
 
-    tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-gray-500">Memuat…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>';
+    
+    // Menggunakan lm76_crud.php karena lm77 adalah turunan data yang sama
     fetch('lm76_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
-      // Modifikasi .then() untuk memanggil groupAndRender
       .then(j=>{ 
         allData = (j && j.success && Array.isArray(j.data)) ? j.data : []; 
         groupAndRender(); 
@@ -328,16 +410,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
       .catch(()=>{ tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-red-500">Gagal memuat data</td></tr>'; });
   }
 
+  // Load awal
   refresh();
   
-  // Modifikasi listener, hapus currentPage=1
+  // Event listener realtime filter
   [fUnit,fBulan,fTahun,fKebun].forEach(el=>el.addEventListener('change', refresh));
-  
-  // Hapus listener Pager
-  // pageSizeSel.addEventListener('change', ...);
-  // pagerEl.addEventListener('click', ...);p
 
-  // Export ikut filter + CSRF (Sudah benar, tidak perlu diubah)
+  // Export Link Generator
   function filtersQS(){
     return new URLSearchParams({
       csrf_token: '<?= htmlspecialchars($CSRF) ?>',

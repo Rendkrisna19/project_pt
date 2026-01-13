@@ -1,381 +1,282 @@
-<?php
-// admin/cetak/lm76_export_pdf.php
-// Layout: seperti contoh (header kiri-kanan, Volume Produksi, Biaya Produksi/Afdeling dengan BI & S/D BI)
-// Persentase = (Realisasi − RKAP)/RKAP × 100
+  <?php
+  // admin/cetak/lm_biaya_pdf.php
+  // UPDATE: Sinkronisasi dengan Web View (Logic Volume LM76, Incl/Excl, dan Style HPP Hijau)
 
-session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
+  session_start();
+  if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
-require_once '../../config/database.php';
-require_once '../../vendor/autoload.php';
+  require_once '../../config/database.php';
+  require_once '../../vendor/autoload.php'; // Pastikan path vendor benar
 
-use Dompdf\Dompdf;
-use Dompdf\Options;
+  use Dompdf\Dompdf;
+  use Dompdf\Options;
 
-/* ==== helpers ==== */
-function col_exists(PDO $pdo, $table, $col){
-  $st = $pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
-  $st->execute([':t'=>$table, ':c'=>$col]);
-  return (bool)$st->fetchColumn();
-}
-function nf($n,$d=2){ return number_format((float)$n,$d,',','.'); }
-function pct_str($num){ return is_null($num) ? '-' : sprintf('%s%s%%', $num>=0?'+':'', nf($num,2)); }
-function bulan_index($b){
-  static $m=['Januari'=>1,'Februari'=>2,'Maret'=>3,'April'=>4,'Mei'=>5,'Juni'=>6,'Juli'=>7,'Agustus'=>8,'September'=>9,'Oktober'=>10,'November'=>11,'Desember'=>12];
-  return $m[$b] ?? null;
-}
-function idx_to_bulan($i){
-  $arr=[1=>'Januari',2=>'Februari',3=>'Maret',4=>'April',5=>'Mei',6=>'Juni',7=>'Juli',8=>'Agustus',9=>'September',10=>'Oktober',11=>'November',12=>'Desember'];
-  return $arr[$i] ?? '';
-}
-
-try {
   $db  = new Database();
   $pdo = $db->getConnection();
 
-  // ===== Filters =====
-  $kebun_id = (isset($_GET['kebun_id']) && $_GET['kebun_id']!=='') ? (int)$_GET['kebun_id'] : null;
-  $unit_id  = (isset($_GET['unit_id'])  && $_GET['unit_id'] !=='') ? (int)$_GET['unit_id']  : null;
-  $bulan    = (isset($_GET['bulan'])    && $_GET['bulan']   !=='') ? trim($_GET['bulan'])   : null;
-  $tahun    = (isset($_GET['tahun'])    && $_GET['tahun']   !=='') ? (int)$_GET['tahun']   : (int)date('Y');
-  $tt       = (isset($_GET['tt'])       && $_GET['tt']      !=='') ? trim($_GET['tt'])      : null;
-
-  $bulanIdx = bulan_index($bulan ?: idx_to_bulan((int)date('n')));
-
-  /* ===== Master name for header ===== */
-  $nama_kebun = '-'; $nama_unit = '-';
-  if ($kebun_id){
-    $nama_kebun = $pdo->prepare("SELECT nama_kebun FROM md_kebun WHERE id=?");
-    $nama_kebun->execute([$kebun_id]); $nama_kebun = $nama_kebun->fetchColumn() ?: '-';
+  /* --- 1. HELPER FUNCTIONS --- */
+  function col_exists($pdo, $table, $col){
+      $st = $pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
+      $st->execute([':t'=>$table, ':c'=>$col]);
+      return (bool)$st->fetchColumn();
   }
-  if ($unit_id){
-    $nama_unit = $pdo->prepare("SELECT nama_unit FROM units WHERE id=?");
-    $nama_unit->execute([$unit_id]); $nama_unit = $nama_unit->fetchColumn() ?: '-';
+  function find_col($pdo, $table, $candidates, $default='0') {
+      foreach ($candidates as $col) { if (col_exists($pdo, $table, $col)) return $col; }
+      return $default;
   }
 
-  /* ====================== VOLUME PRODUKSI (LM76) ======================= */
-  $hasKebun76  = col_exists($pdo,'lm76','kebun_id');
-  $colBIrkap   = col_exists($pdo,'lm76','prod_bi_anggaran') ? 'prod_bi_anggaran' :
-                 (col_exists($pdo,'lm76','prod_bi_rkap') ? 'prod_bi_rkap' : '0');
+  // --- 2. TERIMA FILTER ---
+  $unit_id  = $_GET['unit_id']  ?? '';
+  $tahun    = $_GET['tahun']    ?? date('Y');
+  $bulan    = $_GET['bulan']    ?? '';
+  $kebun_id = $_GET['kebun_id'] ?? '';
+  $q        = trim($_GET['q'] ?? '');
 
-  $sql76 = "SELECT l.*, u.nama_unit ".($hasKebun76?", k.nama_kebun":"")."
-            FROM lm76 l
-            LEFT JOIN units u ON u.id=l.unit_id
-            ".($hasKebun76?"LEFT JOIN md_kebun k ON k.id=l.kebun_id":"")."
-            WHERE l.tahun=:thn";
-  $b76 = [':thn'=>$tahun];
-  if ($kebun_id && $hasKebun76){ $sql76.=" AND l.kebun_id=:kid"; $b76[':kid']=$kebun_id; }
-  if ($unit_id){ $sql76.=" AND l.unit_id=:uid"; $b76[':uid']=$unit_id; }
-  if ($bulan){ $sql76.=" AND l.bulan=:bln"; $b76[':bln']=$bulan; }
-  if ($tt){ $sql76.=" AND l.tt=:tt"; $b76[':tt']=$tt; }
+  // --- 3. LOGIKA VOLUME (LM76) ---
+  $vol_real = 0; $vol_ang = 0;
+  if (col_exists($pdo, 'lm76', 'id')) {
+      $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi']);
+      $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap']);
 
-  $st76=$pdo->prepare($sql76); $st76->execute($b76);
-  $rows76=$st76->fetchAll(PDO::FETCH_ASSOC);
+      $wh76 = " WHERE 1=1 "; $bd76 = [];
+      if ($tahun !== '')    { $wh76 .= " AND tahun=:t"; $bd76[':t'] = $tahun; }
+      if ($bulan !== '')    { $wh76 .= " AND bulan=:b"; $bd76[':b'] = $bulan; }
+      if ($unit_id !== '')  { $wh76 .= " AND unit_id=:u"; $bd76[':u'] = $unit_id; }
+      if ($kebun_id !== '') { $wh76 .= " AND kebun_id=:k"; $bd76[':k'] = $kebun_id; }
 
-  $agg=['bi_real'=>0,'bi_rkap'=>0,'sd_real'=>0,'sd_rkap'=>0];
-  foreach($rows76 as $r){
-    $agg['bi_real'] += (float)($r['prod_bi_realisasi'] ?? 0);
-    $agg['bi_rkap'] += (float)($r[$colBIrkap] ?? 0);
+      $sqlVol = "SELECT SUM(COALESCE($col_r,0)) as v_real, SUM(COALESCE($col_a,0)) as v_ang FROM lm76 $wh76";
+      $stVol = $pdo->prepare($sqlVol);
+      $stVol->execute($bd76);
+      $dVol = $stVol->fetch(PDO::FETCH_ASSOC);
+      $vol_real = (float)($dVol['v_real'] ?? 0);
+      $vol_ang  = (float)($dVol['v_ang'] ?? 0);
   }
 
-  // S/D BI: ambil semua bulan <= target
-  $sql76sd = "SELECT SUM(COALESCE(prod_sd_realisasi,0)) sd_real, SUM(COALESCE(prod_sd_anggaran,0)) sd_rkap
-              FROM lm76 WHERE tahun=:thn ".($bulan?" AND FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember') <= :idx":"");
-  $b76sd=[':thn'=>$tahun]; if($bulan) $b76sd[':idx']=$bulanIdx;
-  if ($kebun_id && $hasKebun76){ $sql76sd.=" AND kebun_id=:kid"; $b76sd[':kid']=$kebun_id; }
-  if ($unit_id){ $sql76sd.=" AND unit_id=:uid"; $b76sd[':uid']=$unit_id; }
-  if ($tt){ $sql76sd.=" AND tt=:tt"; $b76sd[':tt']=$tt; }
-
-  $st76sd=$pdo->prepare($sql76sd); $st76sd->execute($b76sd);
-  $sd = $st76sd->fetch(PDO::FETCH_ASSOC) ?: ['sd_real'=>0,'sd_rkap'=>0];
-  $agg['sd_real'] = (float)$sd['sd_real']; $agg['sd_rkap']=(float)$sd['sd_rkap'];
-
-  $pct_bi = ($agg['bi_rkap']>0) ? (($agg['bi_real']-$agg['bi_rkap'])/$agg['bi_rkap']*100) : null;
-  $pct_sd = ($agg['sd_rkap']>0) ? (($agg['sd_real']-$agg['sd_rkap'])/$agg['sd_rkap']*100) : null;
-
-  /* ====================== BIAYA PRODUKSI (LM_BIAYA) ======================= */
-  $hasKebunB = col_exists($pdo,'lm_biaya','kebun_id');
-
-  // BI (bulan ini)
-  $sqlBI = "SELECT alokasi, uraian_pekerjaan,
-                   SUM(COALESCE(rencana_bi,0)) ang, SUM(COALESCE(realisasi_bi,0)) real
-            FROM lm_biaya WHERE tahun=:thn ".($bulan?" AND bulan=:bln":"")." ";
-  $bBI=[':thn'=>$tahun]; if($bulan) $bBI[':bln']=$bulan;
-  if ($unit_id){ $sqlBI.=" AND unit_id=:uid"; $bBI[':uid']=$unit_id; }
-  if ($kebun_id && $hasKebunB){ $sqlBI.=" AND kebun_id=:kid"; $bBI[':kid']=$kebun_id; }
-  $sqlBI.=" GROUP BY alokasi, uraian_pekerjaan ORDER BY alokasi";
-  $stBI=$pdo->prepare($sqlBI); $stBI->execute($bBI);
-  $rowsBI=$stBI->fetchAll(PDO::FETCH_ASSOC);
-
-  // SD BI (Januari..bulan)
-  $sqlSD = "SELECT alokasi, uraian_pekerjaan,
-                   SUM(COALESCE(rencana_bi,0)) ang, SUM(COALESCE(realisasi_bi,0)) real
-            FROM lm_biaya WHERE tahun=:thn ";
-  $bSD=[':thn'=>$tahun];
-  if ($bulan){
-    $sqlSD.=" AND FIELD(bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember') <= :idx";
-    $bSD[':idx']=$bulanIdx;
-  }
-  if ($unit_id){ $sqlSD.=" AND unit_id=:uid"; $bSD[':uid']=$unit_id; }
-  if ($kebun_id && $hasKebunB){ $sqlSD.=" AND kebun_id=:kid"; $bSD[':kid']=$kebun_id; }
-  $sqlSD.=" GROUP BY alokasi, uraian_pekerjaan ORDER BY alokasi";
-  $stSD=$pdo->prepare($sqlSD); $stSD->execute($bSD);
-  $rowsSD=$stSD->fetchAll(PDO::FETCH_ASSOC);
-
-  // Index by alokasi+uraian untuk merge BI & SD
-  $mapSD = [];
-  foreach($rowsSD as $r){
-    $k = ($r['alokasi']??'')."|".($r['uraian_pekerjaan']??'');
-    $mapSD[$k] = $r;
+  // --- 4. DATA BIAYA ---
+  $where = " WHERE 1=1 "; $bind = [];
+  if ($unit_id !== '')  { $where .= " AND b.unit_id=:uid"; $bind[':uid'] = $unit_id; }
+  if ($tahun !== '')    { $where .= " AND b.tahun=:thn";  $bind[':thn'] = $tahun; }
+  if ($bulan !== '')    { $where .= " AND b.bulan=:bln";  $bind[':bln'] = $bulan; }
+  if ($kebun_id !== '') { $where .= " AND b.kebun_id=:kid"; $bind[':kid'] = $kebun_id; }
+  if ($q !== '') {
+      $where .= " AND (b.alokasi LIKE :kw OR b.uraian_pekerjaan LIKE :kw)";
+      $bind[':kw'] = "%$q%";
   }
 
-  // Totals + kelompok pemupukan
-  $tot = ['bi_ang'=>0,'bi_real'=>0,'sd_ang'=>0,'sd_real'=>0];
-  $incl = ['bi_ang'=>0,'bi_real'=>0,'sd_ang'=>0,'sd_real'=>0];
-  $excl = ['bi_ang'=>0,'bi_real'=>0,'sd_ang'=>0,'sd_real'=>0];
+  $sql = "SELECT b.*, u.nama_unit, kb.nama_kebun
+          FROM lm_biaya b
+          LEFT JOIN units u ON u.id=b.unit_id
+          LEFT JOIN md_kebun kb ON kb.id=b.kebun_id
+          $where
+          ORDER BY b.tahun DESC, 
+            FIELD(b.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
+            b.alokasi ASC";
+  $st = $pdo->prepare($sql);
+  foreach($bind as $k=>$v) $st->bindValue($k,$v);
+  $st->execute();
+  $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-  $rowsMerged = [];
-  foreach($rowsBI as $r){
-    $key = ($r['alokasi']??'')."|".($r['uraian_pekerjaan']??'');
-    $sd  = $mapSD[$key] ?? ['ang'=>0,'real'=>0];
-    $isPupuk = (strpos(strtolower(($r['alokasi']??'').' '.($r['uraian_pekerjaan']??'')),'pupuk')!==false);
+  // --- 5. HITUNG SUMMARY & HPP ---
+  $sumAnggaran = 0; $sumRealisasi = 0;
+  $pupukAng = 0;    $pupukReal = 0;
 
-    $bi_ang=(float)$r['ang']; $bi_real=(float)$r['real'];
-    $sd_ang=(float)$sd['ang']; $sd_real=(float)$sd['real'];
+  foreach($rows as $r){
+      $a  = (float)$r['rencana_bi'];
+      $re = (float)$r['realisasi_bi'];
+      
+      // Total Incl
+      $sumAnggaran  += $a; 
+      $sumRealisasi += $re;
 
-    $tot['bi_ang']+=$bi_ang; $tot['bi_real']+=$bi_real;
-    $tot['sd_ang']+=$sd_ang; $tot['sd_real']+=$sd_real;
-
-    if ($isPupuk){
-      $incl['bi_ang']+=$bi_ang; $incl['bi_real']+=$bi_real;
-      $incl['sd_ang']+=$sd_ang; $incl['sd_real']+=$sd_real;
-    }else{
-      $excl['bi_ang']+=$bi_ang; $excl['bi_real']+=$bi_real;
-      $excl['sd_ang']+=$sd_ang; $excl['sd_real']+=$sd_real;
-    }
-
-    $rowsMerged[] = [
-      'alokasi'=>$r['alokasi'],'uraian'=>$r['uraian_pekerjaan'],
-      'bi_ang'=>$bi_ang,'bi_real'=>$bi_real,
-      'sd_ang'=>$sd_ang,'sd_real'=>$sd_real
-    ];
+      // Cek Pupuk
+      $txt = strtolower(($r['alokasi']??'').' '.($r['uraian_pekerjaan']??''));
+      if (strpos($txt, 'pupuk') !== false){ 
+          $pupukAng  += $a; 
+          $pupukReal += $re; 
+      }
   }
 
-  // Baris agregat “Incl. Pemupukan” harus termasuk SEMUA biaya (by tanaman incl pemupukan = total keseluruhan)
-  // sesuai catatan, kita gunakan total (semua item) sebagai "Incl".
-  // Jadi penuhi juga jika ada item pemupukan tersebar: incl = tot
-  $incl = $tot;
+  // Total Excl
+  $exclAng  = $sumAnggaran - $pupukAng;
+  $exclReal = $sumRealisasi - $pupukReal;
 
-  // Kalkulasi persen (+/- dan %)
-  $calcPct = function($real,$ang){
-    $plus = $real - $ang;
-    $pct  = $ang>0 ? ($plus/$ang*100) : null;
-    return [$plus,$pct];
+  // HPP Incl
+  $hppInclA = ($vol_ang > 0)  ? ($sumAnggaran / $vol_ang) : 0;
+  $hppInclR = ($vol_real > 0) ? ($sumRealisasi / $vol_real) : 0;
+
+  // HPP Excl
+  $hppExclA = ($vol_ang > 0)  ? ($exclAng / $vol_ang) : 0;
+  $hppExclR = ($vol_real > 0) ? ($exclReal / $vol_real) : 0;
+
+  // Helper Perhitungan
+  $calc = function($real, $ang) {
+      $diff = $real - $ang;
+      $pct  = ($ang > 0) ? ($diff / $ang * 100) : null;
+      return [$diff, $pct];
   };
 
-  // HPP
-  $hpp_bi_incl = $agg['bi_real']>0 ? ($tot['bi_real']/$agg['bi_real']) : null;
-  $hpp_bi_excl = $agg['bi_real']>0 ? ($excl['bi_real']/$agg['bi_real']) : null;
-  $hpp_sd_incl = $agg['sd_real']>0 ? ($tot['sd_real']/$agg['sd_real']) : null;
-  $hpp_sd_excl = $agg['sd_real']>0 ? ($excl['sd_real']/$agg['sd_real']) : null;
+  ob_start();
+  ?>
+  <!doctype html>
+  <html>
+  <head>
+  <meta charset="utf-8">
+  <style>
+    @page { margin: 10mm 10mm; }
+    body { font-family: sans-serif; font-size: 9px; color:#000; }
+    .header { text-align:center; margin-bottom:15px; }
+    .header h1 { margin:0; font-size:14px; text-transform:uppercase; }
+    .header p { margin:2px 0; font-size:10px; }
+    
+    table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+    th, td { border:1px solid #000; padding:4px; vertical-align:middle; }
+    
+    th { background:#eee; font-weight:bold; text-align:center; height:20px; }
+    
+    .right { text-align:right; }
+    .center { text-align:center; }
+    
+    /* Styling Khusus agar mirip Excel User */
+    .row-vol td { background:#e0e0e0; font-weight:bold; }
+    .row-hpp td { background:#86efac; font-weight:bold; } /* Warna Hijau */
+    .bold { font-weight:bold; }
+    
+    .neg { color:#000; } /* PDF biasanya hitam saja, atau bisa dikasih kurung */
+  </style>
+  </head>
+  <body>
 
-} catch (Throwable $e) {
-  http_response_code(500);
-  exit('DB Error: '.$e->getMessage());
-}
+    <div class="header">
+      <h1>Laporan Biaya & Harga Pokok</h1>
+      <p>
+        <?= $kebun_id!=='' ? 'Kebun: '.htmlspecialchars($rows[0]['nama_kebun']??'').' | ' : '' ?>
+        <?= $unit_id!==''  ? 'Unit: '.htmlspecialchars($rows[0]['nama_unit']??'').' | ' : '' ?>
+        Bulan: <?= $bulan?:'Semua' ?> | Tahun: <?= $tahun ?>
+      </p>
+    </div>
 
-ob_start();
-?>
-<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-@page { margin: 10mm 10mm; }
-body { font-family: DejaVu Sans, Arial, sans-serif; font-size: 11px; color:#111; }
-.head-wrap{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; }
-.h-left{ font-weight:700; line-height:1.5; }
-.h-right{ text-align:right; font-weight:700; line-height:1.5; }
-.h-sep{ border-top:2px dotted #aaa; margin:6px 0 10px; }
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">Unit/Devisi</th>
+          <th colspan="2">Uraian</th>
+          <th rowspan="2" style="width:6%">Bulan</th>
+          <th rowspan="2" style="width:5%">Tahun</th>
+          <th style="width:12%">Realisasi</th>
+          <th style="width:12%">Anggaran</th>
+          <th style="width:12%">+/-</th>
+          <th style="width:7%">%</th>
+        </tr>
+        <tr>
+          <th>No. ALOKASI</th>
+          <th>Uraian Pekerjaan</th>
+          <th>(Rp)</th>
+          <th>(Rp)</th>
+          <th>(Rp)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php list($dVol, $pVol) = $calc($vol_real, $vol_ang); ?>
+        <tr class="row-vol">
+          <td></td>
+          <td colspan="2" style="text-align:center">- Produksi TBS (KG)</td>
+          <td></td>
+          <td></td>
+          <td class="right"><?= number_format($vol_real) ?></td>
+          <td class="right"><?= number_format($vol_ang) ?></td>
+          <td class="right"><?= number_format($dVol) ?></td>
+          <td class="right"><?= is_null($pVol)?'-':number_format($pVol,2) ?></td>
+        </tr>
 
-.table { width:100%; border-collapse:collapse; table-layout:fixed; }
-.table th,.table td{ border:1px solid #cfd8dc; padding:6px 8px; }
-.table thead th{ background:#e8f5e9; color:#0d5b38; font-weight:700; }
-.subhead { background:#d1fae5; font-weight:700; color:#0f5132; }
-.center{ text-align:center; } .right{ text-align:right; }
-.pos{ color:#059669; } .neg{ color:#dc2626; }
-.row-green { background:#ecfdf5; font-weight:700; }
-.row-orange{ background:#ffe9d6; font-weight:700; }
-.small{ font-size:10px; color:#6b7280; }
-</style>
-</head>
-<body>
+        <?php if(empty($rows)): ?>
+          <tr><td colspan="9" class="center">Data tidak ditemukan.</td></tr>
+        <?php else: ?>
+          <?php foreach($rows as $r): 
+              list($diff, $pct) = $calc((float)$r['realisasi_bi'], (float)$r['rencana_bi']);
+              $fmtDiff = ($diff<0) ? '('.number_format(abs($diff)).')' : number_format($diff);
+          ?>
+          <tr>
+              <td><?= htmlspecialchars($r['nama_unit']??'-') ?></td>
+              <td><?= htmlspecialchars($r['alokasi']) ?></td>
+              <td><?= htmlspecialchars($r['uraian_pekerjaan']) ?></td>
+              <td class="center"><?= $r['bulan'] ?></td>
+              <td class="center"><?= $r['tahun'] ?></td>
+              <td class="right"><?= number_format((float)$r['realisasi_bi']) ?></td>
+              <td class="right"><?= number_format((float)$r['rencana_bi']) ?></td>
+              <td class="right"><?= $fmtDiff ?></td>
+              <td class="right"><?= is_null($pct)?'-':number_format($pct,2) ?></td>
+          </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
 
-<div class="head-wrap">
-  <div class="h-left">
-    PT. PERKEBUNAN NUSANTARA - V<br>
-    KEBUN : <?= htmlspecialchars($nama_kebun) ?><br>
-    BULAN : <?= strtoupper(htmlspecialchars(($bulan?:idx_to_bulan(date('n'))).' '.$tahun)) ?>
-  </div>
-  <div class="h-right">
-    BIAYA PRODUKSI / AFDELING<br>
-    AFDELING : <?= htmlspecialchars($nama_unit) ?>
-  </div>
-</div>
-<div class="h-sep"></div>
+        <?php 
+          list($dInc, $pInc) = $calc($sumRealisasi, $sumAnggaran);
+          $fmtInc = ($dInc<0)?'('.number_format(abs($dInc)).')':number_format($dInc);
+        ?>
+        <tr class="bold">
+          <td colspan="5" class="right">Jlh By Tanaman Inc. Pemupukan</td>
+          <td class="right"><?= number_format($sumRealisasi) ?></td>
+          <td class="right"><?= number_format($sumAnggaran) ?></td>
+          <td class="right"><?= $fmtInc ?></td>
+          <td class="right"><?= is_null($pInc)?'-':number_format($pInc,2) ?></td>
+        </tr>
 
-<!-- ============== VOLUME PRODUKSI ============== -->
-<table class="table">
-  <thead>
-    <tr><th colspan="9" class="center">VOLUME PRODUKSI</th></tr>
-    <tr class="subhead">
-      <th style="width:22%">Uraian</th>
-      <th style="width:14%" class="center" colspan="4">BULAN INI</th>
-      <th style="width:14%" class="center" colspan="4">S / D BULAN INI</th>
-    </tr>
-    <tr class="subhead">
-      <th></th>
-      <th class="right">REALISASI</th>
-      <th class="right">RKAP</th>
-      <th class="right">+/-</th>
-      <th class="right">(%)</th>
-      <th class="right">REALISASI</th>
-      <th class="right">RKAP</th>
-      <th class="right">+/-</th>
-      <th class="right">(%)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <?php
-      $bi_plus = $agg['bi_real'] - $agg['bi_rkap'];
-      $sd_plus = $agg['sd_real'] - $agg['sd_rkap'];
-      $bi_pct_cls = is_null($pct_bi)?'':($pct_bi>=0?'pos':'neg');
-      $sd_pct_cls = is_null($pct_sd)?'':($pct_sd>=0?'pos':'neg');
-    ?>
-    <tr>
-      <td><b>- Produksi TBS (KG)</b></td>
-      <td class="right"><b><?= nf($agg['bi_real']) ?></b></td>
-      <td class="right"><b><?= nf($agg['bi_rkap']) ?></b></td>
-      <td class="right <?= $bi_plus>=0?'pos':'neg' ?>"><b><?= nf($bi_plus) ?></b></td>
-      <td class="right <?= $bi_pct_cls ?>"><b><?= pct_str($pct_bi) ?></b></td>
+        <?php 
+          list($dExc, $pExc) = $calc($exclReal, $exclAng);
+          $fmtExc = ($dExc<0)?'('.number_format(abs($dExc)).')':number_format($dExc);
+        ?>
+        <tr class="bold">
+          <td colspan="5" class="right">Jlh By Tanaman Excl. Pemupukan</td>
+          <td class="right"><?= number_format($exclReal) ?></td>
+          <td class="right"><?= number_format($exclAng) ?></td>
+          <td class="right"><?= $fmtExc ?></td>
+          <td class="right"><?= is_null($pExc)?'-':number_format($pExc,2) ?></td>
+        </tr>
 
-      <td class="right"><?= nf($agg['sd_real']) ?></td>
-      <td class="right"><?= nf($agg['sd_rkap']) ?></td>
-      <td class="right <?= $sd_plus>=0?'pos':'neg' ?>"><?= nf($sd_plus) ?></td>
-      <td class="right <?= $sd_pct_cls ?>"><?= pct_str($pct_sd) ?></td>
-    </tr>
-  </tbody>
-</table>
+        <?php 
+          list($dHi, $pHi) = $calc($hppInclR, $hppInclA);
+          $fmtHi = ($dHi<0)?'('.number_format(abs($dHi),2).')':number_format($dHi,2);
+        ?>
+        <tr class="row-hpp">
+          <td colspan="5" class="right">Harga Pokok Incl. Pemupukan</td>
+          <td class="right"><?= number_format($hppInclR,2) ?></td>
+          <td class="right"><?= number_format($hppInclA,2) ?></td>
+          <td class="right"><?= $fmtHi ?></td>
+          <td class="right"><?= is_null($pHi)?'-':number_format($pHi,2) ?></td>
+        </tr>
 
-<br>
+        <?php 
+          list($dHe, $pHe) = $calc($hppExclR, $hppExclA);
+          $fmtHe = ($dHe<0)?'('.number_format(abs($dHe),2).')':number_format($dHe,2);
+        ?>
+        <tr class="row-hpp">
+          <td colspan="5" class="right">Harga Pokok Excl. Pemupukan</td>
+          <td class="right"><?= number_format($hppExclR,2) ?></td>
+          <td class="right"><?= number_format($hppExclA,2) ?></td>
+          <td class="right"><?= $fmtHe ?></td>
+          <td class="right"><?= is_null($pHe)?'-':number_format($pHe,2) ?></td>
+        </tr>
 
-<!-- ============== BIAYA PRODUKSI / AFDELING ============== -->
-<table class="table">
-  <thead>
-    <tr class="subhead">
-      <th style="width:12%">No. ALOKASI</th>
-      <th>Uraian</th>
-      <th class="center" colspan="4">BULAN INI</th>
-      <th class="center" colspan="4">S / D BULAN INI</th>
-    </tr>
-    <tr class="subhead">
-      <th></th><th></th>
-      <th class="right">REALISASI</th>
-      <th class="right">RKAP</th>
-      <th class="right">+/-</th>
-      <th class="right">(%)</th>
-      <th class="right">REALISASI</th>
-      <th class="right">RKAP</th>
-      <th class="right">+/-</th>
-      <th class="right">(%)</th>
-    </tr>
-  </thead>
-  <tbody>
-    <?php if (!$rowsMerged): ?>
-      <tr><td colspan="10" class="center small">Belum ada data.</td></tr>
-    <?php else: foreach($rowsMerged as $r):
-      list($bi_plus,$bi_pct) = $calcPct($r['bi_real'],$r['bi_ang']);
-      list($sd_plus,$sd_pct) = $calcPct($r['sd_real'],$r['sd_ang']);
-      $bi_pct_cls = is_null($bi_pct)?'':($bi_pct>=0?'pos':'neg');
-      $sd_pct_cls = is_null($sd_pct)?'':($sd_pct>=0?'pos':'neg');
-    ?>
-      <tr>
-        <td><?= htmlspecialchars($r['alokasi']) ?></td>
-        <td><?= htmlspecialchars($r['uraian']) ?></td>
+      </tbody>
+    </table>
 
-        <td class="right"><?= nf($r['bi_real']) ?></td>
-        <td class="right"><?= nf($r['bi_ang']) ?></td>
-        <td class="right <?= $bi_plus>=0?'pos':'neg' ?>"><?= nf($bi_plus) ?></td>
-        <td class="right <?= $bi_pct_cls ?>"><?= pct_str($bi_pct) ?></td>
+    <div style="font-size:8px; margin-top:10px;">
+      <i>Dicetak pada: <?= date('d-m-Y H:i:s') ?></i>
+    </div>
 
-        <td class="right"><?= nf($r['sd_real']) ?></td>
-        <td class="right"><?= nf($r['sd_ang']) ?></td>
-        <td class="right <?= $sd_plus>=0?'pos':'neg' ?>"><?= nf($sd_plus) ?></td>
-        <td class="right <?= $sd_pct_cls ?>"><?= pct_str($sd_pct) ?></td>
-      </tr>
-    <?php endforeach; endif; ?>
+  </body>
+  </html>
+  <?php
+  $html = ob_get_clean();
 
-    <!-- Rekap: Jlh By Tanaman Incl/Excl -->
-    <?php
-      list($bi_plus_i,$bi_pct_i) = $calcPct($tot['bi_real'],$tot['bi_ang']);
-      list($sd_plus_i,$sd_pct_i) = $calcPct($tot['sd_real'],$tot['sd_ang']);
-      list($bi_plus_e,$bi_pct_e) = $calcPct($excl['bi_real'],$excl['bi_ang']);
-      list($sd_plus_e,$sd_pct_e) = $calcPct($excl['sd_real'],$excl['sd_ang']);
-    ?>
-    <tr class="row-green">
-      <td colspan="2"><b>Jlh By Tanaman Incl. Pemupukan</b></td>
-      <td class="right"><b><?= nf($tot['bi_real']) ?></b></td>
-      <td class="right"><b><?= nf($tot['bi_ang']) ?></b></td>
-      <td class="right <?= $bi_plus_i>=0?'pos':'neg' ?>"><b><?= nf($bi_plus_i) ?></b></td>
-      <td class="right <?= is_null($bi_pct_i)?'':($bi_pct_i>=0?'pos':'neg') ?>"><b><?= pct_str($bi_pct_i) ?></b></td>
+  $opt = new Options();
+  $opt->set('isRemoteEnabled', true);
+  $opt->set('isHtml5ParserEnabled', true);
 
-      <td class="right"><b><?= nf($tot['sd_real']) ?></b></td>
-      <td class="right"><b><?= nf($tot['sd_ang']) ?></b></td>
-      <td class="right <?= $sd_plus_i>=0?'pos':'neg' ?>"><b><?= nf($sd_plus_i) ?></b></td>
-      <td class="right <?= is_null($sd_pct_i)?'':($sd_pct_i>=0?'pos':'neg') ?>"><b><?= pct_str($sd_pct_i) ?></b></td>
-    </tr>
-
-    <tr class="row-green">
-      <td colspan="2"><b>Jlh By Tanaman Excl. Pemupukan</b></td>
-      <td class="right"><b><?= nf($excl['bi_real']) ?></b></td>
-      <td class="right"><b><?= nf($excl['bi_ang']) ?></b></td>
-      <td class="right <?= $bi_plus_e>=0?'pos':'neg' ?>"><b><?= nf($bi_plus_e) ?></b></td>
-      <td class="right <?= is_null($bi_pct_e)?'':($bi_pct_e>=0?'pos':'neg') ?>"><b><?= pct_str($bi_pct_e) ?></b></td>
-
-      <td class="right"><b><?= nf($excl['sd_real']) ?></b></td>
-      <td class="right"><b><?= nf($excl['sd_ang']) ?></b></td>
-      <td class="right <?= $sd_plus_e>=0?'pos':'neg' ?>"><b><?= nf($sd_plus_e) ?></b></td>
-      <td class="right <?= is_null($sd_pct_e)?'':($sd_pct_e>=0?'pos':'neg') ?>"><b><?= pct_str($sd_pct_e) ?></b></td>
-    </tr>
-
-    <!-- HPP -->
-    <tr class="row-orange">
-      <td colspan="6"><b>Harga Pokok Incl. Pemupukan</b></td>
-      <td class="right"><b><?= is_null($hpp_sd_incl)?'-':nf($hpp_sd_incl,6) ?></b></td>
-      <td class="right" colspan="3" style="background:#fff7ed"><span class="small">S/D BI = total biaya SD ÷ produksi SD</span></td>
-    </tr>
-    <tr class="row-orange">
-      <td colspan="6"><b>Harga Pokok Excl. Pemupukan</b></td>
-      <td class="right"><b><?= is_null($hpp_sd_excl)?'-':nf($hpp_sd_excl,6) ?></b></td>
-      <td class="right" colspan="3" style="background:#fff7ed"><span class="small">S/D BI = total biaya SD (excl) ÷ produksi SD</span></td>
-    </tr>
-  </tbody>
-</table>
-
-<p class="small">Catatan: Persen = (Realisasi − RKAP)/RKAP × 100. Angka merah = negatif; hijau = positif.</p>
-
-</body>
-</html>
-<?php
-$html = ob_get_clean();
-
-$options = new Options();
-$options->set('isRemoteEnabled', true);
-
-$dompdf = new Dompdf($options);
-$dompdf->loadHtml($html, 'UTF-8');
-$dompdf->setPaper('A4', 'landscape');
-$dompdf->render();
-$filename = 'biaya_produksi_'.($bulan?:idx_to_bulan(date('n'))).'_'.$tahun.'_'.date('Ymd_His').'.pdf';
-$dompdf->stream($filename, ['Attachment'=>false]);
-exit;
+  $pdf = new Dompdf($opt);
+  $pdf->loadHtml($html);
+  $pdf->setPaper('A4', 'landscape'); // Landscape agar kolom muat
+  $pdf->render();
+  $pdf->stream('laporan_biaya_hpp.pdf', ['Attachment'=>false]);
+  ?>

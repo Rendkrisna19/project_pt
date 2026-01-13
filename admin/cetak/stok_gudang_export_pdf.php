@@ -1,6 +1,7 @@
 <?php
 // pages/cetak/stok_gudang_export_pdf.php
-// PDF rekap stok gudang (mengikuti filter GET: kebun_id, bahan_id, bulan, tahun) — header hijau PTPN IV REGIONAL 3
+// PDF Preview Stok Gudang
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { http_response_code(403); exit('Unauthorized'); }
 
@@ -18,13 +19,10 @@ $pdo = $db->getConnection();
 /* ===== Params ===== */
 $kebun_id = ($_GET['kebun_id'] ?? '') === '' ? '' : (int)$_GET['kebun_id'];
 $bahan_id = ($_GET['bahan_id'] ?? '') === '' ? '' : (int)$_GET['bahan_id'];
-$bulan    = trim((string)($_GET['bulan'] ?? '')); // boleh kosong = semua
+$bulan    = trim((string)($_GET['bulan'] ?? '')); 
 $tahun    = (int)($_GET['tahun'] ?? date('Y'));
 
-/* ===== Query =====
-   Asumsi tabel rekap bernama `stok_gudang` dengan kolom:
-   id, kebun_id, bahan_id, bulan, tahun, stok_awal, mutasi_masuk, mutasi_keluar, pasokan, dipakai
-*/
+/* ===== Query ===== */
 $sql = "SELECT
           sg.*,
           k.kode AS kebun_kode, k.nama_kebun,
@@ -158,4 +156,6 @@ if ($bahan_id!=='') $fname .= '_B'.$bahan_id;
 if ($bulan!=='')    $fname .= '_'.$bulan;
 $fname .= '_'.$tahun.'.pdf';
 
-$dompdf->stream($fname, ['Attachment'=>true]);
+// MODIFIKASI: Attachment => false agar preview di browser
+$dompdf->stream($fname, ['Attachment' => false]);
+?>

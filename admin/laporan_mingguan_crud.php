@@ -1,7 +1,7 @@
 <?php
 // admin/laporan_mingguan_crud.php
 // Backend CRUD arsip per-kategori (list/store/update/delete)
-// Versi: 2025-11-11 — FIX alias kebun_nama, upload path, validasi CUD
+// Versi: 2025-11-11 — FIX alias kebun_nama, upload path, validasi CUD, Max Upload 25MB
 
 declare(strict_types=1);
 session_start();
@@ -66,8 +66,12 @@ function handle_upload(): ?string {
   $f = $_FILES['upload_dokumen'];
   if ($f['error'] !== UPLOAD_ERR_OK) json_error('Upload gagal. Kode: '.$f['error'], 500);
 
-  $max = 10 * 1024 * 1024; // 10MB
-  if ($f['size'] > $max) json_error('Ukuran file melebihi 10MB.');
+  // MODIFIKASI: Mengubah limit menjadi 25MB
+  $max = 25 * 1024 * 1024; // 25MB
+  
+  if ($f['size'] > $max) {
+      json_error('Ukuran file melebihi batas 25MB.');
+  }
 
   $allow = ['pdf','jpg','jpeg','png','doc','docx','xls','xlsx'];
   $ext = strtolower(pathinfo($f['name'], PATHINFO_EXTENSION));

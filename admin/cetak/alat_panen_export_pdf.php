@@ -7,172 +7,239 @@ require_once '../../config/database.php';
 require_once '../../vendor/autoload.php';
 use Mpdf\Mpdf;
 
-// === DB
-$db = new Database(); $pdo = $db->getConnection();
+// === 1. KONEKSI & HELPER ===
+$db = new Database(); 
+$pdo = $db->getConnection();
 
-// === helper: cek kolom
-function col_exists(PDO $pdo, $table, $col){
-  $st=$pdo->prepare("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:t AND COLUMN_NAME=:c");
-  $st->execute([':t'=>$table, ':c'=>$col]); 
-  return (bool)$st->fetchColumn();
-}
-
-// === Ambil filter
+// === 2. AMBIL FILTER DARI URL ===
 $kebun_id = isset($_GET['kebun_id']) && ctype_digit((string)$_GET['kebun_id']) ? (int)$_GET['kebun_id'] : null;
 $unit_id  = isset($_GET['unit_id'])  && ctype_digit((string)$_GET['unit_id'])  ? (int)$_GET['unit_id']  : null;
 $bulan    = trim($_GET['bulan'] ?? '');
 $tahun    = isset($_GET['tahun']) && ctype_digit((string)$_GET['tahun']) ? (int)$_GET['tahun'] : null;
-$blok_f   = trim($_GET['blok'] ?? ''); // bila filter by text blok
-$tt_f     = trim($_GET['tt']   ?? ''); // bila filter by text tahun tanam
+$id_jenis = isset($_GET['id_jenis_alat']) && ctype_digit((string)$_GET['id_jenis_alat']) ? (int)$_GET['id_jenis_alat'] : null;
 
-// === deteksi kolom di tabel alat_panen
-$hasBlokId = col_exists($pdo,'alat_panen','blok_id');
-$hasBlokTx = col_exists($pdo,'alat_panen','blok');
-$hasTtId   = col_exists($pdo,'alat_panen','tt_id');
-$hasTtTx   = col_exists($pdo,'alat_panen','tt');
+// === 3. QUERY DATA ===
+$sql = "SELECT ap.*, 
+               k.nama_kebun, 
+               u.nama_unit,
+               mja.nama AS nama_alat_panen
+        FROM alat_panen ap
+        LEFT JOIN md_kebun k ON k.id = ap.kebun_id
+        LEFT JOIN units u ON u.id = ap.unit_id
+        LEFT JOIN md_jenis_alat_panen mja ON mja.id = ap.id_jenis_alat
+        WHERE 1=1";
 
-// === Build JOIN & SELECT dinamis untuk BLOK / T.T
-$selectParts = [
-  "ap.*",
-  "k.nama_kebun",
-  "u.nama_unit"
-];
-$joins = [
-  "LEFT JOIN md_kebun k ON k.id = ap.kebun_id",
-  "LEFT JOIN units u ON u.id = ap.unit_id"
-];
-
-if ($hasBlokId) {
-  $selectParts[] = "mb.kode_blok AS blok_nama";
-  $joins[] = "LEFT JOIN md_blok mb ON mb.id = ap.blok_id";
-} elseif ($hasBlokTx) {
-  $selectParts[] = "ap.blok AS blok_nama";
-} else {
-  $selectParts[] = "NULL AS blok_nama";
-}
-
-if ($hasTtId) {
-  $selectParts[] = "tt.tahun_tanam AS tt_nama";
-  $joins[] = "LEFT JOIN md_tahun_tanam tt ON tt.id = ap.tt_id";
-} elseif ($hasTtTx) {
-  $selectParts[] = "ap.tt AS tt_nama";
-} else {
-  $selectParts[] = "NULL AS tt_nama";
-}
-
-$where = ["1=1"];
 $params = [];
 
-if ($kebun_id) { $where[]="ap.kebun_id = :kebun_id"; $params[':kebun_id']=$kebun_id; }
-if ($unit_id)  { $where[]="ap.unit_id  = :unit_id";  $params[':unit_id']=$unit_id; }
-if ($bulan!==''){ $where[]="ap.bulan    = :bulan";    $params[':bulan']=$bulan; }
-if ($tahun)    { $where[]="ap.tahun    = :tahun";    $params[':tahun']=$tahun; }
-if ($blok_f!==''){
-  if ($hasBlokId) { // izinkan filter numeric id
-    if (ctype_digit($blok_f)) { $where[]="ap.blok_id = :blok_id"; $params[':blok_id']=(int)$blok_f; }
-    else { $where[]="mb.kode_blok = :blok_tx"; $params[':blok_tx']=$blok_f; }
-  } elseif ($hasBlokTx) {
-    $where[]="ap.blok = :blok_tx"; $params[':blok_tx']=$blok_f;
-  }
-}
-if ($tt_f!==''){
-  if ($hasTtId) {
-    if (ctype_digit($tt_f)) { $where[]="ap.tt_id = :tt_id"; $params[':tt_id']=(int)$tt_f; }
-    else { $where[]="tt.tahun_tanam = :tt_tx"; $params[':tt_tx']=$tt_f; }
-  } elseif ($hasTtTx) {
-    $where[]="ap.tt = :tt_tx"; $params[':tt_tx']=$tt_f;
-  }
-}
+if ($kebun_id) { $sql .= " AND ap.kebun_id = :kid"; $params[':kid'] = $kebun_id; }
+if ($unit_id)  { $sql .= " AND ap.unit_id = :uid";  $params[':uid'] = $unit_id; }
+if ($bulan)    { $sql .= " AND ap.bulan = :bln";    $params[':bln'] = $bulan; }
+if ($tahun)    { $sql .= " AND ap.tahun = :thn";    $params[':thn'] = $tahun; }
+if ($id_jenis) { $sql .= " AND ap.id_jenis_alat = :ija"; $params[':ija'] = $id_jenis; }
 
-$sql = "SELECT ".implode(', ',$selectParts)."
-        FROM alat_panen ap
-        ".implode("\n", $joins)."
-        WHERE ".implode(' AND ', $where)."
-        ORDER BY ap.tahun DESC,
-                 FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'),
-                 ap.id DESC";
+$sql .= " ORDER BY ap.tahun DESC, FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), ap.id DESC";
+
 $st = $pdo->prepare($sql);
 $st->execute($params);
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-// === Tema hijau + judul
-$judul = 'PTPN 4 REGIONAL 3';
-$css = <<<CSS
-body{font-family: sans-serif; font-size:11px; color:#1f2937}
-.header{font-size:18px; font-weight:bold; text-align:center; margin-bottom:6px; color:#065F46}
-.sub{font-size:11px; text-align:center; margin-bottom:12px; color:#059669}
-table{width:100%; border-collapse:collapse}
-th,td{border:1px solid #e5e7eb; padding:6px}
-th{background:#DCFCE7; color:#065F46; font-weight:bold}
-.right{text-align:right}
-CSS;
+// === 4. LOGIKA HITUNG TOTAL & ROW HTML ===
+$rowsHtml = '';
+$no = 1;
 
-// sub filter line (tanpa nama & tanggal cetak)
-$subs = [];
-if ($kebun_id) $subs[]='KebunID: '.$kebun_id;
-if ($unit_id)  $subs[]='UnitID: '.$unit_id;
-if ($bulan!=='')$subs[]='Bulan: '.$bulan;
-if ($tahun)    $subs[]='Tahun: '.$tahun;
-if ($blok_f!=='') $subs[]='Blok: '.$blok_f;
-if ($tt_f!=='')   $subs[]='T.T: '.$tt_f;
-$subHtml = $subs ? '<div class="sub">'.htmlspecialchars(implode(' • ', $subs)).'</div>' : '';
+// Inisialisasi Variabel Total
+$tot_awal   = 0;
+$tot_masuk  = 0;
+$tot_keluar = 0;
+$tot_pakai  = 0;
+$tot_akhir  = 0;
 
-$rowsHtml='';
-$no=1;
-foreach($rows as $r){
-  $rowsHtml.='<tr>'.
-    '<td class="right">'.($no++).'</td>'.
-    '<td>'.htmlspecialchars(($r['bulan']??'')." ".($r['tahun']??'')).'</td>'.
-    '<td>'.htmlspecialchars($r['nama_kebun']??'-').'</td>'.
-    '<td>'.htmlspecialchars($r['nama_unit']??'-').'</td>'.
-    // '<td>'.htmlspecialchars($r['blok_nama']??'-').'</td>'.
-    // '<td>'.htmlspecialchars($r['tt_nama']??'-').'</td>'.
-    '<td>'.htmlspecialchars($r['jenis_alat']??'-').'</td>'.
-    '<td class="right">'.number_format((float)($r['stok_awal']??0),2).'</td>'.
-    '<td class="right">'.number_format((float)($r['mutasi_masuk']??0),2).'</td>'.
-    '<td class="right">'.number_format((float)($r['mutasi_keluar']??0),2).'</td>'.
-    '<td class="right">'.number_format((float)($r['dipakai']??0),2).'</td>'.
-    '<td class="right">'.number_format((float)($r['stok_akhir']??0),2).'</td>'.
-    '<td>'.htmlspecialchars($r['krani_afdeling']??'-').'</td>'.
-    '<td>'.htmlspecialchars($r['catatan']??'-').'</td>'.
-  '</tr>';
+if (count($rows) > 0) {
+    foreach($rows as $r) {
+        // Format nama alat
+        $alat = $r['nama_alat_panen'] ?? ($r['jenis_alat'] ?? '-');
+        
+        // Konversi ke float agar aman saat dijumlah
+        $val_awal   = (float)($r['stok_awal'] ?? 0);
+        $val_masuk  = (float)($r['mutasi_masuk'] ?? 0);
+        $val_keluar = (float)($r['mutasi_keluar'] ?? 0);
+        $val_pakai  = (float)($r['dipakai'] ?? 0);
+        $val_akhir  = (float)($r['stok_akhir'] ?? 0);
+
+        // Akumulasi Total
+        $tot_awal   += $val_awal;
+        $tot_masuk  += $val_masuk;
+        $tot_keluar += $val_keluar;
+        $tot_pakai  += $val_pakai;
+        $tot_akhir  += $val_akhir;
+
+        $rowsHtml .= '<tr>
+            <td class="center">'. $no++ .'</td>
+            <td class="center">'. htmlspecialchars($r['bulan'] . ' ' . $r['tahun']) .'</td>
+            <td>'. htmlspecialchars($r['nama_kebun'] ?? '-') .'</td>
+            <td>'. htmlspecialchars($r['nama_unit'] ?? '-') .'</td>
+            <td>'. htmlspecialchars($alat) .'</td>
+            
+            <td class="right">'. number_format($val_awal, 2) .'</td>
+            <td class="right" style="color:green;">'. number_format($val_masuk, 2) .'</td>
+            <td class="right" style="color:red;">'. number_format($val_keluar, 2) .'</td>
+            <td class="right" style="color:orange;">'. number_format($val_pakai, 2) .'</td>
+            <td class="right" style="background-color:#f0f9ff; color:#059fd3;">'. number_format($val_akhir, 2) .'</td>
+            
+            <td>'. htmlspecialchars($r['krani_afdeling'] ?? '-') .'</td>
+            <td style="font-size:8pt; font-style:italic;">'. htmlspecialchars($r['catatan'] ?? '-') .'</td>
+        </tr>';
+    }
+} else {
+    $rowsHtml = '<tr><td colspan="12" class="center" style="padding:20px; color:#777;">Tidak ada data ditemukan untuk filter ini.</td></tr>';
 }
 
+// === 5. PERSIAPAN TAMPILAN ===
+
+$judulUtama = 'LAPORAN STOK ALAT PERTANIAN';
+$subJudul   = 'PTPN 4 REGIONAL 3';
+
+// Info Filter Header
+$infoFilter = [];
+if ($kebun_id) {
+    $k = $pdo->query("SELECT nama_kebun FROM md_kebun WHERE id=$kebun_id")->fetchColumn();
+    $infoFilter[] = "<b>Kebun:</b> " . htmlspecialchars($k);
+}
+if ($unit_id) {
+    $u = $pdo->query("SELECT nama_unit FROM units WHERE id=$unit_id")->fetchColumn();
+    $infoFilter[] = "<b>Unit:</b> " . htmlspecialchars($u);
+}
+if ($bulan) $infoFilter[] = "<b>Bulan:</b> $bulan";
+if ($tahun) $infoFilter[] = "<b>Tahun:</b> $tahun";
+if ($id_jenis) {
+    $j = $pdo->query("SELECT nama FROM md_jenis_alat_panen WHERE id=$id_jenis")->fetchColumn();
+    $infoFilter[] = "<b>Jenis Alat:</b> " . htmlspecialchars($j);
+}
+
+$filterString = empty($infoFilter) ? 'Semua Data' : implode(" &nbsp;|&nbsp; ", $infoFilter);
+$tanggalCetak = date('d F Y, H:i');
+
+// CSS Styles
+$css = <<<CSS
+    body { font-family: 'Helvetica', 'Arial', sans-serif; font-size: 10pt; color: #333; }
+    .header-container { text-align: center; margin-bottom: 20px; border-bottom: 3px double #059fd3; padding-bottom: 10px; }
+    .company-name { font-size: 14pt; font-weight: bold; color: #555; letter-spacing: 1px; }
+    .report-title { font-size: 16pt; font-weight: bold; color: #059fd3; margin-top: 5px; text-transform: uppercase; }
+    .filter-box { background-color: #f0f9ff; border: 1px solid #bae6fd; padding: 8px; font-size: 9pt; margin-bottom: 15px; border-radius: 4px; color: #0369a1; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { 
+        background-color: #059fd3; color: #ffffff; padding: 8px 5px; 
+        font-size: 9pt; font-weight: bold; text-transform: uppercase; 
+        border: 1px solid #0487b4; vertical-align: middle;
+    }
+    td { padding: 6px 5px; font-size: 9pt; border: 1px solid #e2e8f0; vertical-align: middle; }
+    
+    /* Footer Total Row Style */
+    .total-row td {
+        background-color: #e0f2fe;
+        border-top: 2px solid #059fd3;
+        font-weight: bold;
+        color: #0369a1;
+    }
+
+    tr:nth-child(even) { background-color: #f8fafc; }
+    .center { text-align: center; }
+    .right { text-align: right; font-family: 'Courier New', monospace; font-weight: bold; }
+    .left { text-align: left; }
+    
+    /* Column Widths */
+    .col-no { width: 5%; }
+    .col-period { width: 10%; }
+    .col-loc { width: 12%; }
+    .col-unit { width: 12%; }
+    .col-item { width: 13%; }
+    .col-num { width: 7%; }
+    .col-krani { width: 10%; }
+    .col-note { width: 10%; }
+CSS;
+
+// === 6. TEMPLATE HTML ===
 $html = <<<HTML
 <html>
-<head><meta charset="utf-8"><style>{$css}</style></head>
+<head>
+    <meta charset="utf-8">
+    <style>{$css}</style>
+</head>
 <body>
-  <div class="header">{$judul}</div>
-  {$subHtml}
-  <table>
-    <thead>
-      <tr>
-        <th style="width:30px">No</th>
-        <th style="width:90px">Periode</th>
-        <th style="width:140px">Kebun</th>
-        <th style="width:130px">Unit/Devisi</th>
-        <!-- <th style="width:70px">Blok</th> -->
-        <!-- <th style="width:60px">T.T</th> -->
-        <th>Jenis Alat</th>
-        <th style="width:85px">Stok Awal</th>
-        <th style="width:95px">Mutasi Masuk</th>
-        <th style="width:95px">Mutasi Keluar</th>
-        <th style="width:75px">Dipakai</th>
-        <th style="width:85px">Stok Akhir</th>
-        <th style="width:120px">Krani Afdeling</th>
-        <th style="width:150px">Catatan</th>
-      </tr>
-    </thead>
-    <tbody>
-      {$rowsHtml}
-    </tbody>
-  </table>
+
+    <div class="header-container">
+        <div class="company-name">{$subJudul}</div>
+        <div class="report-title">{$judulUtama}</div>
+    </div>
+
+    <div class="filter-box">
+        <table style="width:100%; border:none; margin:0;">
+            <tr>
+                <td style="border:none; text-align:left; padding:0;">Filter: {$filterString}</td>
+                <td style="border:none; text-align:right; padding:0;">Cetak: {$tanggalCetak}</td>
+            </tr>
+        </table>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th class="col-no">No</th>
+                <th class="col-period">Periode</th>
+                <th class="col-loc">Kebun</th>
+                <th class="col-unit">Unit</th>
+                <th class="col-item">Jenis Alat</th>
+                <th class="col-num">Awal</th>
+                <th class="col-num">Masuk</th>
+                <th class="col-num">Keluar</th>
+                <th class="col-num">Pakai</th>
+                <th class="col-num">Akhir</th>
+                <th class="col-krani">Krani</th>
+                <th class="col-note">Ket</th>
+            </tr>
+        </thead>
+        <tbody>
+            {$rowsHtml}
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="5" class="right" style="text-align:right; padding-right:10px;">TOTAL KESELURUHAN</td>
+                <td class="right">{$tot_awal}</td> <td class="right">{$tot_masuk}</td>
+                <td class="right">{$tot_keluar}</td>
+                <td class="right">{$tot_pakai}</td>
+                <td class="right">{$tot_akhir}</td>
+                <td colspan="2" style="background-color:#f1f5f9;"></td>
+            </tr>
+        </tfoot>
+    </table>
+
 </body>
 </html>
 HTML;
 
-$mpdf = new Mpdf(['format'=>'A4-L']);
-$mpdf->SetTitle($judul);
-$mpdf->WriteHTML($html);
-$mpdf->Output('Alat_Panen_'.date('Ymd_His').'.pdf','I');
-exit;
+// Perbaikan sedikit string interpolasi untuk format number di footer
+$html = str_replace('{$tot_awal}', number_format($tot_awal, 2), $html);
+$html = str_replace('{$tot_masuk}', number_format($tot_masuk, 2), $html);
+$html = str_replace('{$tot_keluar}', number_format($tot_keluar, 2), $html);
+$html = str_replace('{$tot_pakai}', number_format($tot_pakai, 2), $html);
+$html = str_replace('{$tot_akhir}', number_format($tot_akhir, 2), $html);
+
+// === 7. GENERATE PDF ===
+try {
+    $mpdf = new Mpdf([
+        'format' => 'A4-L',
+        'margin_top' => 10,
+        'margin_bottom' => 15,
+        'margin_left' => 10,
+        'margin_right' => 10
+    ]);
+    
+    $mpdf->SetTitle("Laporan Alat Pertanian - " . date('Ymd'));
+    $mpdf->SetFooter('Halaman {PAGENO} dari {nbpg}');
+    $mpdf->WriteHTML($html);
+    $mpdf->Output('Laporan_Alat_Panen_'.date('Ymd_His').'.pdf', 'I');
+
+} catch (\Mpdf\MpdfException $e) {
+    echo $e->getMessage();
+}
+?>
