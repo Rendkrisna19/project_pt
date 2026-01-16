@@ -1,63 +1,66 @@
 <?php
-// pemakaian_barang_gudang_crud.php
-declare(strict_types=1);
+// pemakaian_barang_gudang_crud.php (FINAL SECURED)
+// Role: Viewer (Read Only), Staf (Create Only), Admin (Full Access)
+
 session_start();
-header('Content-Type: application/json; charset=utf-8');
+header('Content-Type: application/json');
+
+// 1. Cek Login
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { 
+    echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); 
+    exit; 
+}
+
+// 2. Cek CSRF
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { 
+    echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); 
+    exit; 
+}
+// Opsional: Cek Token CSRF jika dikirim dari JS
+// if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) { ... }
+
+// 3. AMBIL ROLE
+$role = $_SESSION['user_role'] ?? 'viewer'; 
+
 require_once '../config/database.php';
-
-// Helper & Safety
-ini_set('display_errors', '0');
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { echo json_encode(['success'=>false,'message'=>'Unauthorized']); exit; }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['success'=>false,'message'=>'Invalid Method']); exit; }
-
 $db = new Database();
 $conn = $db->getConnection();
 
 $action = $_POST['action'] ?? '';
 
-// --- LIST DATA ---
+// --- LIST DATA (SEMUA ROLE BOLEH) ---
 if ($action === 'list') {
     $where = " WHERE 1=1 ";
     $params = [];
 
-    // 1. Filter Tahun
+    // Filter Logic
     if (!empty($_POST['tahun'])) { 
         $where .= " AND YEAR(t.tanggal) = :thn"; 
         $params[':thn'] = $_POST['tahun']; 
     }
-    
-    // 2. Filter Bulan (BARU)
     if (!empty($_POST['bulan'])) { 
         $where .= " AND MONTH(t.tanggal) = :bln"; 
         $params[':bln'] = $_POST['bulan']; 
     }
-
-    // 3. Filter Kebun
     if (!empty($_POST['kebun_id'])) { 
         $where .= " AND t.kebun_id = :kbd"; 
         $params[':kbd'] = $_POST['kebun_id']; 
     }
-
-    // 4. Filter Tanggal Spesifik
     if (!empty($_POST['tanggal'])) { 
         $where .= " AND t.tanggal = :tgl"; 
         $params[':tgl'] = $_POST['tanggal']; 
     }
-
-    // 5. Filter Jenis Bahan
     if (!empty($_POST['jenis_bahan_id'])) { 
         $where .= " AND t.jenis_bahan_id = :jbh"; 
         $params[':jbh'] = $_POST['jenis_bahan_id']; 
     }
 
-    // 6. Logika Limit (BARU)
     $limitClause = "";
     $limitVal = $_POST['limit'] ?? '25';
     if ($limitVal !== 'all') {
         $limitClause = " LIMIT " . (int)$limitVal;
     }
 
-    // Query Utama (Join Kendaraan & Mobil DIHAPUS agar lebih ringan & sesuai frontend)
     $sql = "SELECT t.*, 
                    k.nama_kebun, 
                    bbm.nama AS nama_bahan,
@@ -74,8 +77,7 @@ if ($action === 'list') {
         $st->execute($params);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        // Hitung Total (Hanya dari data yang ter-load / atau bisa buat query terpisah jika ingin total seluruh data)
-        // Disini kita hitung total dari result set query (sesuai limit)
+        // Hitung Total (Sederhana dari result set)
         $totalJumlah = 0;
         foreach($rows as $r) $totalJumlah += (float)$r['jumlah'];
 
@@ -86,11 +88,18 @@ if ($action === 'list') {
     exit;
 }
 
-// --- STORE / UPDATE ---
-if ($action === 'store' || $action === 'update') {
-    $id = !empty($_POST['id']) ? (int)$_POST['id'] : 0;
+// --- STORE (TAMBAH DATA) ---
+if ($action === 'store') {
+    // Permission Check: Admin & Staf Only
+    if ($role !== 'admin' && $role !== 'staf') {
+        echo json_encode(['success'=>false, 'message'=>'Anda tidak memiliki izin untuk menambah data.']); 
+        exit;
+    }
+
+    $sql = "INSERT INTO tr_pemakaian_barang_gudang 
+            (kebun_id, tanggal, jenis_bahan_id, jumlah, no_dokumen, keterangan) 
+            VALUES (:kbd, :tgl, :jbb, :jml, :doc, :ket)";
     
-    // Mapping Data (KENDARAAN & MOBIL DIHAPUS)
     $data = [
         ':kbd' => $_POST['kebun_id'] ?? null,
         ':tgl' => $_POST['tanggal'] ?? null,
@@ -99,26 +108,6 @@ if ($action === 'store' || $action === 'update') {
         ':doc' => $_POST['no_dokumen'] ?? '',
         ':ket' => $_POST['keterangan'] ?? ''
     ];
-
-    /* Catatan: 
-       Jika kolom 'jenis_kendaraan_id' atau 'mobil_id' di database bersifat NOT NULL, 
-       Anda mungkin perlu mengubah struktur database menjadi NULLABLE 
-       atau mengirim nilai default (misal 0 atau NULL jika diizinkan).
-       Disini diasumsikan kolom tersebut boleh NULL atau memiliki default.
-    */
-
-    if ($action === 'store') {
-        // Query Insert (Tanpa Kendaraan/Mobil)
-        $sql = "INSERT INTO tr_pemakaian_barang_gudang 
-                (kebun_id, tanggal, jenis_bahan_id, jumlah, no_dokumen, keterangan) 
-                VALUES (:kbd, :tgl, :jbb, :jml, :doc, :ket)";
-    } else {
-        // Query Update (Tanpa Kendaraan/Mobil)
-        $sql = "UPDATE tr_pemakaian_barang_gudang 
-                SET kebun_id=:kbd, tanggal=:tgl, jenis_bahan_id=:jbb, jumlah=:jml, no_dokumen=:doc, keterangan=:ket 
-                WHERE id=:id";
-        $data[':id'] = $id;
-    }
 
     try {
         $st = $conn->prepare($sql);
@@ -130,8 +119,47 @@ if ($action === 'store' || $action === 'update') {
     exit;
 }
 
-// --- DELETE ---
+// --- UPDATE (EDIT DATA) ---
+if ($action === 'update') {
+    // Permission Check: Admin Only
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false, 'message'=>'Hanya Admin yang boleh mengubah data.']); 
+        exit;
+    }
+
+    $id = !empty($_POST['id']) ? (int)$_POST['id'] : 0;
+    $sql = "UPDATE tr_pemakaian_barang_gudang 
+            SET kebun_id=:kbd, tanggal=:tgl, jenis_bahan_id=:jbb, jumlah=:jml, no_dokumen=:doc, keterangan=:ket 
+            WHERE id=:id";
+    
+    $data = [
+        ':kbd' => $_POST['kebun_id'] ?? null,
+        ':tgl' => $_POST['tanggal'] ?? null,
+        ':jbb' => $_POST['jenis_bahan_id'] ?? null,
+        ':jml' => $_POST['jumlah'] ?? 0,
+        ':doc' => $_POST['no_dokumen'] ?? '',
+        ':ket' => $_POST['keterangan'] ?? '',
+        ':id'  => $id
+    ];
+
+    try {
+        $st = $conn->prepare($sql);
+        $st->execute($data);
+        echo json_encode(['success' => true]);
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    }
+    exit;
+}
+
+// --- DELETE (HAPUS DATA) ---
 if ($action === 'delete') {
+    // Permission Check: Admin Only
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false, 'message'=>'Hanya Admin yang boleh menghapus data.']); 
+        exit;
+    }
+
     $id = (int)$_POST['id'];
     try {
         $st = $conn->prepare("DELETE FROM tr_pemakaian_barang_gudang WHERE id = ?");

@@ -1,14 +1,27 @@
 <?php
+// pages/laporan_mingguan.php
+// MODIFIKASI FULL: Role Access & Sticky Grid Layout
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
     header("Location: ../auth/login.php"); exit;
 }
+
+// --- SETUP ROLE ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; 
+
+// Definisi Boolean
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+// Definisi Hak Akses (ARSIP BIASANYA ADMIN ONLY)
+// Jika Staf boleh upload, ubah jadi: ($isAdmin || $isStaf)
+$canInput  = ($isAdmin); 
+$canAction = ($isAdmin); 
+
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
-
-// Role Check
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf   = ($userRole === 'staf');
 
 require_once '../config/database.php';
 $db   = new Database();
@@ -40,7 +53,7 @@ include_once '../layouts/header.php';
     transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     display: flex;
     flex-direction: column;
-    min-height: 150px; /* Sedikit lebih tinggi untuk menampung judul besar */
+    min-height: 150px; 
     border: 1px solid rgba(255,255,255,0.1);
   }
 
@@ -56,16 +69,16 @@ include_once '../layouts/header.php';
     padding: 1.5rem;
     display: flex;
     justify-content: space-between;
-    align-items: center; /* Center vertikal */
+    align-items: center; 
     flex: 1;
     position: relative;
     z-index: 2;
   }
 
-  /* === MODIFIKASI: IKON JELAS & BESAR === */
+  /* IKON BESAR */
   .widget-icon {
-    font-size: 5rem; /* Sangat Besar */
-    color: rgba(255, 255, 255, 0.9); /* Putih Terang (Hampir Solid) */
+    font-size: 5rem; 
+    color: rgba(255, 255, 255, 0.9); 
     position: absolute;
     left: 0.5rem;
     bottom: 2.5rem; 
@@ -75,7 +88,7 @@ include_once '../layouts/header.php';
   
   .widget-card:hover .widget-icon {
     transform: scale(1.1) rotate(-8deg);
-    color: #ffffff; /* Solid Putih saat hover */
+    color: #ffffff; 
   }
 
   /* Bagian Teks di Kanan */
@@ -88,33 +101,31 @@ include_once '../layouts/header.php';
     flex-direction: column;
     align-items: flex-end;
     justify-content: center;
-    padding-left: 4rem; /* Ruang agar tidak menabrak ikon besar */
+    padding-left: 4rem; 
   }
 
-  /* === MODIFIKASI: ANGKA DATA DIKECILIN === */
   .widget-count {
-    font-size: 1rem; /* Lebih kecil dari sebelumnya */
+    font-size: 1rem; 
     font-weight: 200;
     line-height: 1;
     margin-bottom: 0.5rem;
     opacity: 0.9;
-    order: 1; /* Pindah ke atas judul */
+    order: 1; 
   }
 
-  /* === MODIFIKASI: JUDUL DIPERBESAR === */
   .widget-title {
-    font-size: 1.25rem; /* Jauh Lebih Besar */
-    font-weight: 700; /* Lebih Tebal (Bold) */
+    font-size: 1.25rem; 
+    font-weight: 700; 
     text-transform: uppercase;
     letter-spacing: 0.5px;
     line-height: 1.1;
-    opacity: 1; /* Sangat Jelas */
-    text-shadow: 0 2px 5px rgba(0,0,0,0.3); /* Shadow agar lebih pop-out */
-    order: 2; /* Pindah ke bawah angka */
-    word-break: break-word; /* Agar text panjang turun ke bawah */
+    opacity: 1; 
+    text-shadow: 0 2px 5px rgba(0,0,0,0.3); 
+    order: 2; 
+    word-break: break-word; 
   }
 
-  /* Footer (Bagian Bawah "More Info") */
+  /* Footer */
   .widget-footer {
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(5px);
@@ -154,13 +165,13 @@ include_once '../layouts/header.php';
     border-bottom: 1px solid rgba(255,255,255,0.2);
   }
 
-  /* --- PALET WARNA GELAP (TETAP) --- */
-  .theme-0 { background: linear-gradient(135deg, #1e3a8a, #9da1a9ff); } /* Deep Ocean */
-  .theme-1 { background: linear-gradient(135deg, #064e3b, #b2bdbaff); } /* Dark Emerald */
-  .theme-2 { background: linear-gradient(135deg, #4c1d95, #9e9ba3ff); } /* Royal Purple */
-  .theme-3 { background: linear-gradient(135deg, #7f1d1d, #b3aaaaff); } /* Burnt Maroon */
-  .theme-4 { background: linear-gradient(135deg, #334155, #9e9fa3ff); } /* Charcoal Slate */
-  .theme-5 { background: linear-gradient(135deg, #78350f, #c4c2c1ff); } /* Deep Bronze */
+  /* Palet Warna */
+  .theme-0 { background: linear-gradient(135deg, #1e3a8a, #9da1a9ff); } 
+  .theme-1 { background: linear-gradient(135deg, #064e3b, #b2bdbaff); } 
+  .theme-2 { background: linear-gradient(135deg, #4c1d95, #9e9ba3ff); } 
+  .theme-3 { background: linear-gradient(135deg, #7f1d1d, #b3aaaaff); } 
+  .theme-4 { background: linear-gradient(135deg, #334155, #9e9fa3ff); } 
+  .theme-5 { background: linear-gradient(135deg, #78350f, #c4c2c1ff); } 
 
   /* Tombol Aksi Floating */
   .widget-actions {
@@ -194,7 +205,6 @@ include_once '../layouts/header.php';
   .btn-edit { color: #1e40af; }
   .btn-del { color: #991b1b; }
   .action-btn:hover { transform: scale(1.15); }
-
 </style>
 
 <div class="space-y-6">
@@ -208,7 +218,7 @@ include_once '../layouts/header.php';
         </div>
 
         <div class="flex gap-3">
-            <?php if (!$isStaf): ?>
+            <?php if ($canInput): ?>
             <button id="btn-add-kategori" class="bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-900 flex items-center gap-2 shadow-sm transition-all font-medium text-sm">
                 <i class="ti ti-plus"></i>
                 <span>Tambah Kategori</span>
@@ -234,7 +244,7 @@ include_once '../layouts/header.php';
 
 </div>
 
-<?php if (!$isStaf): ?>
+<?php if ($canInput): ?>
 <div id="kategori-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-opacity">
     <div class="bg-white p-6 rounded-2xl shadow-2xl w-full max-w-lg transform scale-100 transition-transform">
         <div class="flex items-center justify-between mb-6 border-b pb-4">
@@ -270,7 +280,9 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const IS_STAF    = <?= $isStaf ? 'true' : 'false'; ?>;
+    // Pass permission to JS
+    const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; 
+    const CAN_INPUT  = <?= $canInput ? 'true' : 'false'; ?>;
     const CSRF_TOKEN = '<?= htmlspecialchars($CSRF) ?>';
     const API_URL    = 'arsip_crud.php'; 
     
@@ -301,8 +313,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const iconClass = ICONS_LIST[index % ICONS_LIST.length];
         const linkDetail = `laporan_mingguan_detail.php?k_id=${kategori.id}`;
 
+        // Tombol Aksi Hanya Jika CAN_ACTION (Admin)
         let actionsHtml = '';
-        if (!IS_STAF) {
+        if (CAN_ACTION) {
             actionsHtml = `
             <div class="widget-actions">
                 <button class="action-btn btn-edit btn-edit-kategori" data-json="${payload}" title="Edit" onclick="event.stopPropagation()">
@@ -314,7 +327,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>`;
         }
 
-        // Perhatikan urutan: widget-count dulu, baru widget-title agar sesuai CSS order
         return `
         <div class="widget-card ${themeClass}" onclick="window.location.href='${linkDetail}'">
             <div class="widget-number">NO. ${index + 1}</div>
@@ -351,7 +363,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         gridContainer.innerHTML = kategoriList.map(buildCardHTML).join('');
-        attachActionListeners();
+        
+        // Attach listener hanya jika ada tombol (Admin)
+        if(CAN_ACTION) attachActionListeners();
     }
 
     function applySearchFilter() {
@@ -393,9 +407,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     }
     
-    // --- Event Listeners ---
+    // --- Event Listeners (Admin Only) ---
     function attachActionListeners() {
-        if (IS_STAF) return;
+        if (!CAN_ACTION) return;
 
         document.querySelectorAll('.btn-edit-kategori').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -452,8 +466,8 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshKategoriList();
     searchInput.addEventListener('input', applySearchFilter);
 
-    // --- Modal Logic ---
-    if (!IS_STAF) {
+    // --- Modal Logic (Input Only) ---
+    if (CAN_INPUT) {
         const modal = $('#kategori-modal');
         const btnClose = $('#btn-close');
         const btnCancel = $('#btn-cancel');
@@ -463,13 +477,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); };
         const close= () => { modal.classList.add('hidden'); modal.classList.remove('flex'); };
 
-        $('#btn-add-kategori').addEventListener('click', () => {
-            form.reset();
-            $('#form-action').value = 'store';
-            $('#form-id').value = '';
-            title.textContent = 'Buat Kategori Baru';
-            open();
-        });
+        if($('#btn-add-kategori')) {
+            $('#btn-add-kategori').addEventListener('click', () => {
+                form.reset();
+                $('#form-action').value = 'store';
+                $('#form-id').value = '';
+                title.textContent = 'Buat Kategori Baru';
+                open();
+            });
+        }
         
         btnClose.addEventListener('click', close);
         btnCancel.addEventListener('click', close);

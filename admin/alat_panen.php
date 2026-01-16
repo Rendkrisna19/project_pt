@@ -1,12 +1,19 @@
 <?php
 // pages/alat_panen.php
-// MODIFIKASI: Filter Jenis Alat Panen (AJAX)
+// MODIFIKASI: Filter Jenis Alat Panen & Hak Akses (Viewer/Staf/Admin)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf = ($userRole === 'staf');
+// --- LOGIKA ROLE ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; // Default viewer
+
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+$canInput  = ($isAdmin || $isStaf); // Admin & Staf bisa Input
+$canAction = ($isAdmin);            // Hanya Admin bisa Edit/Hapus
 
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
@@ -19,7 +26,7 @@ $conn = $db->getConnection();
 $units = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 $kebun = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-// Ambil Master Jenis Alat Panen (Pastikan kolom 'nama' sesuai database Anda)
+// Ambil Master Jenis Alat Panen
 $jenisAlatMaster = $conn->query("SELECT id, nama FROM md_jenis_alat_panen ORDER BY nama ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // --- LOGIKA BULAN & TAHUN OTOMATIS ---
@@ -82,7 +89,7 @@ include_once '../layouts/header.php';
                 <span>PDF</span>
             </button>
 
-            <?php if (!$isStaf): ?>
+            <?php if ($canInput): ?>
             <button id="btn-add" class="flex items-center gap-2 bg-[#059fd3] hover:bg-[#0487b4] text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 ml-2 border-none cursor-pointer">
                 <i class="ti ti-plus text-lg"></i> 
                 <span>Input Alat</span>
@@ -214,19 +221,19 @@ include_once '../layouts/header.php';
             <th class="text-right">Stok Akhir</th>
             <th class="text-left">Krani Afdeling</th>
             <th class="text-left">Catatan</th>
-            <?php if (!$isStaf): ?>
+            <?php if ($canAction): ?>
               <th class="text-center" style="width: 100px;">Aksi</th>
             <?php endif; ?>
           </tr>
         </thead>
         <tbody id="tbody-data">
-          <tr><td colspan="<?= $isStaf ? 10 : 11 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat Data...</td></tr>
+          <tr><td colspan="<?= $canAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat Data...</td></tr>
         </tbody>
       </table>
   </div>
 </div>
 
-<?php if (!$isStaf): ?>
+<?php if ($canInput): ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
   <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-4xl transform scale-100 transition-transform">
     <div class="flex justify-between items-center mb-6 border-b pb-4">
@@ -328,8 +335,11 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
-  const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
-  const COLSPAN = IS_STAF ? 10 : 11;
+  // Pass permission flags to JS
+  const CAN_INPUT  = <?= $canInput ? 'true' : 'false'; ?>; 
+  const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; // Admin Only
+  const COLSPAN    = CAN_ACTION ? 11 : 10;
+
   const $ = s => document.querySelector(s);
   const tbody = $('#tbody-data');
   const perSel = $('#per-page'), btnPrev = $('#btn-prev'), btnNext = $('#btn-next'), pageInfo = $('#page-info');
@@ -361,18 +371,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const payload=encodeURIComponent(JSON.stringify(x));
         const namaAlat = x.display_jenis_alat || x.jenis_alat || '-';
 
-        const actionCell = IS_STAF ? '' : `
-          <td class="text-center">
-            <div class="flex items-center justify-center gap-1">
-              <button class="btn-icon text-cyan-600 hover:text-cyan-800" data-json="${payload}" title="Edit">
-                <i class="ti ti-pencil"></i>
-              </button>
-              <button class="btn-icon text-red-600 hover:text-red-800" data-id="${x.id}" title="Hapus">
-                <i class="ti ti-trash"></i>
-              </button>
-            </div>
-          </td>
-        `;
+        // Hanya buat kolom aksi jika CAN_ACTION (Admin) true
+        let actionCell = '';
+        if (CAN_ACTION) {
+            actionCell = `
+              <td class="text-center">
+                <div class="flex items-center justify-center gap-1">
+                  <button class="btn-icon text-cyan-600 hover:text-cyan-800" data-json="${payload}" title="Edit">
+                    <i class="ti ti-pencil"></i>
+                  </button>
+                  <button class="btn-icon text-red-600 hover:text-red-800" data-id="${x.id}" title="Hapus">
+                    <i class="ti ti-trash"></i>
+                  </button>
+                </div>
+              </td>
+            `;
+        }
+
         return `
           <tr>
             <td class="text-left font-medium text-gray-800">${x.nama_kebun || '-'}</td>
@@ -405,7 +420,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('unit_id',$('#f-unit').value);
     fd.append('bulan',$('#f-bulan').value);
     fd.append('tahun',$('#f-tahun').value);
-    // MODIFIKASI: Kirim ID jenis alat ke backend
     fd.append('id_jenis_alat', $('#f-jenis-alat').value);
     
     fd.append('order_by','created_at'); fd.append('order_dir','desc');
@@ -442,8 +456,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   btnPrev.addEventListener('click', ()=>{ if(CUR_PAGE > 1) { CUR_PAGE--; renderPage(); } });
   btnNext.addEventListener('click', ()=>{ CUR_PAGE++; renderPage(); });
 
-  // CRUD MODAL LOGIC
-  if (!IS_STAF) {
+  // CRUD MODAL LOGIC (Only load handlers if permission allows)
+  if (CAN_INPUT) {
     const modal=$('#crud-modal'), form=$('#crud-form'), btnAdd=$('#btn-add');
     const openModal=()=>{modal.classList.remove('hidden');modal.classList.add('flex')};
     const closeModal=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
@@ -454,23 +468,28 @@ document.addEventListener('DOMContentLoaded', ()=>{
     };
     ['stok_awal','mutasi_masuk','mutasi_keluar','dipakai'].forEach(id=>document.getElementById(id).addEventListener('input', calc));
     
-    btnAdd.addEventListener('click',()=>{
-      form.reset();
-      $('#form-action').value='store'; $('#form-id').value='';
-      const b = $('#f-bulan').value, t = $('#f-tahun').value;
-      if(b) $('#bulan').value = b;
-      if(t) $('#tahun').value = t;
-      calc(); openModal();
-    });
+    // Tombol Input mungkin tidak ada jika user adalah Viewer, jadi cek dulu
+    if(btnAdd) {
+        btnAdd.addEventListener('click',()=>{
+          form.reset();
+          $('#form-action').value='store'; $('#form-id').value='';
+          const b = $('#f-bulan').value, t = $('#f-tahun').value;
+          if(b) $('#bulan').value = b;
+          if(t) $('#tahun').value = t;
+          calc(); openModal();
+        });
+    }
 
     $('#btn-close').addEventListener('click',closeModal);
     $('#btn-cancel').addEventListener('click',closeModal);
 
+    // Event Delegation for Table Buttons
     document.body.addEventListener('click',e=>{
       const btn = e.target.closest('button');
       if (!btn) return;
       
-      if(btn.classList.contains('btn-icon') && btn.dataset.json){
+      // Handle Edit (Hanya jika CAN_ACTION alias Admin)
+      if(CAN_ACTION && btn.classList.contains('btn-icon') && btn.dataset.json){
         const d=JSON.parse(decodeURIComponent(btn.dataset.json));
         form.reset();
         $('#form-action').value='update'; $('#form-id').value=d.id;
@@ -488,7 +507,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         calc(); openModal();
       }
       
-      if(btn.classList.contains('btn-icon') && btn.dataset.id && !btn.dataset.json){
+      // Handle Delete (Hanya jika CAN_ACTION alias Admin)
+      if(CAN_ACTION && btn.classList.contains('btn-icon') && btn.dataset.id && !btn.dataset.json){
         Swal.fire({title:'Hapus data?', text:'Tidak dapat dikembalikan', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Hapus'})
         .then(res=>{
           if(res.isConfirmed){
@@ -520,7 +540,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         })
         .catch(()=> Swal.fire('Gagal','Koneksi Error','error'));
     });
-  }
+  } // End if CAN_INPUT
 
   // Exports (Updated with id_jenis_alat)
   const getQs = () => new URLSearchParams({
@@ -529,7 +549,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       unit_id:$('#f-unit').value,
       bulan:$('#f-bulan').value, 
       tahun:$('#f-tahun').value,
-      id_jenis_alat:$('#f-jenis-alat').value // Parameter baru
+      id_jenis_alat:$('#f-jenis-alat').value
   }).toString();
 
   $('#btn-export-excel').addEventListener('click', () => window.open('cetak/alat_panen_export_excel.php?'+getQs(), '_blank'));

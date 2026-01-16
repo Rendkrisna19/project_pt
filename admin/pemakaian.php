@@ -1,15 +1,24 @@
 <?php
 // pemakaian.php
-// MODIFIKASI FULL: Grid Table, Auto Filter Date, New Export Buttons
+// MODIFIKASI FULL: Grid Table, Auto Filter Date, New Export Buttons + Role Access (Viewer/Staf/Admin)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
     header("Location: ../auth/login.php"); exit;
 }
 
-// --- Role user ---
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf = ($userRole === 'staf');
+// --- MODIFIKASI PERMISSION LOGIC ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer jika session error
+
+// Definisi Role Boolean
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+// Definisi Hak Akses
+$canInput  = ($isAdmin || $isStaf); // Admin & Staf boleh input
+$canAction = ($isAdmin);            // Hanya Admin boleh Edit/Hapus
+// -----------------------------------
 
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
@@ -126,7 +135,7 @@ include_once '../layouts/header.php';
         <i class="ti ti-file-type-pdf"></i> PDF
       </button>
 
-      <?php if (!$isStaf): ?>
+      <?php if ($canInput): ?>
       <button id="btn-add" class="bg-gray-800 text-white px-4 py-2 rounded-lg hover:bg-gray-900 flex items-center gap-2 shadow-sm transition ml-2">
         <i class="ti ti-plus"></i> Input Data
       </button>
@@ -199,11 +208,11 @@ include_once '../layouts/header.php';
             <th class="text-right">Jlh Fisik</th>
             <th class="text-center">Dokumen</th>
             <th class="text-left">Keterangan</th>
-            <?php if (!$isStaf): ?><th class="text-center" style="width:100px">Aksi</th><?php endif; ?>
+            <?php if ($canAction): ?><th class="text-center" style="width:100px">Aksi</th><?php endif; ?>
         </tr>
         </thead>
         <tbody id="tbody-data" class="text-gray-800">
-        <tr><td colspan="<?= $isStaf ? 10 : 11 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
+        <tr><td colspan="<?= $canAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
         </tbody>
     </table>
   </div>
@@ -239,7 +248,7 @@ include_once '../layouts/header.php';
   </div>
 </div>
 
-<?php if (!$isStaf): ?>
+<?php if ($canInput): ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-opacity">
   <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-4xl transform scale-100 transition-transform">
     <div class="flex items-center justify-between mb-6 border-b pb-4">
@@ -358,8 +367,10 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
-  const COLSPAN = IS_STAF ? 10 : 11;
+  // --- PERMISSION FLAGS FROM PHP ---
+  const CAN_INPUT  = <?= $canInput ? 'true' : 'false'; ?>;  // Admin & Staf
+  const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; // Admin Only
+  const COLSPAN    = CAN_ACTION ? 11 : 10;
 
   const $ = s => document.querySelector(s);
   const tbody = $('#tbody-data');
@@ -377,9 +388,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let ALL_ROWS = [], CURRENT_PAGE = 1, PER_PAGE = parseInt(perPageEl.value, 10) || 10;
   const fmt = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
-  /* === Logic Export (Fixed) === */
+  /* === Logic Export === */
   const handleExport = (format) => {
-    // Ambil value langsung dari dropdown
     const params = new URLSearchParams({
       csrf_token: '<?= htmlspecialchars($CSRF) ?>',
       q: q.value,
@@ -418,8 +428,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const docLink = row.dokumen_path ? `<a href="${row.dokumen_path}" target="_blank" class="text-blue-600 underline hover:text-blue-800">Lihat</a>` : '-';
     const ketText = (row.keterangan_clean && String(row.keterangan_clean).trim()) ? row.keterangan_clean : '-';
     
+    // Tombol Aksi HANYA jika Admin
     let actionCell = '';
-    if (!IS_STAF) {
+    if (CAN_ACTION) {
       actionCell = `
         <td class="text-center">
           <div class="flex items-center justify-center gap-1">
@@ -519,8 +530,8 @@ document.addEventListener('DOMContentLoaded', () => {
   btnPrev.addEventListener('click', () => { if(CURRENT_PAGE>1){ CURRENT_PAGE--; renderPage(); } });
   btnNext.addEventListener('click', () => { CURRENT_PAGE++; renderPage(); });
 
-  /* === CRUD (Non-Staf) === */
-  if (!IS_STAF) {
+  /* === CRUD (Hanya load jika CAN_INPUT true) === */
+  if (CAN_INPUT) {
     const modal = $('#crud-modal'), form = $('#crud-form');
     const open = () => { modal.classList.remove('hidden'); modal.classList.add('flex'); }
     const close = () => { modal.classList.add('hidden'); modal.classList.remove('flex'); }
@@ -532,26 +543,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     bahanSelect.addEventListener('change', updateSatuanHint);
 
-    $('#btn-add')?.addEventListener('click', () => {
-      form.reset();
-      $('#form-action').value = 'store';
-      $('#form-id').value = '';
-      // Pre-fill modal with current filter
-      if(selUnit.value) $('#unit_id').value = selUnit.value;
-      if(selBulan.value) $('#bulan').value = selBulan.value;
-      if(selTahun.value) $('#tahun').value = selTahun.value;
-      updateSatuanHint();
-      open();
-    });
+    // Tombol Tambah
+    if($('#btn-add')) {
+        $('#btn-add').addEventListener('click', () => {
+        form.reset();
+        $('#form-action').value = 'store';
+        $('#form-id').value = '';
+        // Pre-fill modal with current filter
+        if(selUnit.value) $('#unit_id').value = selUnit.value;
+        if(selBulan.value) $('#bulan').value = selBulan.value;
+        if(selTahun.value) $('#tahun').value = selTahun.value;
+        updateSatuanHint();
+        open();
+        });
+    }
 
-    $('#btn-close')?.addEventListener('click', close);
-    $('#btn-cancel')?.addEventListener('click', close);
+    $('#btn-close').addEventListener('click', close);
+    $('#btn-cancel').addEventListener('click', close);
 
+    // Event Delegation (Edit/Delete - Hanya Admin)
     document.body.addEventListener('click', (e) => {
       const btn = e.target.closest('button');
       if (!btn) return;
-
-      if (btn.classList.contains('btn-icon') && btn.title==='Edit') {
+      
+      // Edit: Hanya jika Admin
+      if (CAN_ACTION && btn.classList.contains('btn-icon') && btn.title==='Edit') {
         const row = JSON.parse(decodeURIComponent(btn.dataset.json));
         form.reset();
         $('#form-action').value = 'update';
@@ -566,7 +582,8 @@ document.addEventListener('DOMContentLoaded', () => {
         open();
       }
 
-      if (btn.classList.contains('btn-icon') && btn.title==='Hapus') {
+      // Delete: Hanya jika Admin
+      if (CAN_ACTION && btn.classList.contains('btn-icon') && btn.title==='Hapus') {
         const id = btn.dataset.id;
         Swal.fire({
           title: 'Hapus data ini?', text: 'Tindakan tidak dapat dikembalikan.', icon: 'warning',
@@ -604,6 +621,8 @@ document.addEventListener('DOMContentLoaded', () => {
           } else { Swal.fire('Gagal', j.message, 'error'); }
         });
     });
-  }
+  } // End if CAN_INPUT
 });
 </script>
+
+<?php include_once '../layouts/footer.php'; ?>

@@ -1,19 +1,29 @@
 <?php
   // stok_barang_gudang.php
-  // FULL MODIFIKASI: Sisa Stok Hitung Otomatis (Tabel & Modal), Sticky Header, 0 jadi Strip (-)
+  // FULL MODIFIKASI: Sisa Stok Hitung Otomatis, Sticky Header, 0 jadi Strip (-)
+  // Role: Viewer (Read Only), Staf (Input Only), Admin (Full)
 
   session_start();
   if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
-  // --- Role User ---
-  $userRole = $_SESSION['user_role'] ?? 'staf';
-  $isStaf = ($userRole === 'staf');
+  // --- MODIFIKASI PERMISSION LOGIC ---
+  $userRole = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer jika session error
+
+  // Definisi Role Boolean
+  $isAdmin   = ($userRole === 'admin');
+  $isStaf    = ($userRole === 'staf');
+  $isViewer  = ($userRole === 'viewer');
+
+  // Definisi Hak Akses
+  $canInput  = ($isAdmin || $isStaf); // Admin & Staf boleh input
+  $canAction = ($isAdmin);            // Hanya Admin boleh Edit/Hapus
+  // -----------------------------------
 
   if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
   $CSRF = $_SESSION['csrf_token'];
 
   require_once '../config/database.php';
-  $db   = new Database();
+  $db    = new Database();
   $conn = $db->getConnection();
 
   // ===== Master Data =====
@@ -127,9 +137,11 @@
           <i class="ti ti-file-type-pdf"></i> PDF
         </button>
         
+        <?php if ($canInput): ?>
         <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition ml-2">
           <i class="ti ti-plus"></i> Input Stok
         </button>
+        <?php endif; ?>
       </div>
     </div>
 
@@ -200,18 +212,20 @@
             <tr>
               <th class="text-left">Kebun</th>
               <th class="text-left">Nama Barang</th> 
-              <th class="text-center">Satuan</th>   
+              <th class="text-center">Satuan</th>    
               <th class="text-right">Stok Awal</th>
               <th class="text-right">Mutasi Masuk</th>
               <th class="text-right">Mutasi Keluar</th>
               <th class="text-right">Pasokan</th>
               <th class="text-right">Dipakai</th>
               <th class="text-right">Sisa Stok</th>
+              <?php if ($canAction): ?>
               <th class="text-center" style="width: 100px;">Aksi</th>
+              <?php endif; ?>
             </tr>
           </thead>
           <tbody id="tbody-stok" class="text-gray-800">
-            <tr><td colspan="10" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
+            <tr><td colspan="<?= $canAction ? 10 : 9 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
           </tbody>
         </table>
     </div>
@@ -314,7 +328,9 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <script>
   document.addEventListener('DOMContentLoaded', () => {
-    const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
+    // --- PERMISSION FLAGS FROM PHP ---
+    const CAN_INPUT  = <?= $canInput ? 'true' : 'false'; ?>;  // Admin & Staf
+    const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; // Admin Only
 
     const $ = s => document.querySelector(s);
     const tbody = $('#tbody-stok');
@@ -389,11 +405,12 @@
       const endIdx   = Math.min(startIdx + pageSize, total);
       const pageRows = allRows.slice(startIdx, endIdx);
 
+      const colSpan = CAN_ACTION ? 10 : 9;
+
       if (total === 0){
-        tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-gray-400 italic">Belum ada data untuk filter ini.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-gray-400 italic">Belum ada data untuk filter ini.</td></tr>`;
       } else {
         tbody.innerHTML = pageRows.map(row => {
-            // HITUNG MANUAL SISA STOK DI JS (Agar pasti muncul)
             const awal    = parseFloat(row.stok_awal || 0);
             const masuk   = parseFloat(row.mutasi_masuk || 0);
             const keluar  = parseFloat(row.mutasi_keluar || 0);
@@ -402,6 +419,18 @@
             
             const sisaStok = (awal + masuk + pasokan) - (keluar + dipakai);
             const colorClass = sisaStok < 0 ? 'text-red-600' : 'text-gray-900';
+
+            // Logic Column Aksi (Hanya Admin)
+            let actionHtml = '';
+            if (CAN_ACTION) {
+                actionHtml = `
+                <td class="text-center">
+                  <div class="flex justify-center gap-1">
+                    <button class="btn-action text-cyan-600 hover:text-cyan-800" title="Edit" data-json='${encodeURIComponent(JSON.stringify(row))}'><i class="ti ti-pencil"></i></button>
+                    <button class="btn-action text-red-600 hover:text-red-800" title="Hapus" data-id="${row.id}"><i class="ti ti-trash"></i></button>
+                  </div>
+                </td>`;
+            }
 
             return `
               <tr class="hover:bg-blue-50 transition-colors">
@@ -426,12 +455,7 @@
                     ${numberFmt(sisaStok)}
                 </td>
 
-                <td class="text-center">
-                  <div class="flex justify-center gap-1">
-                    <button class="btn-action text-cyan-600 hover:text-cyan-800" title="Edit" data-json='${encodeURIComponent(JSON.stringify(row))}' ${IS_STAF ? 'disabled' : ''}><i class="ti ti-pencil"></i></button>
-                    <button class="btn-action text-red-600 hover:text-red-800" title="Hapus" data-id="${row.id}" ${IS_STAF ? 'disabled' : ''}><i class="ti ti-trash"></i></button>
-                  </div>
-                </td>
+                ${actionHtml}
               </tr>
             `;
         }).join('');
@@ -464,14 +488,15 @@
       if (selBulan.value) fd.append('bulan', selBulan.value);
       fd.append('tahun', selTahun.value || '<?= (int)date('Y') ?>');
 
-      tbody.innerHTML = `<tr><td colspan="11" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin"></i> Memuat data...</td></tr>`;
+      const colSpan = CAN_ACTION ? 10 : 9;
+      tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin"></i> Memuat data...</td></tr>`;
       
       fetch('stok_barang_gudang_crud.php',{method:'POST', body:fd})
         .then(r=>r.json())
         .then(j=>{
           if (!j.success) {
             allRows = []; renderPage();
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-red-500">${j.message||'Gagal memuat data'}</td></tr>`;
             return;
           }
           const arr = Array.isArray(j.data) ? j.data : [];
@@ -481,7 +506,7 @@
         })
         .catch(err=>{
           allRows = []; renderPage();
-          tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
+          tbody.innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-red-500">${err?.message||'Network error'}</td></tr>`;
         });
     }
 
@@ -502,62 +527,67 @@
     }
     document.getElementById('jenis_barang_id')?.addEventListener('change', updateSatuanHint);
 
-    // Add Button
-    btnAdd.addEventListener('click', ()=>{
-      form.reset();
-      formId.value = ''; formAction.value = 'store';
-      title.textContent = 'Input Stok Gudang Baru';
-      if (selKebun.value) document.getElementById('kebun_id').value = selKebun.value;
-      if (selBarang.value) document.getElementById('jenis_barang_id').value = selBarang.value;
-      if (selBulan.value) document.getElementById('bulan').value = selBulan.value;
-      document.getElementById('tahun').value = selTahun.value;
-      updateSatuanHint();
-      calculateSisaModal();
-      open();
-    });
+    // Add Button (Hanya jika tombol ada)
+    if (btnAdd) {
+        btnAdd.addEventListener('click', ()=>{
+        form.reset();
+        formId.value = ''; formAction.value = 'store';
+        title.textContent = 'Input Stok Gudang Baru';
+        if (selKebun.value) document.getElementById('kebun_id').value = selKebun.value;
+        if (selBarang.value) document.getElementById('jenis_barang_id').value = selBarang.value;
+        if (selBulan.value) document.getElementById('bulan').value = selBulan.value;
+        document.getElementById('tahun').value = selTahun.value;
+        updateSatuanHint();
+        calculateSisaModal();
+        open();
+        });
+    }
+    
     btnClose.addEventListener('click', close);
     btnCancel.addEventListener('click', close);
 
-    // Edit & Delete Handler
-    document.body.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button');
-      if (!btn) return;
+    // Edit & Delete Handler (Hanya Aktif jika CAN_ACTION true)
+    if (CAN_ACTION) {
+        document.body.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button');
+        if (!btn) return;
 
-      if (btn.title === 'Edit' && !IS_STAF && btn.dataset.json) {
-        const row = JSON.parse(decodeURIComponent(btn.dataset.json));
-        form.reset();
-        formAction.value='update';
-        formId.value = row.id;
-        title.textContent='Edit Stok Gudang';
-        ['kebun_id','jenis_barang_id','bulan','tahun','stok_awal','mutasi_masuk','mutasi_keluar','pasokan','dipakai'].forEach(k=>{
-          if (document.getElementById(k)) document.getElementById(k).value = row[k] ?? '';
-        });
-        updateSatuanHint();
-        calculateSisaModal(); 
-        open();
-      }
+        if (btn.title === 'Edit' && btn.dataset.json) {
+            const row = JSON.parse(decodeURIComponent(btn.dataset.json));
+            form.reset();
+            formAction.value='update';
+            formId.value = row.id;
+            title.textContent='Edit Stok Gudang';
+            ['kebun_id','jenis_barang_id','bulan','tahun','stok_awal','mutasi_masuk','mutasi_keluar','pasokan','dipakai'].forEach(k=>{
+            if (document.getElementById(k)) document.getElementById(k).value = row[k] ?? '';
+            });
+            updateSatuanHint();
+            calculateSisaModal(); 
+            open();
+        }
 
-      if (btn.title === 'Hapus' && !IS_STAF && btn.dataset.id) {
-        const id = btn.dataset.id;
-        Swal.fire({
-          title:'Hapus data ini?', text:'Tindakan ini tidak dapat dibatalkan.',
-          icon:'warning', showCancelButton:true, confirmButtonText:'Ya, hapus', confirmButtonColor:'#d33'
-        }).then(res=>{
-          if (!res.isConfirmed) return;
-          const fd = new FormData();
-          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-          fd.append('action','delete');
-          fd.append('id', id);
-          fetch('stok_barang_gudang_crud.php',{method:'POST',body:fd})
-            .then(r=>r.json())
-            .then(j=>{
-              if (j.success){ Swal.fire('Terhapus!', j.message, 'success'); refreshList(); }
-              else Swal.fire('Gagal', j.message||'Tidak bisa menghapus','error');
-            })
-            .catch(err=> Swal.fire('Error', err?.message||'Network error','error'));
+        if (btn.title === 'Hapus' && btn.dataset.id) {
+            const id = btn.dataset.id;
+            Swal.fire({
+            title:'Hapus data ini?', text:'Tindakan ini tidak dapat dibatalkan.',
+            icon:'warning', showCancelButton:true, confirmButtonText:'Ya, hapus', confirmButtonColor:'#d33'
+            }).then(res=>{
+            if (!res.isConfirmed) return;
+            const fd = new FormData();
+            fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+            fd.append('action','delete');
+            fd.append('id', id);
+            fetch('stok_barang_gudang_crud.php',{method:'POST',body:fd})
+                .then(r=>r.json())
+                .then(j=>{
+                if (j.success){ Swal.fire('Terhapus!', j.message, 'success'); refreshList(); }
+                else Swal.fire('Gagal', j.message||'Tidak bisa menghapus','error');
+                })
+                .catch(err=> Swal.fire('Error', err?.message||'Network error','error'));
+            });
+        }
         });
-      }
-    });
+    }
 
     // Form Submit
     form.addEventListener('submit', (e)=>{

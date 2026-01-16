@@ -3,7 +3,7 @@
 
 $currentPage = $currentPage ?? 'dashboard';
 $userName    = $_SESSION['user_nama'] ?? 'User';
-$userRole    = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer agar lebih aman jika session kosong
+$userRole    = $_SESSION['user_role'] ?? 'viewer'; 
 
 // Helper function menu aktif
 function navClass($key, $current) {
@@ -17,11 +17,13 @@ function navClass($key, $current) {
 $PEM_KEYS    = ['pemeliharaan', 'pemeliharaan_tm', 'pemeliharaan_tu','pemeliharaan_tk', 'pemeliharaan_tbm1','pemeliharaan_tbm2','pemeliharaan_tbm3', 'pemeliharaan_pn','pemeliharaan_mn'];
 $GUDANG_KEYS = ['stok_gudang', 'alat_panen', 'stok_barang_gudang'];
 $LM_KEYS     = ['lm76', 'lm77', 'lm_biaya'];
+$SDM_KEYS    = ['data_karyawan']; // Array untuk Menu Baru
 
 // Cek apakah dropdown harus terbuka berdasarkan halaman aktif
 $isPemOpen    = in_array($currentPage, $PEM_KEYS);
 $isGudangOpen = in_array($currentPage, $GUDANG_KEYS);
 $isLmOpen     = in_array($currentPage, $LM_KEYS);
+$isSdmOpen    = in_array($currentPage, $SDM_KEYS); // Cek Menu Baru
 ?>
 
 <div x-show="sidebarOpen" 
@@ -164,6 +166,16 @@ $isLmOpen     = in_array($currentPage, $LM_KEYS);
             <a href="pemakaian.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-pink-300 <?= navClass('pemakaian', $currentPage) ?>">
                 <i data-lucide="clipboard-check" class="w-5 h-5 mr-3 group-hover:text-pink-400 transition-colors <?= $currentPage=='pemakaian'?'text-white':'' ?>"></i>
                 <span>Pemakaian Bahan Kimia </span>
+            </a>
+
+            <div class="px-4 mt-6 mb-2 flex items-center gap-2">
+                <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">SDM & Personalia</span>
+                <div class="h-px bg-cyan-900/30 flex-1"></div>
+            </div>
+
+            <a href="data_karyawan_menu.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('data_karyawan', $currentPage) ?>">
+                <i data-lucide="briefcase" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='data_karyawan'?'text-white':'' ?>"></i>
+                <span>Data Karyawan</span>
             </a>
 
             <div class="px-4 mt-6 mb-2 flex items-center gap-2">

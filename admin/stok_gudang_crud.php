@@ -1,17 +1,34 @@
 <?php
-// stok_gudang_crud.php (FINAL) — konsisten relasi kebun_id & bahan_id, hitung net_mutasi & sisa_stok di SQL
+// stok_gudang_crud.php (FINAL SECURED)
+// Role: Viewer (Read Only), Staf (Create Only), Admin (Full Access)
+
 session_start();
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit; }
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') { echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit; }
-if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
-  echo json_encode(['success'=>false,'message'=>'Token keamanan tidak valid. Refresh halaman.']); exit;
+// 1. Cek Login
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { 
+    echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); 
+    exit; 
 }
+
+// 2. Cek CSRF
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { 
+    echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); 
+    exit; 
+}
+if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['csrf_token'] ?? '')) {
+    echo json_encode(['success'=>false,'message'=>'Token keamanan tidak valid. Refresh halaman.']); 
+    exit;
+}
+
+// 3. AMBIL ROLE (PENTING!)
+$role = $_SESSION['user_role'] ?? 'viewer'; // Default viewer jika tidak ada role
 
 require_once '../config/database.php';
 
 $action = $_POST['action'] ?? '';
+
+// Helper Functions
 function s($k){ return trim((string)($_POST[$k] ?? '')); }
 function f($k){ $v = $_POST[$k] ?? null; if ($v===''||$v===null) return null; return is_numeric($v) ? (float)$v : null; }
 function i($k){ $v = $_POST[$k] ?? null; if ($v===''||$v===null) return null; return ctype_digit((string)$v) ? (int)$v : null; }
@@ -22,7 +39,7 @@ $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus"
 try {
   $db = new Database(); $conn = $db->getConnection();
 
-  // ===== LIST
+  // ===== LIST (SEMUA ROLE BOLEH AKSES) =====
   if ($action === 'list') {
     $kebun_id = i('kebun_id');
     $bahan_id = i('bahan_id');
@@ -59,8 +76,15 @@ try {
     echo json_encode(['success'=>true,'data'=>$rows]); exit;
   }
 
-  // ===== STORE
+  // ===== STORE (HANYA ADMIN & STAF) =====
   if ($action === 'store' || $action === 'create') {
+    
+    // SECURITY CHECK
+    if ($role !== 'admin' && $role !== 'staf') {
+        echo json_encode(['success'=>false, 'message'=>'Anda tidak memiliki izin untuk menambah data.']); 
+        exit;
+    }
+
     $errors = [];
     $kebun_id = i('kebun_id');
     $bahan_id = i('bahan_id');
@@ -99,8 +123,15 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data stok berhasil ditambahkan.']); exit;
   }
 
-  // ===== UPDATE
+  // ===== UPDATE (HANYA ADMIN) =====
   if ($action === 'update') {
+    
+    // SECURITY CHECK
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false, 'message'=>'Hanya Admin yang boleh mengubah data.']); 
+        exit;
+    }
+
     $id = (int)($_POST['id'] ?? 0);
     if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
 
@@ -144,8 +175,15 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data stok berhasil diperbarui.']); exit;
   }
 
-  // ===== DELETE
+  // ===== DELETE (HANYA ADMIN) =====
   if ($action === 'delete') {
+    
+    // SECURITY CHECK
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false, 'message'=>'Hanya Admin yang boleh menghapus data.']); 
+        exit;
+    }
+
     $id = (int)($_POST['id'] ?? 0);
     if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
     $st=$conn->prepare("DELETE FROM stok_gudang WHERE id=:id");

@@ -78,7 +78,7 @@ ob_start();
 </head>
 <body>
     <div class="header-box">
-        <h2>REKAPITULASI PEMELIHARAAN TM - TAHUN <?= $f_tahun ?></h2>
+        <h2>REKAPITULASI PEMELIHARAAN TU - TAHUN <?= $f_tahun ?></h2>
         <div>Unit: <?= $f_afd ? $f_afd : 'Semua AFD' ?> | Dicetak: <?= date('d-m-Y H:i') ?></div>
     </div>
 

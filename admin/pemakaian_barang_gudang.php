@@ -1,32 +1,40 @@
 <?php
-// pemakaian_barang_gudang.php
+// pages/pemakaian_barang_gudang.php
+// MODIFIKASI FULL: Role Akses (Viewer/Staf/Admin) tanpa merubah ID/Class layout.
+
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
+
+// --- 1. SETUP ROLE ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer demi keamanan
+
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+// Admin & Staf boleh Input. Hanya Admin boleh Edit/Hapus.
+$canInput  = ($isAdmin || $isStaf); 
+$canAction = ($isAdmin); 
+
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
 
 require_once '../config/database.php';
-$db = new Database();
+$db   = new Database();
 $conn = $db->getConnection();
 
 // --- AMBIL MASTER DATA ---
-// Kebun
 $kebuns = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
-// Bahan Bakar / Pelumas
 $bahans = $conn->query("SELECT id, nama, satuan FROM md_jenis_bahan_bakar_pelumas ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
 
 // Data Waktu Default
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 $f_tahun = date('Y');
-$f_bulan = date('n'); // Bulan saat ini (angka 1-12)
+$f_bulan = date('n'); 
 
-// Helper Function untuk Query String Export (Initial load)
-function qs_export($y, $m) {
-    return "tahun=$y&bulan=$m";
-}
+function qs_export($y, $m) { return "tahun=$y&bulan=$m"; }
 
 $currentPage = 'pemakaian_barang_gudang';
-
 include_once '../layouts/header.php';
 ?>
 
@@ -69,10 +77,13 @@ table.table-grid tfoot td { position: sticky; bottom: 0; background: #f0f9ff; co
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M12 17v-6"/><path d="M9 14l3 3 3-3"/></svg>
                 PDF
             </a>
+            
+            <?php if ($canInput): ?>
             <button id="btn-add" class="btn btn-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 Tambah Data
             </button>
+            <?php endif; ?>
         </div>
     </div>
 
@@ -138,23 +149,26 @@ table.table-grid tfoot td { position: sticky; bottom: 0; background: #f0f9ff; co
                     <th style="width: 80px;">Satuan</th>
                     <th class="text-right" style="width: 100px;">Jlh Bahan</th>
                     <th>Keterangan</th>
+                    <?php if ($canAction): ?>
                     <th class="text-center" style="width: 80px;">Aksi</th>
+                    <?php endif; ?>
                 </tr>
             </thead>
             <tbody id="tbody-data" class="text-gray-700 bg-white">
-                <tr><td colspan="10" class="text-center py-8 text-gray-400">Memuat data...</td></tr>
+                <tr><td colspan="<?= $canAction ? 10 : 9 ?>" class="text-center py-8 text-gray-400">Memuat data...</td></tr>
             </tbody>
             <tfoot>
                 <tr>
                     <td colspan="7" class="text-right pr-4 uppercase">Total Jumlah:</td>
                     <td class="text-right font-mono text-blue-700" id="footer-total">0.00</td>
-                    <td colspan="2"></td>
+                    <td colspan="<?= $canAction ? 2 : 1 ?>"></td>
                 </tr>
             </tfoot>
         </table>
     </div>
 </div>
 
+<?php if ($canInput): ?>
 <div id="modal-form" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-100 transition-all">
         <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
@@ -212,12 +226,17 @@ table.table-grid tfoot td { position: sticky; bottom: 0; background: #f0f9ff; co
         </form>
     </div>
 </div>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const bulanIndo = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+
+// --- PASS PHP ROLE TO JS ---
+const CAN_ACTION = <?= $canAction ? 'true' : 'false' ?>; // Admin Only
+const CAN_INPUT  = <?= $canInput ? 'true' : 'false' ?>;  // Admin & Staf
 
 // Update Satuan di Modal
 function updateSatuan() {
@@ -228,15 +247,13 @@ function updateSatuan() {
 
 // Function: Load Data Realtime
 async function loadData() {
-    // Ambil semua value filter
     const tahun   = $('#f_tahun').value;
-    const bulan   = $('#f_bulan').value; // Baru
+    const bulan   = $('#f_bulan').value;
     const kebun   = $('#f_kebun').value;
     const tanggal = $('#f_tanggal').value;
     const bahan   = $('#f_bahan').value;
-    const limit   = $('#f_limit').value; // Baru
+    const limit   = $('#f_limit').value;
 
-    // Update URL tombol Export secara dinamis
     const qs = new URLSearchParams({
         tahun: tahun,
         bulan: bulan,
@@ -248,24 +265,26 @@ async function loadData() {
     $('#btn-excel').href = `cetak/pemakaian_barang_gudang_excel.php?${qs}`;
     $('#btn-pdf').href = `cetak/pemakaian_barang_gudang_pdf.php?${qs}`;
 
-    // Fetch Data Table
     const fd = new FormData();
     fd.append('action', 'list');
     fd.append('tahun', tahun);
-    fd.append('bulan', bulan); // Kirim bulan
+    fd.append('bulan', bulan);
     fd.append('kebun_id', kebun);
     fd.append('tanggal', tanggal);
     fd.append('jenis_bahan_id', bahan);
-    fd.append('limit', limit); // Kirim limit
+    fd.append('limit', limit);
 
     try {
         const res = await fetch('pemakaian_barang_gudang_crud.php', { method: 'POST', body: fd });
         const json = await res.json();
 
+        // Tentukan jumlah kolom saat kosong/loading
+        const colSpan = CAN_ACTION ? 10 : 9;
+
         if(json.success) {
             const rows = json.data;
             if(rows.length === 0) {
-                $('#tbody-data').innerHTML = '<tr><td colspan="10" class="text-center py-8 text-gray-400 italic">Tidak ada data ditemukan.</td></tr>';
+                $('#tbody-data').innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-gray-400 italic">Tidak ada data ditemukan.</td></tr>`;
                 $('#footer-total').innerText = '0.00';
                 return;
             }
@@ -277,7 +296,18 @@ async function loadData() {
                 const bln = bulanIndo[d.getMonth() + 1];
                 const rowJson = encodeURIComponent(JSON.stringify(r));
 
-                // HAPUS KOLOM KENDARAAN & NO POLISI DI RENDER TABLE
+                // Logic Tombol Aksi (Hanya Render jika Admin)
+                let actionCell = '';
+                if(CAN_ACTION) {
+                    actionCell = `
+                    <td class="text-center">
+                        <div class="flex justify-center gap-1">
+                            <button onclick="editData('${rowJson}')" class="p-1 text-cyan-600 hover:bg-cyan-100 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
+                            <button onclick="deleteData(${r.id})" class="p-1 text-red-600 hover:bg-red-100 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                        </div>
+                    </td>`;
+                }
+
                 html += `
                 <tr class="hover:bg-blue-50 transition">
                     <td>${thn}</td>
@@ -289,12 +319,7 @@ async function loadData() {
                     <td class="text-center text-xs bg-gray-100 rounded px-1">${r.satuan || ''}</td>
                     <td class="text-right font-mono font-bold text-blue-600">${parseFloat(r.jumlah).toLocaleString('en-US', {minimumFractionDigits:2})}</td>
                     <td class="text-sm text-gray-500 truncate max-w-xs">${r.keterangan || ''}</td>
-                    <td class="text-center">
-                        <div class="flex justify-center gap-1">
-                            <button onclick="editData('${rowJson}')" class="p-1 text-cyan-600 hover:bg-cyan-100 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>
-                            <button onclick="deleteData(${r.id})" class="p-1 text-red-600 hover:bg-red-100 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
-                        </div>
-                    </td>
+                    ${actionCell}
                 </tr>`;
             });
             $('#tbody-data').innerHTML = html;
@@ -302,30 +327,43 @@ async function loadData() {
         }
     } catch (e) {
         console.error(e);
-        $('#tbody-data').innerHTML = '<tr><td colspan="10" class="text-center py-8 text-red-500">Gagal memuat data.</td></tr>';
+        const colSpan = CAN_ACTION ? 10 : 9;
+        $('#tbody-data').innerHTML = `<tr><td colspan="${colSpan}" class="text-center py-8 text-red-500">Gagal memuat data.</td></tr>`;
     }
 }
 
 // Modal Logic
-function openModal() { $('#modal-form').classList.remove('hidden'); $('#modal-form').classList.add('flex'); }
-function closeModal() { $('#modal-form').classList.add('hidden'); $('#modal-form').classList.remove('flex'); }
+function openModal() { 
+    if(!CAN_INPUT) return; // Guard extra
+    $('#modal-form').classList.remove('hidden'); 
+    $('#modal-form').classList.add('flex'); 
+}
+function closeModal() { 
+    if(!CAN_INPUT) return;
+    $('#modal-form').classList.add('hidden'); 
+    $('#modal-form').classList.remove('flex'); 
+}
 
-$('#btn-add').addEventListener('click', () => {
-    $('#form-data').reset();
-    $('#form-action').value = 'store';
-    $('#form-id').value = '';
-    $('#modal-title').innerText = 'Input Pemakaian';
-    $('#txt_satuan').value = '';
-    openModal();
-});
+// Bind Add Button (Check if exists first)
+if(CAN_INPUT && $('#btn-add')) {
+    $('#btn-add').addEventListener('click', () => {
+        $('#form-data').reset();
+        $('#form-action').value = 'store';
+        $('#form-id').value = '';
+        $('#modal-title').innerText = 'Input Pemakaian';
+        $('#txt_satuan').value = '';
+        openModal();
+    });
+}
 
+// Edit Data (Hanya akan dipanggil jika tombol render via CAN_ACTION)
 function editData(jsonStr) {
+    if(!CAN_ACTION) return; // Guard
     const r = JSON.parse(decodeURIComponent(jsonStr));
     $('#form-action').value = 'update';
     $('#form-id').value = r.id;
     $('#modal-title').innerText = 'Edit Pemakaian';
     
-    // Populate Fields (HAPUS SET VALUE UNTUK KENDARAAN & POLISI)
     $('#inp_tanggal').value = r.tanggal;
     $('#inp_kebun').value = r.kebun_id;
     $('#inp_bahan').value = r.jenis_bahan_id;
@@ -337,7 +375,9 @@ function editData(jsonStr) {
     openModal();
 }
 
+// Delete Data (Hanya akan dipanggil jika tombol render via CAN_ACTION)
 function deleteData(id) {
+    if(!CAN_ACTION) return; // Guard
     Swal.fire({
         title: 'Hapus Data?', text: "Data tidak bisa dikembalikan!", icon: 'warning',
         showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Ya, Hapus'
@@ -355,21 +395,23 @@ function deleteData(id) {
     })
 }
 
-// Submit Handler
-$('#form-data').addEventListener('submit', e => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    fetch('pemakaian_barang_gudang_crud.php', {method: 'POST', body: fd})
-    .then(r => r.json()).then(j => {
-        if(j.success) {
-            closeModal();
-            Swal.fire('Berhasil', 'Data telah disimpan', 'success');
-            loadData();
-        } else {
-            Swal.fire('Error', j.message || 'Gagal menyimpan', 'error');
-        }
+// Submit Handler (Hanya jika form ada)
+if($('#form-data')) {
+    $('#form-data').addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        fetch('pemakaian_barang_gudang_crud.php', {method: 'POST', body: fd})
+        .then(r => r.json()).then(j => {
+            if(j.success) {
+                closeModal();
+                Swal.fire('Berhasil', 'Data telah disimpan', 'success');
+                loadData();
+            } else {
+                Swal.fire('Error', j.message || 'Gagal menyimpan', 'error');
+            }
+        });
     });
-});
+}
 
 // Auto Trigger Filter
 $$('.filter-input').forEach(el => {

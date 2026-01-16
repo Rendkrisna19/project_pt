@@ -1,15 +1,16 @@
 <?php
-// pemakaian_crud.php (FINAL stable + FILTER bahan & jenis aktif)
-// - Tag [Kebun: ...] & [Fisik: ...] diprefix saat store/update
-// - Parser tag toleran (urutan bebas, case-insensitive)
-// - LIST: sekarang support filter: q, unit_id, bulan, tahun, kebun_label, nama_bahan, jenis_pekerjaan
+// pemakaian_crud.php
+// LIST: Semua Role boleh. STORE: Admin & Staf. UPDATE/DELETE: Hanya Admin.
 
 session_start();
 header('Content-Type: application/json');
 
+// 1. Cek Login
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
   echo json_encode(['success'=>false,'message'=>'Akses ditolak. Silakan login.']); exit;
 }
+
+// 2. Cek Method & CSRF
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
   echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit;
 }
@@ -17,12 +18,15 @@ if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_PO
   echo json_encode(['success'=>false,'message'=>'Token keamanan tidak valid. Refresh halaman.']); exit;
 }
 
+// 3. Ambil Role
+$role = $_SESSION['user_role'] ?? 'viewer';
+
 require_once '../config/database.php';
 
 $bulanList = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
 function s($k){ return trim((string)($_POST[$k] ?? '')); }
 function f($k){ $v = $_POST[$k] ?? null; if ($v===''||$v===null) return null; return is_numeric($v) ? (float)$v : null; }
-function validYear($y){ return preg_match('/^(19[7-9]\d|20\d{2}|2100)$/',$y); } // 1970..2100
+function validYear($y){ return preg_match('/^(19[7-9]\d|20\d{2}|2100)$/',$y); } 
 
 // ===================== Tag Helpers =====================
 function extract_tag_anywhere($ket, $label){
@@ -52,15 +56,15 @@ try {
   $conn = $db->getConnection();
   $action = $_POST['action'] ?? '';
 
-  // ===== LIST
+  // ===== LIST (SEMUA ROLE)
   if ($action === 'list') {
     $q             = s('q');
     $unit_id       = (int)($_POST['unit_id'] ?? 0);
     $bulan         = s('bulan');
-    $tahunRaw      = s('tahun');              // jangan paksa filter kalau kosong
-    $kebun_lblF    = s('kebun_label');        // optional via tag
-    $nama_bahanF   = s('nama_bahan');         // NEW
-    $jenis_pekerF  = s('jenis_pekerjaan');    // NEW
+    $tahunRaw      = s('tahun');             
+    $kebun_lblF    = s('kebun_label');        
+    $nama_bahanF   = s('nama_bahan');         
+    $jenis_pekerF  = s('jenis_pekerjaan');    
 
     $sql = "SELECT p.*, u.nama_unit AS unit_nama
             FROM pemakaian_bahan_kimia p
@@ -80,20 +84,16 @@ try {
       $sql .= " AND p.bulan = :bln"; $bind[':bln'] = $bulan;
     }
     if ($tahunRaw !== '') {
-      // validasi tahun; jika tidak valid, kembalikan error ringan
       if (!validYear($tahunRaw)) {
         echo json_encode(['success'=>false,'message'=>'Filter tahun tidak valid.']); exit;
       }
       $sql .= " AND p.tahun = :thn"; $bind[':thn'] = $tahunRaw;
     }
     if ($kebun_lblF !== '') {
-      // Karena kita prefix tag di depan keterangan
       $sql .= " AND p.keterangan LIKE :kbntag";
       $bind[':kbntag'] = "[Kebun: ".$kebun_lblF."]%";
     }
-    // ===== NEW FILTERS =====
     if ($nama_bahanF !== '') {
-      // exact match (dari dropdown master), gunakan LIKE kalau ingin partial
       $sql .= " AND p.nama_bahan = :nbF";
       $bind[':nbF'] = $nama_bahanF;
     }
@@ -110,7 +110,7 @@ try {
     $stmt->execute($bind);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-    // Parse kebun_label & fisik_label dari keterangan; urutan tag bebas
+    // Parse kebun_label & fisik_label
     foreach ($rows as &$r) {
       $ketRaw = (string)($r['keterangan'] ?? '');
       list($kebun, $rest)  = extract_kebun_from_ket($ketRaw);
@@ -129,8 +129,14 @@ try {
     echo json_encode(['success'=>true,'data'=>$rows]); exit;
   }
 
-  // ===== STORE
+  // ===== STORE (ADMIN & STAF)
   if ($action === 'store' || $action === 'create') {
+    
+    // Validasi Role
+    if ($role !== 'admin' && $role !== 'staf') {
+        echo json_encode(['success'=>false,'message'=>'Anda tidak memiliki izin untuk menambah data.']); exit;
+    }
+
     $errors = [];
     $no_dokumen = s('no_dokumen');
     $unit_id    = (int)($_POST['unit_id'] ?? 0);
@@ -152,7 +158,6 @@ try {
     if ($jenis==='')        $errors[]='Jenis pekerjaan wajib dipilih.';
     if ($diminta<0 || $fisik<0) $errors[]='Jumlah tidak boleh negatif.';
 
-    // upload dokumen (opsional)
     $path = null; $orig = null;
     if (!empty($_FILES['dokumen']) && $_FILES['dokumen']['error'] !== UPLOAD_ERR_NO_FILE) {
       if ($_FILES['dokumen']['error'] !== UPLOAD_ERR_OK) $errors[]='Gagal upload dokumen.';
@@ -186,8 +191,14 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data pemakaian berhasil ditambahkan.']); exit;
   }
 
-  // ===== UPDATE
+  // ===== UPDATE (HANYA ADMIN)
   if ($action === 'update') {
+    
+    // Validasi Role
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false,'message'=>'Hanya Admin yang boleh mengubah data.']); exit;
+    }
+
     $id = (int)($_POST['id'] ?? 0);
     if ($id<=0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
 
@@ -212,7 +223,6 @@ try {
     if ($jenis==='')        $errors[]='Jenis pekerjaan wajib dipilih.';
     if ($diminta<0 || $fisik<0) $errors[]='Jumlah tidak boleh negatif.';
 
-    // file baru?
     $path = null; $orig = null; $addSet = '';
     if (!empty($_FILES['dokumen']) && $_FILES['dokumen']['error'] !== UPLOAD_ERR_NO_FILE) {
       if ($_FILES['dokumen']['error'] !== UPLOAD_ERR_OK) $errors[]='Gagal upload dokumen.';
@@ -250,8 +260,14 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data pemakaian berhasil diperbarui.']); exit;
   }
 
-  // ===== DELETE
+  // ===== DELETE (HANYA ADMIN)
   if ($action === 'delete') {
+    
+    // Validasi Role
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false,'message'=>'Hanya Admin yang boleh menghapus data.']); exit;
+    }
+
     $id = (int)($_POST['id'] ?? 0);
     if ($id<=0) { echo json_encode(['success'=>false,'message'=>'ID tidak valid.']); exit; }
     $stmt = $conn->prepare("DELETE FROM pemakaian_bahan_kimia WHERE id=:id");

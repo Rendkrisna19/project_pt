@@ -1,12 +1,21 @@
 <?php
-// admin/lm_biaya.php
-// MODIFIKASI: Grouping per Unit + Perbaikan Deteksi Pupuk
+// lm_biaya.php — Modifikasi Full: Role Access (Viewer/Staf/Admin) + Sticky Header & Grouping
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf = ($userRole === 'staf');
+// --- MODIFIKASI PERMISSION LOGIC ---
+$userRole = $_SESSION['user_role'] ?? 'viewer'; // Default ke viewer jika error
+
+// Definisi Role Boolean
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+// Definisi Hak Akses
+$canInput  = ($isAdmin || $isStaf); // Admin & Staf boleh input
+$canAction = ($isAdmin);            // Hanya Admin boleh Edit/Hapus
+// -----------------------------------
 
 if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 $CSRF = $_SESSION['csrf_token'];
@@ -45,7 +54,7 @@ $tahun    = $_GET['tahun'] ?? $tahunNow;
 $bulan    = $_GET['bulan'] ?? 'Semua Bulan';
 
 // Parameter Paging
-$per_page = (int)($_GET['per_page'] ?? 100); // Default diperbanyak agar grouping terlihat
+$per_page = (int)($_GET['per_page'] ?? 100); 
 if (!in_array($per_page,[10,15,20,25,50,100,200],true)) $per_page = 100;
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $offset = ($page-1)*$per_page;
@@ -108,18 +117,14 @@ $st->bindValue(':off',$offset,PDO::PARAM_INT);
 $st->execute();
 $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
-$fromRow = $total_rows ? $offset+1 : 0;
-$toRow   = min($offset+$per_page,$total_rows);
-
 // --- 4. DATA GROUPING & CALCULATION ---
 $groupedData = [];
-$sumAnggaran = 0; $sumRealisasi = 0; // Total Incl
-$pupukAng = 0;    $pupukReal = 0;    // Total Pupuk
+$sumAnggaran = 0; $sumRealisasi = 0; 
+$pupukAng = 0;    $pupukReal = 0;    
 
 foreach($rows as $r){
     $unitName = $r['nama_unit'] ?? 'Tanpa Unit';
     
-    // Siapkan data untuk view
     $ang = (float)$r['rencana_bi']; 
     $rea = (float)$r['realisasi_bi'];
     $diff = $rea - $ang;
@@ -130,30 +135,24 @@ foreach($rows as $r){
     $r['val_diff'] = $diff;
     $r['val_pct'] = $pct;
 
-    // Masukkan ke Grouping
     $groupedData[$unitName][] = $r;
 
-    // --- HITUNG GLOBAL INCL ---
     $sumAnggaran  += $ang; 
     $sumRealisasi += $rea;
 
-    // --- HITUNG PUPUK (DETEKSI KATA KUNCI) ---
-    // Pastikan kata kunci "pupuk" atau "pemupukan" ada di Uraian atau Alokasi
     $textCheck = strtolower(($r['alokasi']??'').' '.($r['uraian_pekerjaan']??''));
     if (strpos($textCheck, 'pupuk') !== false || strpos($textCheck, 'pemupukan') !== false || strpos($textCheck, 'fertilizer') !== false) {
         $pupukAng  += $ang;
         $pupukReal += $rea;
-        $r['is_pupuk'] = true; // Flag untuk debug view
+        $r['is_pupuk'] = true; 
     } else {
         $r['is_pupuk'] = false;
     }
 }
 
-// Hitung Exclusive
 $exclAng  = $sumAnggaran - $pupukAng;
 $exclReal = $sumRealisasi - $pupukReal;
 
-// Hitung HPP
 $hppInclAng = ($vol_ang > 0) ? ($sumAnggaran / $vol_ang) : 0;
 $hppInclReal= ($vol_real > 0)? ($sumRealisasi / $vol_real) : 0;
 $hppExclAng = ($vol_ang > 0) ? ($exclAng / $vol_ang) : 0;
@@ -176,7 +175,6 @@ include_once '../layouts/header.php';
   }
   table.custom-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
   
-  /* Header */
   table.custom-table thead th {
     background-color: #0097e6; color: #fff; text-transform: uppercase; font-size: 0.75rem;
     font-weight: 700; padding: 0.75rem; text-align: left; border-right: 1px solid rgba(255,255,255,0.2);
@@ -188,20 +186,16 @@ include_once '../layouts/header.php';
   }
   table.custom-table tbody tr:hover { background-color: #f8fafc; }
 
-  /* Group Header (Unit) */
   .group-header { background-color: #e0f2fe; color: #0284c7; font-weight: bold; border-top: 2px solid #bae6fd; }
   .group-header td { padding: 0.75rem; font-size: 0.9rem; }
 
-  /* Footer */
   table.custom-table tfoot td { background-color: #f1f5f9; font-weight: bold; padding: 0.75rem; border-top: 2px solid #e2e8f0; }
   .bg-hpp { background-color: #86efac !important; color: #000 !important; }
   .bg-vol { background-color: #e2e8f0 !important; font-weight: bold; font-style: italic; }
 
-  /* Colors */
   .text-red-custom { color: #dc2626; font-weight: 600; }
   .text-green-custom { color: #16a34a; font-weight: 600; }
   
-  /* Filter Styles */
   .filter-label { display: block; font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 0.25rem; }
   .filter-input { width: 100%; border: 1px solid #cbd5e1; border-radius: 0.375rem; padding: 0.5rem; font-size: 0.875rem; outline: none; }
   .filter-input:focus { border-color: #0097e6; box-shadow: 0 0 0 2px rgba(0, 151, 230, 0.1); }
@@ -211,7 +205,7 @@ include_once '../layouts/header.php';
   
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold text-gray-800">LM Biaya (Grouping per Unit)</h1>
-    <?php if (!$isStaf): ?>
+    <?php if ($canInput): ?>
       <button id="btn-add" class="px-4 py-2 bg-[#0097e6] text-white rounded-md hover:bg-[#0086cc] flex items-center gap-2 shadow-sm transition font-medium text-sm">
           <i class="ti ti-plus"></i> Tambah
       </button>
@@ -285,7 +279,7 @@ include_once '../layouts/header.php';
           <th class="text-right">Realisasi</th>
           <th class="text-right">+/- Biaya</th>
           <th class="text-center">%</th>
-          <?php if (!$isStaf): ?><th class="text-center">Aksi</th><?php endif; ?>
+          <?php if ($canAction): ?><th class="text-center">Aksi</th><?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -299,16 +293,16 @@ include_once '../layouts/header.php';
              <td class="text-right"><?= number_format($vol_real) ?></td>
              <td class="text-right"><?= number_format($diffVol) ?></td>
              <td class="text-center"><?= is_null($pctVol)?'-':number_format($pctVol,2).'%' ?></td>
-             <?php if (!$isStaf): ?><td></td><?php endif; ?>
+             <?php if ($canAction): ?><td></td><?php endif; ?>
         </tr>
 
         <?php if (!$groupedData): ?>
-          <tr><td colspan="12" class="text-center py-8 text-gray-500">Data tidak ditemukan.</td></tr>
+          <tr><td colspan="<?= ($canAction ? 11 : 10) + ($hasKebun ? 1 : 0) ?>" class="text-center py-8 text-gray-500">Data tidak ditemukan.</td></tr>
         <?php else: ?>
           <?php foreach ($groupedData as $unitName => $items): ?>
             
             <tr class="group-header">
-                <td colspan="<?= ($hasKebun?11:10) + (!$isStaf?1:0) ?>">
+                <td colspan="<?= ($hasKebun?10:9) + ($canAction?1:0) ?>">
                     <i class="ti ti-folder"></i> Unit: <?= htmlspecialchars($unitName) ?>
                 </td>
             </tr>
@@ -334,7 +328,7 @@ include_once '../layouts/header.php';
                 <td class="text-right <?= $d<0 ? 'text-green-custom':'text-red-custom' ?>"><?= number_format($d, 2) ?></td>
                 <td class="text-center <?= $pctClass ?>"><?= is_null($p)?'-':number_format($p,2).'%' ?></td>
                 
-                <?php if (!$isStaf): ?>
+                <?php if ($canAction): ?>
                 <td class="text-center">
                   <div class="flex items-center justify-center gap-2">
                     <button class="btn-edit text-[#0097e6] hover:text-blue-800 transition" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES) ?>'><i class="ti ti-pencil text-lg"></i></button>
@@ -356,7 +350,7 @@ include_once '../layouts/header.php';
             <td class="text-right"><?= number_format($sumRealisasi,2) ?></td>
             <td class="text-right"><?= number_format($dInc,2) ?></td>
             <td class="text-center"><?= is_null($pInc)?'-':number_format($pInc,2).'%' ?></td>
-            <?php if (!$isStaf): ?><td></td><?php endif; ?>
+            <?php if ($canAction): ?><td></td><?php endif; ?>
           </tr>
           
           <?php list($dExc, $pExc) = $calcDiff($exclReal, $exclAng); ?>
@@ -366,7 +360,7 @@ include_once '../layouts/header.php';
             <td class="text-right"><?= number_format($exclReal,2) ?></td>
             <td class="text-right"><?= number_format($dExc,2) ?></td>
             <td class="text-center"><?= is_null($pExc)?'-':number_format($pExc,2).'%' ?></td>
-            <?php if (!$isStaf): ?><td></td><?php endif; ?>
+            <?php if ($canAction): ?><td></td><?php endif; ?>
           </tr>
 
           <?php list($dHppI, $pHppI) = $calcDiff($hppInclReal, $hppInclAng); ?>
@@ -376,7 +370,7 @@ include_once '../layouts/header.php';
             <td class="text-right"><?= number_format($hppInclReal,2) ?></td>
             <td class="text-right"><?= number_format($dHppI,2) ?></td>
             <td class="text-center"><?= is_null($pHppI)?'-':number_format($pHppI,2).'%' ?></td>
-            <?php if (!$isStaf): ?><td></td><?php endif; ?>
+            <?php if ($canAction): ?><td></td><?php endif; ?>
           </tr>
 
           <?php list($dHppE, $pHppE) = $calcDiff($hppExclReal, $hppExclAng); ?>
@@ -386,7 +380,7 @@ include_once '../layouts/header.php';
             <td class="text-right"><?= number_format($hppExclReal,2) ?></td>
             <td class="text-right"><?= number_format($dHppE,2) ?></td>
             <td class="text-center"><?= is_null($pHppE)?'-':number_format($pHppE,2).'%' ?></td>
-            <?php if (!$isStaf): ?><td></td><?php endif; ?>
+            <?php if ($canAction): ?><td></td><?php endif; ?>
           </tr>
       </tfoot>
     </table>
@@ -402,7 +396,7 @@ include_once '../layouts/header.php';
 
 </div>
 
-<?php if (!$isStaf): ?>
+<?php if ($canInput): ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
   <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl transform scale-100 transition-all">
      <div class="flex justify-between items-center mb-5 border-b pb-3">
@@ -470,23 +464,32 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 document.addEventListener('DOMContentLoaded', ()=>{
+  // Pass permission to JS
+  const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; // Admin only
+
   const $=s=>document.querySelector(s);
-  <?php if (!$isStaf): ?>
+
+  // Hanya jalankan logic modal jika user punya hak input
+  <?php if ($canInput): ?>
   const modal=$('#crud-modal'), open=()=>{modal.classList.remove('hidden');modal.classList.add('flex')}, close=()=>{modal.classList.add('hidden');modal.classList.remove('flex')};
   
-  $('#btn-add').onclick=()=>{ 
-      $('#crud-form').reset(); 
-      $('#form-action').value='store'; 
-      $('#form-id').value=''; 
-      $('#modal-title').innerText='Tambah Data Biaya';
-      open(); 
-  };
+  if($('#btn-add')) {
+      $('#btn-add').onclick=()=>{ 
+          $('#crud-form').reset(); 
+          $('#form-action').value='store'; 
+          $('#form-id').value=''; 
+          $('#modal-title').innerText='Tambah Data Biaya';
+          open(); 
+      };
+  }
   $('#btn-close').onclick=close; 
   $('#btn-cancel').onclick=close;
   
   document.body.addEventListener('click',e=>{
     const btnEdit=e.target.closest('.btn-edit'), btnDel=e.target.closest('.btn-delete');
-    if(btnEdit){
+    
+    // Edit & Delete HANYA bisa dilakukan jika CAN_ACTION (Admin)
+    if(btnEdit && CAN_ACTION){
         const r=JSON.parse(btnEdit.dataset.json); 
         $('#form-action').value='update'; $('#form-id').value=r.id;
         $('#modal-title').innerText='Edit Data Biaya';
@@ -495,7 +498,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if($('#kebun_id')) $('#kebun_id').value=r.kebun_id||'';
         open();
     }
-    if(btnDel){
+    
+    if(btnDel && CAN_ACTION){
         Swal.fire({
             title:'Hapus Data?', text: "Data tidak bisa dikembalikan!", icon:'warning',
             showCancelButton:true, confirmButtonColor:'#d33', cancelButtonColor:'#3085d6',

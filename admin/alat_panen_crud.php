@@ -1,13 +1,16 @@
 <?php
 // pages/alat_panen_crud.php
-// MODIFIKASI FULL: Support Relasi & Filtering Jenis Alat Panen
+// MODIFIKASI FULL: Support Relasi & Filtering Jenis Alat Panen + Hak Akses Role
 
 session_start();
 header('Content-Type: application/json');
 
+// 1. Cek Login
 if(!isset($_SESSION['loggedin']) || $_SESSION['loggedin']!==true){
   echo json_encode(['success'=>false,'message'=>'Silakan login.']); exit;
 }
+
+// 2. Cek Method & CSRF
 if($_SERVER['REQUEST_METHOD']!=='POST'){
   echo json_encode(['success'=>false,'message'=>'Metode request tidak valid.']); exit;
 }
@@ -15,13 +18,16 @@ if(empty($_SESSION['csrf_token']) || $_SESSION['csrf_token']!==($_POST['csrf_tok
   echo json_encode(['success'=>false,'message'=>'CSRF token tidak valid.']); exit;
 }
 
+// 3. Ambil Role
+$role = $_SESSION['user_role'] ?? 'viewer';
+
 require_once '../config/database.php';
 $db = new Database(); 
 $conn = $db->getConnection();
 $act = $_POST['action'] ?? '';
 
 try {
-  // --- ACTION: LIST (READ DATA) ---
+  // --- ACTION: LIST (READ DATA) - Semua Role Boleh ---
   if ($act === 'list') {
     $w=[]; $p=[];
     
@@ -58,6 +64,20 @@ try {
 
   // --- ACTION: STORE & UPDATE ---
   if (in_array($act, ['store','update'], true)) {
+    
+    // Validasi Hak Akses
+    if ($act === 'store') {
+        // Create: Admin & Staf Boleh
+        if ($role !== 'admin' && $role !== 'staf') {
+            echo json_encode(['success'=>false,'message'=>'Anda tidak memiliki izin untuk menambah data.']); exit;
+        }
+    } elseif ($act === 'update') {
+        // Update: HANYA Admin Boleh
+        if ($role !== 'admin') {
+            echo json_encode(['success'=>false,'message'=>'Hanya Admin yang boleh mengubah data.']); exit;
+        }
+    }
+
     // Ambil & sanitasi input
     $bulan      = $_POST['bulan'] ?? '';
     $tahun      = (int)($_POST['tahun'] ?? 0);
@@ -125,7 +145,12 @@ try {
     }
   }
 
+  // --- ACTION: DELETE - HANYA Admin ---
   if ($act === 'delete') {
+    if ($role !== 'admin') {
+        echo json_encode(['success'=>false,'message'=>'Hanya Admin yang boleh menghapus data.']); exit;
+    }
+
     $id=(int)($_POST['id'] ?? 0);
     if ($id<=0){ echo json_encode(['success'=>false,'message'=>'ID tidak valid']); exit; }
     $conn->prepare("DELETE FROM alat_panen WHERE id=:id")->execute([':id'=>$id]);
