@@ -153,7 +153,7 @@ include_once '../layouts/header.php';
     .sub-campuran { background-color: #faf5ff; color: #7e22ce; }
 
     /* Inputs & Helper */
-    .inp-cell { width: 100%; text-align: right; background: transparent; border: 1px solid transparent; outline: none; font-family: monospace; font-size: 11px; color: #334155; }
+    .inp-cell { width: 100%; text-align: right; background: transparent; border: 1px solid transparent; outline: none; font-family: monospace; font-size: 13px; color: #334155; }
     .inp-cell:hover, .inp-cell:focus { background: #cffafe; border-radius: 2px; }
     
     .sunday-col { background-color: #fff1f2 !important; }

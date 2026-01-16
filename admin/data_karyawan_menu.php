@@ -1,4 +1,6 @@
-<?php include_once '../layouts/header.php'; ?>
+<?php include_once '../layouts/header.php';
+$currentPage = 'data_karyawan';
+ ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
