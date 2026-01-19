@@ -1,4 +1,4 @@
-<!-- TAB: DATA KARYAWAN -->
+<!-- TAB: DATA KARYAWAN - FIXED -->
 <div class="space-y-4">
     <div class="flex justify-between items-center">
         <div class="flex gap-2">
@@ -62,6 +62,7 @@
                 <ol class="list-decimal ml-4 mt-1 space-y-1">
                     <li>Download <a href="cetak/template_karyawan.php" class="font-bold underline text-green-700 hover:text-green-900">Template Excel Terbaru</a>.</li>
                     <li>Isi data tanpa mengubah urutan kolom.</li>
+                    <li><strong>Kolom Gender:</strong> Isi dengan "L" untuk Laki-laki atau "P" untuk Perempuan.</li>
                     <li>Simpan file (Format <strong>.xlsx</strong>, <strong>.xls</strong>, atau <strong>.csv</strong>).</li>
                     <li>Upload file tersebut di bawah ini.</li>
                 </ol>
@@ -114,9 +115,6 @@
                     
                     <div><label class="block text-xs font-bold text-gray-500 uppercase">Old Pers. No</label>
                     <input type="text" name="old_pers_no" id="old_pers_no" class="w-full border p-2 rounded text-sm"></div>
-
-                    <div><label class="block text-xs font-bold text-gray-500 uppercase">No Urut</label>
-                    <input type="number" name="no_urut" id="no_urut" class="w-full border p-2 rounded text-sm"></div>
                 </div>
 
                 <!-- COLUMN 2: Personal Data -->
@@ -145,6 +143,9 @@
                             <option value="Konghucu">Konghucu</option>
                         </select></div>
                     </div>
+
+                    <div><label class="block text-xs font-bold text-gray-500 uppercase">Tempat Lahir</label>
+                    <input type="text" name="tempat_lahir" id="tempat_lahir" class="w-full border p-2 rounded text-sm"></div>
 
                     <div><label class="block text-xs font-bold text-gray-500 uppercase">Tanggal Lahir</label>
                     <input type="date" name="tgl_lahir" id="tgl_lahir" class="w-full border p-2 rounded text-sm"></div>
@@ -235,7 +236,6 @@
 <?php endif; ?>
 
 <script>
-// Logic Modal Import
 function openImportModal(){ 
     document.getElementById('import-modal').classList.remove('hidden'); 
     document.getElementById('import-modal').classList.add('flex'); 
@@ -253,7 +253,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const tbody = document.getElementById('tbody-data');
     const q     = document.getElementById('q');
 
-    // --- FETCH DATA ---
     async function loadData() {
         const query = q.value;
         tbody.innerHTML = '<tr><td colspan="17" class="text-center py-10">Memuat...</td></tr>';
@@ -320,7 +319,6 @@ document.addEventListener('DOMContentLoaded', () => {
     q.addEventListener('input', () => { clearTimeout(window.t); window.t = setTimeout(loadData, 300); });
     loadData();
 
-    // --- FORM IMPORT ---
     document.getElementById('form-import').addEventListener('submit', async (e) => {
         e.preventDefault();
         const fd = new FormData(e.target);
@@ -349,7 +347,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- CRUD LOGIC ---
     if (CAN_INPUT) {
         const modal = document.getElementById('crud-modal');
         const form = document.getElementById('crud-form');
@@ -395,7 +392,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('form-action').value = 'update';
             document.getElementById('form-id').value = r.id;
             
-            const fields = ['sap_id','old_pers_no','no_urut','nama_karyawan','nik_ktp','gender','tgl_lahir',
+            // Field list sesuai form
+            const fields = ['sap_id','old_pers_no','nama_karyawan','nik_ktp','gender','tempat_lahir','tgl_lahir',
              'person_grade','phdp_golongan','status_keluarga','jabatan_sap','jabatan_real','afdeling',
              'status_karyawan','tmt_kerja','tmt_mbt','tmt_pensiun','tax_id','bpjs_id','jamsostek_id',
              'nama_bank','no_rekening','nama_pemilik_rekening','no_hp','agama','npwp'];

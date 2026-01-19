@@ -1,6 +1,6 @@
 <?php
 // pages/data_karyawan_crud.php
-// FIXED VERSION: Mapping Frontend Names <-> Database Columns & Import Fixes
+// FINAL FIXED VERSION: Correct Column Mapping & Gender Fix
 
 session_start();
 header('Content-Type: application/json');
@@ -46,7 +46,6 @@ try {
         $sql = "SELECT * FROM data_karyawan WHERE 1=1";
         $params = [];
         if ($q) {
-            // Menggunakan nama kolom DATABASE (id_sap, nama_lengkap)
             $sql .= " AND (nama_lengkap LIKE :q OR id_sap LIKE :q OR jabatan_real LIKE :q OR nik_ktp LIKE :q)";
             $params[':q'] = "%$q%";
         }
@@ -54,15 +53,15 @@ try {
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         
-        // Mapping Data untuk Frontend (DB Col -> Frontend Name)
-        // Agar JS editData() bisa membaca field dengan benar
+        // Mapping untuk frontend agar JS bisa baca field dengan benar
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
         $mappedData = array_map(function($row) {
-            // Kita tambahkan alias agar frontend JS yang pakai 'sap_id' atau 'nama_karyawan' tetap jalan
+            // Tambahkan alias untuk kompatibilitas frontend
             $row['sap_id'] = $row['id_sap'];
             $row['nama_karyawan'] = $row['nama_lengkap'];
             $row['tgl_lahir'] = $row['tanggal_lahir'];
             $row['status_keluarga'] = $row['s_kel'];
+            $row['foto_karyawan'] = $row['foto_profil'];
             return $row;
         }, $data);
 
@@ -70,7 +69,49 @@ try {
         exit;
     }
 
-    // IMPORT EXCEL FIX
+    // LIST MBT
+    if ($action === 'list_mbt') {
+        $q = isset($_POST['q']) ? trim($_POST['q']) : '';
+        $sql = "SELECT *, DATEDIFF(tmt_mbt, CURDATE()) as sisa_hari 
+                FROM data_karyawan 
+                WHERE tmt_mbt IS NOT NULL 
+                AND tmt_mbt > CURDATE() 
+                AND tmt_mbt <= DATE_ADD(CURDATE(), INTERVAL 6 MONTH)";
+        $params = [];
+        if ($q) {
+            $sql .= " AND (nama_lengkap LIKE :q OR jabatan_real LIKE :q)";
+            $params[':q'] = "%$q%";
+        }
+        $sql .= " ORDER BY tmt_mbt ASC";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute($params);
+        
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mappedData = array_map(function($row) {
+            $row['sap_id'] = $row['id_sap'];
+            $row['nama_karyawan'] = $row['nama_lengkap'];
+            $row['foto_karyawan'] = $row['foto_profil'];
+            return $row;
+        }, $data);
+        
+        echo json_encode(['success'=>true, 'data'=>$mappedData]);
+        exit;
+    }
+
+    // LIST Karyawan Simple (untuk dropdown)
+    if ($action === 'list_karyawan_simple') {
+        $stmt = $conn->query("SELECT id, id_sap, nama_lengkap FROM data_karyawan ORDER BY nama_lengkap ASC");
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mappedData = array_map(function($row) {
+            $row['sap_id'] = $row['id_sap'];
+            $row['nama_karyawan'] = $row['nama_lengkap'];
+            return $row;
+        }, $data);
+        echo json_encode(['success'=>true, 'data'=>$mappedData]);
+        exit;
+    }
+
+    // IMPORT EXCEL - FIXED
     if ($action === 'import_excel_lib') {
         if (empty($_FILES['file_excel']['name'])) {
             echo json_encode(['success'=>false, 'message'=>'File tidak ditemukan']); exit;
@@ -86,7 +127,7 @@ try {
             $inserted = 0;
             $rowIdx = 0;
 
-            // INSERT QUERY (Menggunakan nama kolom DATABASE)
+            // Kolom sesuai urutan database Anda
             $stmtInsert = $conn->prepare("INSERT INTO data_karyawan 
                 (id_sap, old_pers_no, nama_lengkap, nik_ktp, gender, tempat_lahir, tanggal_lahir, 
                  person_grade, phdp_golongan, s_kel, jabatan_sap, jabatan_real, 
@@ -102,7 +143,7 @@ try {
 
             foreach ($rows as $row) {
                 $rowIdx++;
-                if ($rowIdx == 1 || empty(trim($row['B']))) continue; 
+                if ($rowIdx == 1 || empty(trim($row['A']))) continue; // Skip header & empty SAP
 
                 $fmtDate = function($val) {
                     if (empty($val)) return null;
@@ -110,37 +151,41 @@ try {
                     return date('Y-m-d', strtotime(str_replace('/','-', $val)));
                 };
 
-                // FIX GENDER: Ambil huruf pertama saja & uppercase (mengatasi 'Data truncated')
-                $rawGender = trim($row['F']);
-                $genderFix = !empty($rawGender) ? strtoupper(substr($rawGender, 0, 1)) : null;
+                // FIX GENDER: Ambil huruf pertama & uppercase
+                $rawGender = trim($row['E']);
+                $genderFix = '';
+                if (!empty($rawGender)) {
+                    $first = strtoupper(substr($rawGender, 0, 1));
+                    $genderFix = ($first === 'L' || $first === 'P') ? $first : '';
+                }
 
                 $vals = [
-                    trim($row['B']),  // id_sap
-                    trim($row['C']),  // old_pers_no
-                    trim($row['D']),  // nama_lengkap
-                    trim($row['E']),  // nik_ktp
-                    $genderFix,       // gender (FIXED)
-                    trim($row['G']),  // tempat_lahir
-                    $fmtDate($row['H']), // tanggal_lahir
-                    trim($row['I']),  // person_grade
-                    trim($row['J']),  // phdp_golongan
-                    trim($row['K']),  // s_kel
-                    trim($row['L']),  // jabatan_sap
-                    trim($row['M']),  // jabatan_real
-                    trim($row['N']),  // afdeling
-                    trim($row['O']),  // status_karyawan
-                    $fmtDate($row['P']), // tmt_kerja
-                    $fmtDate($row['Q']), // tmt_mbt
-                    $fmtDate($row['R']), // tmt_pensiun
-                    trim($row['S']),  // tax_id
-                    trim($row['T']),  // bpjs_id
-                    trim($row['U']),  // jamsostek_id
-                    trim($row['V']),  // nama_bank
-                    trim($row['W']),  // no_rekening
-                    trim($row['X']),  // nama_pemilik_rekening
-                    trim($row['Y']),  // no_hp
-                    trim($row['Z']),  // agama
-                    trim($row['AA']), // npwp
+                    trim($row['A']),  // id_sap
+                    trim($row['B']),  // old_pers_no
+                    trim($row['C']),  // nama_lengkap
+                    trim($row['D']),  // nik_ktp
+                    $genderFix,       // gender (L/P/empty)
+                    trim($row['F']),  // tempat_lahir
+                    $fmtDate($row['G']), // tanggal_lahir
+                    trim($row['H']),  // person_grade
+                    trim($row['I']),  // phdp_golongan
+                    trim($row['J']),  // s_kel
+                    trim($row['K']),  // jabatan_sap
+                    trim($row['L']),  // jabatan_real
+                    trim($row['M']),  // afdeling
+                    trim($row['N']),  // status_karyawan
+                    $fmtDate($row['O']), // tmt_kerja
+                    $fmtDate($row['P']), // tmt_mbt
+                    $fmtDate($row['Q']), // tmt_pensiun
+                    trim($row['R']),  // tax_id
+                    trim($row['S']),  // bpjs_id
+                    trim($row['T']),  // jamsostek_id
+                    trim($row['U']),  // nama_bank
+                    trim($row['V']),  // no_rekening
+                    trim($row['W']),  // nama_pemilik_rekening
+                    trim($row['X']),  // no_hp
+                    trim($row['Y']),  // agama
+                    trim($row['Z']),  // npwp
                 ];
 
                 $stmtInsert->execute($vals);
@@ -153,22 +198,22 @@ try {
         exit;
     }
 
-    // STORE / UPDATE KARYAWAN (FIXED MAPPING)
+    // STORE / UPDATE KARYAWAN - FIXED MAPPING
     if ($action === 'store' || $action === 'update') {
         $id = $_POST['id'] ?? null;
         
-        // 1. Definisikan Mapping: 'name_di_form_html' => 'nama_kolom_database'
-        $map = [
-            'sap_id'            => 'id_sap',           // FIX: sap_id form -> id_sap db
+        // Mapping form field -> database column
+        $fieldMap = [
+            'sap_id'            => 'id_sap',
             'old_pers_no'       => 'old_pers_no',
-            'no_urut'           => 'no_urut',
-            'nama_karyawan'     => 'nama_lengkap',     // FIX: nama_karyawan form -> nama_lengkap db
+            'nama_karyawan'     => 'nama_lengkap',
             'nik_ktp'           => 'nik_ktp',
             'gender'            => 'gender',
-            'tgl_lahir'         => 'tanggal_lahir',    // FIX: tgl_lahir form -> tanggal_lahir db
+            'tempat_lahir'      => 'tempat_lahir',
+            'tgl_lahir'         => 'tanggal_lahir',
             'person_grade'      => 'person_grade',
             'phdp_golongan'     => 'phdp_golongan',
-            'status_keluarga'   => 's_kel',            // FIX: status_keluarga form -> s_kel db
+            'status_keluarga'   => 's_kel',
             'jabatan_sap'       => 'jabatan_sap',
             'jabatan_real'      => 'jabatan_real',
             'afdeling'          => 'afdeling',
@@ -187,24 +232,27 @@ try {
             'npwp'              => 'npwp'
         ];
 
-        // 2. Siapkan parameter query
         $params = [];
-        $insertCols = [];
-        $insertVals = [];
+        $dbCols = [];
+        $dbVals = [];
         $updateSets = [];
 
-        foreach ($map as $formName => $dbCol) {
-            // Ambil value dari POST, jika string kosong ubah jadi NULL
-            $val = isset($_POST[$formName]) && $_POST[$formName] !== '' ? $_POST[$formName] : null;
+        foreach ($fieldMap as $formField => $dbCol) {
+            $val = isset($_POST[$formField]) && $_POST[$formField] !== '' ? $_POST[$formField] : null;
+            
+            // FIX Gender validation
+            if ($formField === 'gender' && !empty($val)) {
+                $val = strtoupper(substr($val, 0, 1));
+                if ($val !== 'L' && $val !== 'P') $val = null;
+            }
             
             $params[":$dbCol"] = $val;
-            
-            $insertCols[] = $dbCol;
-            $insertVals[] = ":$dbCol";
+            $dbCols[] = $dbCol;
+            $dbVals[] = ":$dbCol";
             $updateSets[] = "$dbCol = :$dbCol";
         }
 
-        // 3. Handle Foto
+        // Handle Foto
         $foto_name = null;
         if (!empty($_FILES['foto_karyawan']['name'])) { 
             $dir = "../uploads/profil/";
@@ -212,16 +260,15 @@ try {
             $ext = pathinfo($_FILES['foto_karyawan']['name'], PATHINFO_EXTENSION);
             $foto_name = "KARYAWAN_" . time() . ".$ext";
             move_uploaded_file($_FILES['foto_karyawan']['tmp_name'], $dir . $foto_name);
-            
             $params[':foto'] = $foto_name;
         }
 
         if ($action === 'store') {
-            $colsStr = implode(',', $insertCols);
-            $valsStr = implode(',', $insertVals);
+            $colsStr = implode(',', $dbCols);
+            $valsStr = implode(',', $dbVals);
             
             if ($foto_name) {
-                $colsStr .= ",foto_profil"; // Pastikan kolom DB 'foto_profil'
+                $colsStr .= ",foto_profil";
                 $valsStr .= ",:foto";
             }
             $colsStr .= ",created_at,updated_at";
@@ -231,7 +278,7 @@ try {
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
 
-        } else { // Update
+        } else {
             if ($foto_name) {
                 $updateSets[] = "foto_profil = :foto";
             }
@@ -275,7 +322,15 @@ try {
         $sql .= " ORDER BY dk.nama_lengkap ASC";
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
-        echo json_encode(['success'=>true, 'data'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mappedData = array_map(function($row) {
+            $row['sap_id'] = $row['id_sap'];
+            $row['nama_karyawan'] = $row['nama_lengkap'];
+            return $row;
+        }, $data);
+        
+        echo json_encode(['success'=>true, 'data'=>$mappedData]);
         exit;
     }
 
@@ -325,7 +380,15 @@ try {
         $sql .= " ORDER BY dp.tanggal_sp DESC";
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
-        echo json_encode(['success'=>true, 'data'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $mappedData = array_map(function($row) {
+            $row['sap_id'] = $row['id_sap'];
+            $row['nama_karyawan'] = $row['nama_lengkap'];
+            return $row;
+        }, $data);
+        
+        echo json_encode(['success'=>true, 'data'=>$mappedData]);
         exit;
     }
 
