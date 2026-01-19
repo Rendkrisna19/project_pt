@@ -305,7 +305,7 @@ function closeProfileModal() {
     profileContent.classList.add('scale-95');
     setTimeout(() => {
         profileModal.classList.add('hidden');
-        profileModal.classList.remove('flex');
+        profileModal.classList.remove('flex');  
     }, 200); // Wait for transition
 }
 
