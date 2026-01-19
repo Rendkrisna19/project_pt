@@ -14,16 +14,16 @@ function navClass($key, $current) {
 }
 
 // Logika Dropdown (Array Menu)
-$PEM_KEYS    = ['pemeliharaan', 'pemeliharaan_tm', 'pemeliharaan_tu','pemeliharaan_tk', 'pemeliharaan_tbm1','pemeliharaan_tbm2','pemeliharaan_tbm3', 'pemeliharaan_pn','pemeliharaan_mn'];
+$PEM_KEYS    = ['pemeliharaan_tm', 'pemeliharaan_tu','pemeliharaan_tk', 'pemeliharaan_tbm1','pemeliharaan_tbm2','pemeliharaan_tbm3', 'pemeliharaan_pn','pemeliharaan_mn'];
 $GUDANG_KEYS = ['stok_gudang', 'alat_panen', 'stok_barang_gudang'];
 $LM_KEYS     = ['lm76', 'lm77', 'lm_biaya'];
-$SDM_KEYS    = ['data_karyawan']; // Array untuk Menu Baru
+$SDM_KEYS    = ['data_karyawan']; 
 
 // Cek apakah dropdown harus terbuka berdasarkan halaman aktif
 $isPemOpen    = in_array($currentPage, $PEM_KEYS);
 $isGudangOpen = in_array($currentPage, $GUDANG_KEYS);
 $isLmOpen     = in_array($currentPage, $LM_KEYS);
-$isSdmOpen    = in_array($currentPage, $SDM_KEYS); // Cek Menu Baru
+$isSdmOpen    = in_array($currentPage, $SDM_KEYS); 
 ?>
 
 <div x-show="sidebarOpen" 
@@ -173,9 +173,14 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS); // Cek Menu Baru
                 <div class="h-px bg-cyan-900/30 flex-1"></div>
             </div>
 
-            <a href="data_karyawan_menu.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('data_karyawan', $currentPage) ?>">
+            <a href="data_karyawan.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('data_karyawan', $currentPage) ?>">
                 <i data-lucide="briefcase" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='data_karyawan'?'text-white':'' ?>"></i>
                 <span>Data Karyawan</span>
+            </a>
+            
+            <a href="dashboard_hr.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('dashboard_hr', $currentPage) ?>">
+                <i data-lucide="users" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='dashboard_hr'?'text-white':'' ?>"></i>
+                <span>Dashboard HRD</span>
             </a>
 
             <div class="px-4 mt-6 mb-2 flex items-center gap-2">

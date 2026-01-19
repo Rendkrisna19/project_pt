@@ -8,8 +8,15 @@ if (empty($_SESSION['csrf_token'])) $_SESSION['csrf_token'] = bin2hex(random_byt
 $CSRF = $_SESSION['csrf_token'];
 
 // ===== ROLE =====
-$userRole = $_SESSION['user_role'] ?? 'staf';
-$isStaf   = ($userRole === 'staf');
+$userRole = $_SESSION['user_role'] ?? 'viewer';
+
+$isAdmin   = ($userRole === 'admin');
+$isStaf    = ($userRole === 'staf');
+$isViewer  = ($userRole === 'viewer');
+
+// Hak Akses
+$canInput  = ($isAdmin || $isStaf); // Admin & Staf Boleh Input
+$canAction = ($isAdmin);            // Hanya Admin Boleh Edit/Hapus
 
 require_once '../config/database.php';
 $db   = new Database();
@@ -105,7 +112,7 @@ if ($tab === 'angkutan') {
 
   // data
   $sql = "SELECT a.*, u.nama_unit AS unit_tujuan_nama, k.nama_kebun AS kebun_nama, 
-                  r.nama AS nama_rayon, g.nama AS nama_gudang, ket.keterangan AS nama_keterangan
+                 r.nama AS nama_rayon, g.nama AS nama_gudang, ket.keterangan AS nama_keterangan
           FROM angkutan_pupuk_organik a
           LEFT JOIN units u ON u.id = a.unit_tujuan_id
           LEFT JOIN md_kebun k ON k.id = a.kebun_id
@@ -275,9 +282,11 @@ include_once '../layouts/header.php';
             <i class="ti ti-file-type-pdf"></i> PDF
         </a>
         
+        <?php if ($canInput): ?>
         <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-900 flex items-center gap-2 shadow-sm transition ml-2 text-sm font-medium">
             <i class="ti ti-plus"></i> Tambah Data
         </button>
+        <?php endif; ?>
     </div>
   </div>
 
@@ -381,7 +390,7 @@ include_once '../layouts/header.php';
                 <th class="text-left" style="min-width:120px">Jenis Pupuk</th>
                 <th class="text-right" style="min-width:100px">Jumlah (Kg)</th>
                 <th class="text-left" style="min-width:150px">Keterangan</th>
-                <?php if (!$isStaf): ?><th class="text-center" style="min-width:100px">Aksi</th><?php endif; ?>
+                <?php if ($canAction): ?><th class="text-center" style="min-width:100px">Aksi</th><?php endif; ?>
             <?php else: ?>
                 <th class="text-left" style="min-width:80px">Tahun</th>
                 <th class="text-left" style="min-width:150px">Kebun</th>
@@ -394,23 +403,21 @@ include_once '../layouts/header.php';
                 <th class="text-left" style="min-width:120px">Jenis Pupuk</th>
                 <th class="text-right" style="min-width:80px">Dosis</th>
                 <th class="text-right" style="min-width:100px">Jumlah (Kg)</th>
-                <?php if (!$isStaf): ?><th class="text-center" style="min-width:100px">Aksi</th><?php endif; ?>
+                <?php if ($canAction): ?><th class="text-center" style="min-width:100px">Aksi</th><?php endif; ?>
             <?php endif; ?>
         </tr>
         </thead>
         <tbody class="text-gray-800">
         <?php 
-            // Inisialisasi Variabel Total
             $sumLuas = 0; 
             $sumDosis = 0; 
             $sumJumlah = 0;
         ?>
 
         <?php if (!$rows): ?>
-            <tr><td colspan="<?= $tab==='angkutan' ? ($isStaf?10:11) : ($isStaf?11:12) ?>" class="text-center py-10 text-gray-500 italic">Tidak ada data.</td></tr>
+            <tr><td colspan="<?= $tab==='angkutan' ? ($canAction?11:10) : ($canAction?12:11) ?>" class="text-center py-10 text-gray-500 italic">Tidak ada data.</td></tr>
         <?php else: foreach ($rows as $r): ?>
             <?php 
-                // Kalkulasi Total
                 if ($tab === 'angkutan') {
                     $sumJumlah += (float)$r['jumlah'];
                 } else {
@@ -422,7 +429,7 @@ include_once '../layouts/header.php';
             <tr class="hover:bg-blue-50 transition-colors">
             <?php if ($tab==='angkutan'): ?>
                 <td><?= date('Y', strtotime($r['tanggal'])) ?></td>
-                <td><?= htmlspecialchars($r['kebun_nama'] ?? '-') ?></td>
+                <td><?= htmlspecialchars($r['kebun_nama'] ?? ($r['kebun_kode'] ?? '-')) ?></td>
                 <td class="text-center"><?= htmlspecialchars($r['tanggal']) ?></td>
                 <td class="text-center"><?php $m=(int)date('n', strtotime($r['tanggal'])); echo $bulanList[$m] ?? $m; ?></td>
                 <td><?= htmlspecialchars($r['nama_rayon'] ?? '-') ?></td>
@@ -431,14 +438,16 @@ include_once '../layouts/header.php';
                 <td><?= htmlspecialchars($r['jenis_pupuk']) ?></td>
                 <td class="text-right font-mono"><?= number_format((float)$r['jumlah'],2) ?></td>
                 <td><?= htmlspecialchars($r['nama_keterangan'] ?? '-') ?></td>
-                <?php if (!$isStaf): ?>
+                
+                <?php if ($canAction): ?>
                 <td class="text-center">
-                    <div class="flex items-center justify-center gap-1">
+                    <div class="flex justify-center gap-1">
                         <button class="btn-icon text-cyan-600 hover:text-cyan-800 btn-edit" data-tab="angkutan" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'><i class="ti ti-pencil"></i></button>
                         <button class="btn-icon text-red-600 hover:text-red-800 btn-delete" data-tab="angkutan" data-id="<?= (int)$r['id'] ?>"><i class="ti ti-trash"></i></button>
                     </div>
                 </td>
                 <?php endif; ?>
+
             <?php else: ?>
                 <td><?= date('Y', strtotime($r['tanggal'])) ?></td>
                 <td><?= htmlspecialchars($r['kebun_nama'] ?? '-') ?></td>
@@ -451,7 +460,8 @@ include_once '../layouts/header.php';
                 <td><?= htmlspecialchars($r['jenis_pupuk']) ?></td>
                 <td class="text-right font-mono"><?= (isset($r['dosis']) && $r['dosis']!=='') ? number_format((float)$r['dosis'],2) : '-' ?></td>
                 <td class="text-right font-mono"><?= number_format((float)$r['jumlah'],2) ?></td>
-                <?php if (!$isStaf): ?>
+                
+                <?php if ($canAction): ?>
                 <td class="text-center">
                     <div class="flex items-center justify-center gap-1">
                         <button class="btn-icon text-cyan-600 hover:text-cyan-800 btn-edit" data-tab="menabur" data-json='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, "UTF-8") ?>'><i class="ti ti-pencil"></i></button>
@@ -470,16 +480,16 @@ include_once '../layouts/header.php';
                 <?php if ($tab === 'angkutan'): ?>
                     <td colspan="8" class="text-right pr-4 uppercase tracking-wide">Total</td>
                     <td class="text-right font-mono"><?= number_format($sumJumlah, 2) ?></td>
-                    <td colspan="<?= $isStaf ? 1 : 2 ?>"></td>
+                    <td colspan="<?= $canAction ? 2 : 1 ?>"></td>
                 <?php else: ?>
                     <td colspan="7" class="text-right pr-4 uppercase tracking-wide">Total</td>
                     <td class="text-right font-mono"><?= number_format($sumLuas, 2) ?></td>
                     <td></td> <td class="text-right font-mono"><?= number_format($sumDosis, 2) ?></td>
                     <td class="text-right font-mono"><?= number_format($sumJumlah, 2) ?></td>
-                    <?php if (!$isStaf): ?><td></td><?php endif; ?>
+                    <?php if ($canAction): ?><td></td><?php endif; ?>
                 <?php endif; ?>
             </tr>
-        </tfoot>
+        </footer>
         <?php endif; ?>
     </table>
   </div>
@@ -490,7 +500,6 @@ include_once '../layouts/header.php';
     </div>
     <div class="flex items-center gap-2">
         <?php 
-        // Helper link paging
         function page_url($p) {
             $params = $_GET; $params['page'] = $p; return '?' . http_build_query($params);
         }
@@ -502,8 +511,9 @@ include_once '../layouts/header.php';
   </div>
 </div>
 
+<?php if ($canInput): ?>
 <div id="crud-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-opacity">
-  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-3xl transform scale-100 transition-transform">
+  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto transform scale-100 transition-transform">
     <div class="flex items-center justify-between mb-6 border-b pb-4">
       <h3 id="modal-title" class="text-xl font-bold text-gray-900">Tambah Data</h3>
       <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600 transition">&times;</button>
@@ -517,242 +527,224 @@ include_once '../layouts/header.php';
 
       <div id="group-angkutan" class="<?= $tab==='angkutan' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
-            <select name="kebun_id" id="kebun_id_angkutan" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Kebun —</option>
-              <?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Rayon</label>
-            <select name="rayon_id" id="rayon_id" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Rayon —</option>
-              <?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Unit Tujuan</label>
-            <select name="unit_tujuan_id" id="unit_tujuan_id" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Unit —</option>
-              <?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Gudang Asal</label>
-            <select name="asal_gudang_id" id="asal_gudang_id" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Gudang —</option>
-              <?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal</label>
-            <input type="date" name="tanggal" id="tanggal_angkutan" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jenis Pupuk</label>
-            <select name="jenis_pupuk" id="jenis_pupuk_angkutan" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Jenis —</option>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jumlah (Kg)</label>
-            <input type="number" step="0.01" name="jumlah" id="jumlah_angkutan" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div class="md:col-span-2"><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Keterangan</label>
-            <select name="keterangan_id" id="keterangan_id" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Opsional —</option>
-              <?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
+                <select id="kebun_id_angkutan" name="kebun_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Rayon</label>
+                <select id="rayon_id_angkutan" name="rayon_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit Tujuan *</label>
+                <select name="unit_tujuan_id" id="unit_tujuan_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Gudang Asal *</label>
+                <select name="asal_gudang_id" id="asal_gudang_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" name="tanggal" id="tanggal_angkutan" class="i-input" required></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jenis Pupuk *</label>
+                <select name="jenis_pupuk" id="jenis_pupuk_angkutan" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" name="jumlah" id="jumlah_angkutan" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">No SPB</label><input type="text" name="no_spb" id="no_spb_angkutan" class="i-input"></div>
+            <div class="md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Keterangan</label>
+                <select name="keterangan_id" id="keterangan_id_angkutan" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
+            </div>
         </div>
       </div>
 
       <div id="group-menabur" class="<?= $tab==='menabur' ? '' : 'hidden' ?>">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
-            <select name="kebun_id" id="kebun_id_menabur" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Kebun —</option>
-              <?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Unit / Defisi</label>
-            <select name="unit_id" id="unit_id" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Unit —</option>
-              <?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Blok</label>
-            <select name="blok" id="blok" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Unit Dulu —</option>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal</label>
-            <input type="date" name="tanggal" id="tanggal_menabur" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">T. Tanam</label>
-            <input type="number" name="t_tanam" id="t_tanam" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500" placeholder="YYYY">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Luas (Ha)</label>
-            <input type="number" step="0.01" name="luas" id="luas" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jenis Pupuk</label>
-            <select name="jenis_pupuk" id="jenis_pupuk_menabur" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-              <option value="">— Pilih Jenis —</option>
-            </select>
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Dosis</label>
-            <input type="number" step="0.01" name="dosis" id="dosis" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jumlah (Kg)</label>
-            <input type="number" step="0.01" name="jumlah" id="jumlah_menabur" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
-          <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Invt. Pokok</label>
-            <input type="number" step="1" name="invt_pokok" id="invt_pokok" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500">
-          </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
+                <select name="unit_id" id="unit_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Kebun</label>
+                <select id="kebun_id_menabur" name="kebun_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Blok *</label>
+                <select name="blok" id="blok" class="i-select" required><option value="">— Pilih Unit Dulu —</option></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" name="tanggal" id="tanggal_menabur" class="i-input" required></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Tahun</label><input type="number" name="tahun" id="tahun" class="i-input" placeholder="YYYY"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jenis Pupuk *</label>
+                <select name="jenis_pupuk" id="jenis_pupuk_menabur" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Tahun Tanam</label>
+                <input type="number" name="t_tanam" id="t_tanam" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500" placeholder="YYYY">
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Rayon</label>
+                <select name="rayon_id" id="rayon_id_menabur" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Dosis</label><input type="number" step="0.01" name="dosis" id="dosis" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" name="jumlah" id="jumlah_menabur" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Luas (Ha)</label><input type="number" step="0.01" name="luas" id="luas" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Invt. Pokok</label><input type="number" step="1" name="invt_pokok" id="invt_pokok" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">No AU-58</label><input type="text" name="no_au_58" id="no_au_58_menabur" class="i-input"></div>
+            <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 mb-1">Keterangan</label>
+                <select name="keterangan_id" id="keterangan_id_menabur" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
+            </div>
         </div>
       </div>
 
-      <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
+      <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
         <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 transition">Batal</button>
         <button type="submit" class="px-5 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 transition shadow-lg shadow-cyan-500/30">Simpan</button>
       </div>
     </form>
   </div>
 </div>
+<?php endif; ?>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-  const IS_STAF = <?= $isStaf ? 'true' : 'false'; ?>;
-  const $ = s => document.querySelector(s);
-  async function fetchJSON(url){ const r = await fetch(url); return r.json(); }
-  function fillSelect(el, arr, placeholder='— Pilih —'){
-    el.innerHTML='';
-    const d=document.createElement('option'); d.value=''; d.textContent=placeholder; el.appendChild(d);
-    (arr||[]).forEach(v=>{
-      const val = (typeof v === 'object') ? (v.value || v.id || v) : v;
-      const lbl = (typeof v === 'object') ? (v.label || v.nama_kebun || v) : v;
-      const op=document.createElement('option'); op.value=val; op.textContent=lbl; el.appendChild(op);
-    });
-  }
-
-  (async ()=>{
-    try{
-      const j = await fetchJSON('?ajax=options&type=pupuk');
-      const list = (j.success && Array.isArray(j.data)) ? j.data : [];
-      const a = $('#jenis_pupuk_angkutan'); if (a) fillSelect(a, list, '— Pilih Jenis Pupuk —');
-      const m = $('#jenis_pupuk_menabur');  if (m) fillSelect(m, list, '— Pilih Jenis Pupuk —');
-    }catch{}
-  })();
-
-  async function refreshBlok(){
-    const uid = $('#unit_id')?.value || '';
-    const sel = $('#blok');
-    if (!uid){ if(sel) sel.innerHTML='<option value="">— Pilih Unit dulu —</option>'; return; }
-    try{
-      const j = await fetchJSON(`?ajax=options&type=blok&unit_id=${encodeURIComponent(uid)}`);
-      const list = (j.success && Array.isArray(j.data)) ? j.data : [];
-      if (sel) fillSelect(sel, list, '— Pilih Blok —');
-    }catch{ if (sel) sel.innerHTML='<option value="">— Pilih Blok —</option>'; }
-  }
-  $('#unit_id')?.addEventListener('change', refreshBlok);
-
-  // MODIFIKASI: Blok if (!IS_STAF) dihapus agar JS ini jalan untuk semua User
-  const modal = $('#crud-modal'), form = $('#crud-form'), title = $('#modal-title');
-  const open  = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
-  const close = ()=>{ modal.classList.add('hidden');   modal.classList.remove('flex'); };
-
-  $('#btn-add')?.addEventListener('click', ()=>{
-    form.reset(); $('#form-action').value='store'; $('#form-id').value='';
-    title.textContent='Tambah Data';
-    const tab = $('#form-tab').value = '<?= htmlspecialchars($tab) ?>';
-    document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
-    document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
-    if (tab==='menabur') refreshBlok();
-    open();
-  });
-  $('#btn-close')?.addEventListener('click', close);
-  $('#btn-cancel')?.addEventListener('click', close);
-
-  document.body.addEventListener('click', async (e)=>{
-    // Tombol Edit & Delete tidak dirender untuk Staf, jadi kode ini aman
-    const btnE = e.target.closest('.btn-edit');
-    const btnD = e.target.closest('.btn-delete');
-
-    if (btnE){
-      const row = JSON.parse(btnE.dataset.json); const tab = btnE.dataset.tab;
-      form.reset(); $('#form-action').value='update'; $('#form-id').value=row.id; $('#form-tab').value = tab;
-      title.textContent='Edit Data';
-      document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
-      document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
-
-      if (tab==='angkutan'){
-        $('#kebun_id_angkutan').value    = row.kebun_id ?? '';
-        $('#rayon_id').value             = row.rayon_id ?? '';
-        $('#unit_tujuan_id').value       = row.unit_tujuan_id ?? '';
-        $('#asal_gudang_id').value       = row.asal_gudang_id ?? '';
-        $('#tanggal_angkutan').value     = row.tanggal ?? '';
-        $('#jenis_pupuk_angkutan').value = row.jenis_pupuk ?? '';
-        $('#jumlah_angkutan').value      = row.jumlah ?? '';
-        $('#keterangan_id').value        = row.keterangan_id ?? '';
-      } else {
-        $('#kebun_id_menabur').value     = row.kebun_id ?? '';
-        $('#unit_id').value              = row.unit_id ?? '';
-        await refreshBlok();
-        $('#blok').value                 = row.blok ?? '';
-        $('#tanggal_menabur').value      = row.tanggal ?? '';
-        $('#t_tanam').value              = row.t_tanam ?? '';
-        $('#luas').value                 = row.luas ?? '';
-        $('#jenis_pupuk_menabur').value  = row.jenis_pupuk ?? '';
-        $('#dosis').value                = row.dosis ?? '';
-        $('#jumlah_menabur').value       = row.jumlah ?? '';
-        $('#invt_pokok').value           = row.invt_pokok ?? '';
-      }
-      open();
+    // --- Pass Permission to JS ---
+    const CAN_INPUT  = <?= $canInput ? 'true' : 'false'; ?>;  // Admin & Staf
+    const CAN_ACTION = <?= $canAction ? 'true' : 'false'; ?>; // Admin Only
+    
+    const $ = s => document.querySelector(s);
+    async function fetchJSON(url){ const r = await fetch(url); return r.json(); }
+    function fillSelect(el, arr, placeholder='— Pilih —'){
+        el.innerHTML='';
+        const d=document.createElement('option'); d.value=''; d.textContent=placeholder; el.appendChild(d);
+        (arr||[]).forEach(v=>{
+            const val = (typeof v === 'object') ? (v.value || v.id || v) : v;
+            const lbl = (typeof v === 'object') ? (v.label || v.nama_kebun || v) : v;
+            const op=document.createElement('option'); op.value=val; op.textContent=lbl; el.appendChild(op);
+        });
     }
 
-    if (btnD){
-      const id = btnD.dataset.id; const tab = btnD.dataset.tab;
-      Swal.fire({title:'Hapus data?', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Hapus'})
-        .then(res=>{
-          if (!res.isConfirmed) return;
-          const fd = new FormData();
-          fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
-          fd.append('action','delete'); fd.append('tab',tab); fd.append('id',id);
-          fetch('pemupukan_organik_crud.php',{method:'POST', body:fd})
+    // Load Pupuk Options
+    (async ()=>{
+        try{
+        const j = await fetchJSON('?ajax=options&type=pupuk');
+        const list = (j.success && Array.isArray(j.data)) ? j.data : [];
+        const a = $('#jenis_pupuk_angkutan'); if (a) fillSelect(a, list, '— Pilih Jenis Pupuk —');
+        const m = $('#jenis_pupuk_menabur');  if (m) fillSelect(m, list, '— Pilih Jenis Pupuk —');
+        }catch{}
+    })();
+
+    async function refreshBlok(){
+        const uid = $('#unit_id')?.value || '';
+        const sel = $('#blok');
+        if (!uid){ if(sel) sel.innerHTML='<option value="">— Pilih Unit dulu —</option>'; return; }
+        try{
+        const j = await fetchJSON(`?ajax=options&type=blok&unit_id=${encodeURIComponent(uid)}`);
+        const list = (j.success && Array.isArray(j.data)) ? j.data : [];
+        if (sel) fillSelect(sel, list, '— Pilih Blok —');
+        }catch{ if (sel) sel.innerHTML='<option value="">— Pilih Blok —</option>'; }
+    }
+    $('#unit_id')?.addEventListener('change', refreshBlok);
+
+    /* ===== MODAL LOGIC (HANYA JIKA CAN_INPUT) ===== */
+    if (CAN_INPUT) {
+        const modal = $('#crud-modal'), form = $('#crud-form'), title = $('#modal-title');
+        const open  = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
+        const close = ()=>{ modal.classList.add('hidden');   modal.classList.remove('flex'); };
+
+        if ($('#btn-add')) {
+            $('#btn-add').addEventListener('click', ()=>{
+                form.reset(); $('#form-action').value='store'; $('#form-id').value='';
+                title.textContent='Tambah Data';
+                const tab = $('#form-tab').value = '<?= htmlspecialchars($tab) ?>';
+                document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
+                document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
+                if (tab==='menabur') refreshBlok();
+                open();
+            });
+        }
+        $('#btn-close')?.addEventListener('click', close);
+        $('#btn-cancel')?.addEventListener('click', close);
+
+        // Edit & Delete (Hanya jika CAN_ACTION aka Admin)
+        document.body.addEventListener('click', async (e)=>{
+            const btnE = e.target.closest('.btn-edit');
+            const btnD = e.target.closest('.btn-delete');
+
+            if (btnE && CAN_ACTION){
+                const row = JSON.parse(btnE.dataset.json); const tab = btnE.dataset.tab;
+                form.reset(); $('#form-action').value='update'; $('#form-id').value=row.id; $('#form-tab').value = tab;
+                title.textContent='Edit Data';
+                document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
+                document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
+
+                if (tab==='angkutan'){
+                    $('#kebun_id_angkutan').value     = row.kebun_id ?? '';
+                    $('#rayon_id').value              = row.rayon_id ?? '';
+                    $('#unit_tujuan_id').value        = row.unit_tujuan_id ?? '';
+                    $('#asal_gudang_id').value        = row.asal_gudang_id ?? '';
+                    $('#tanggal_angkutan').value      = row.tanggal ?? '';
+                    $('#jenis_pupuk_angkutan').value  = row.jenis_pupuk ?? '';
+                    $('#jumlah_angkutan').value       = row.jumlah ?? '';
+                    $('#keterangan_id').value         = row.keterangan_id ?? '';
+                } else {
+                    $('#kebun_id_menabur').value      = row.kebun_id ?? '';
+                    $('#unit_id').value               = row.unit_id ?? '';
+                    await refreshBlok();
+                    $('#blok').value                  = row.blok ?? '';
+                    $('#tanggal_menabur').value       = row.tanggal ?? '';
+                    $('#t_tanam').value               = row.t_tanam ?? '';
+                    $('#luas').value                  = row.luas ?? '';
+                    $('#jenis_pupuk_menabur').value   = row.jenis_pupuk ?? '';
+                    $('#dosis').value                 = row.dosis ?? '';
+                    $('#jumlah_menabur').value        = row.jumlah ?? '';
+                    $('#invt_pokok').value            = row.invt_pokok ?? '';
+                }
+                open();
+            }
+
+            if (btnD && CAN_ACTION){
+                const id = btnD.dataset.id; const tab = btnD.dataset.tab;
+                Swal.fire({title:'Hapus data?', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Hapus'})
+                    .then(res=>{
+                    if (!res.isConfirmed) return;
+                    const fd = new FormData();
+                    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+                    fd.append('action','delete'); fd.append('tab',tab); fd.append('id',id);
+                    fetch('pemupukan_organik_crud.php',{method:'POST', body:fd})
+                        .then(r=>r.json()).then(j=>{
+                        if (j.success) Swal.fire('Terhapus!','', 'success').then(()=>location.reload());
+                        else Swal.fire('Gagal', j.message||'Error', 'error');
+                        });
+                    });
+            }
+        });
+
+        form.addEventListener('submit',(e)=>{
+            e.preventDefault();
+            const tab = $('#form-tab').value;
+            const fd  = new FormData(form);
+            fd.set('action', $('#form-action').value);
+            fd.set('tab', tab);
+
+            if (tab==='angkutan'){
+                fd.set('kebun_id', $('#kebun_id_angkutan').value);
+                fd.set('rayon_id', $('#rayon_id').value);
+                fd.set('unit_tujuan_id', $('#unit_tujuan_id').value);
+                fd.set('asal_gudang_id', $('#asal_gudang_id').value);
+                fd.set('tanggal', $('#tanggal_angkutan').value);
+                fd.set('jenis_pupuk', $('#jenis_pupuk_angkutan').value);
+                fd.set('jumlah', $('#jumlah_angkutan').value || '');
+                fd.set('keterangan_id', $('#keterangan_id').value || '');
+            } else {
+                fd.set('kebun_id', $('#kebun_id_menabur').value);
+                fd.set('tanggal', $('#tanggal_menabur').value);
+                fd.set('t_tanam', $('#t_tanam').value || '');
+                fd.set('jenis_pupuk', $('#jenis_pupuk_menabur').value);
+                fd.set('dosis', $('#dosis').value || '');
+                fd.set('jumlah', $('#jumlah_menabur').value || '');
+                fd.set('luas', $('#luas').value || '');
+                fd.set('invt_pokok', $('#invt_pokok').value || '');
+            }
+
+            fetch('pemupukan_organik_crud.php',{method:'POST', body:fd})
             .then(r=>r.json()).then(j=>{
-              if (j.success) Swal.fire('Terhapus!','', 'success').then(()=>location.reload());
-              else Swal.fire('Gagal', j.message||'Error', 'error');
+                if (j.success){ close(); Swal.fire({icon:'success', title:'Berhasil', timer:1200, showConfirmButton:false}).then(()=>location.reload()); }
+                else { Swal.fire('Gagal', j.message||'Error', 'error'); }
             });
         });
     }
-  });
-
-  form.addEventListener('submit',(e)=>{
-    e.preventDefault();
-    const tab = $('#form-tab').value;
-    const fd  = new FormData(form);
-    fd.set('action', $('#form-action').value);
-    fd.set('tab', tab);
-
-    if (tab==='angkutan'){
-      fd.set('kebun_id', $('#kebun_id_angkutan').value);
-      fd.set('rayon_id', $('#rayon_id').value);
-      fd.set('unit_tujuan_id', $('#unit_tujuan_id').value);
-      fd.set('asal_gudang_id', $('#asal_gudang_id').value);
-      fd.set('tanggal', $('#tanggal_angkutan').value);
-      fd.set('jenis_pupuk', $('#jenis_pupuk_angkutan').value);
-      fd.set('jumlah', $('#jumlah_angkutan').value || '');
-      fd.set('keterangan_id', $('#keterangan_id').value || '');
-    } else {
-      fd.set('kebun_id', $('#kebun_id_menabur').value);
-      fd.set('tanggal', $('#tanggal_menabur').value);
-      fd.set('t_tanam', $('#t_tanam').value || '');
-      fd.set('jenis_pupuk', $('#jenis_pupuk_menabur').value);
-      fd.set('dosis', $('#dosis').value || '');
-      fd.set('jumlah', $('#jumlah_menabur').value || '');
-      fd.set('luas', $('#luas').value || '');
-      fd.set('invt_pokok', $('#invt_pokok').value || '');
-    }
-
-    fetch('pemupukan_organik_crud.php',{method:'POST', body:fd})
-      .then(r=>r.json()).then(j=>{
-        if (j.success){ close(); Swal.fire({icon:'success', title:'Berhasil', timer:1200, showConfirmButton:false}).then(()=>location.reload()); }
-        else { Swal.fire('Gagal', j.message||'Error', 'error'); }
-      });
-  });
+    
+    $('#tanggal_menabur')?.addEventListener('change', e=>{
+        const y = e.target.value.slice(0,4);
+        if(y && $('#tahun') && !$('#tahun').value) $('#tahun').value=y;
+    });
 });
 </script>
