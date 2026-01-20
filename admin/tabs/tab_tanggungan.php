@@ -35,7 +35,7 @@
                     <th>Hubungan</th>
                     <th>Tempat Lahir</th>
                     <th>Tanggal Lahir</th>
-                    <th>Pendidikan</th>
+                    <th>Pendidikan Terakhir</th>
                     <th>Pekerjaan</th>
                     <th>Keterangan</th>
                     <?php if ($canAction): ?>
@@ -72,7 +72,7 @@
 
                 <div>
                     <label class="block text-sm font-bold text-gray-700 mb-2">Nama Anggota Keluarga *</label>
-                    <input type="text" name="nama_anggota" id="nama_anggota" class="w-full border p-2 rounded" required>
+                    <input type="text" name="nama_batih" id="nama_batih" class="w-full border p-2 rounded" required>
                 </div>
 
                 <div>
@@ -97,8 +97,8 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-bold text-gray-700 mb-2">Pendidikan</label>
-                    <input type="text" name="pendidikan" id="pendidikan" class="w-full border p-2 rounded">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Pendidikan Terakhir</label>
+                    <input type="text" name="pendidikan_terakhir" id="pendidikan_terakhir" class="w-full border p-2 rounded">
                 </div>
 
                 <div>
@@ -163,11 +163,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <tr class="hover:bg-purple-50">
                         <td class="font-mono text-xs">${r.sap_id || '-'}</td>
                         <td class="font-bold">${r.nama_karyawan || '-'}</td>
-                        <td class="font-bold text-purple-700">${r.nama_anggota}</td>
+                        <td class="font-bold text-purple-700">${r.nama_batih}</td>
                         <td><span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-bold">${r.hubungan}</span></td>
                         <td class="text-sm">${r.tempat_lahir || '-'}</td>
                         <td class="text-sm">${r.tanggal_lahir || '-'}</td>
-                        <td class="text-sm">${r.pendidikan || '-'}</td>
+                        <td class="text-sm">${r.pendidikan_terakhir || '-'}</td>
                         <td class="text-sm">${r.pekerjaan || '-'}</td>
                         <td class="text-sm text-slate-500">${r.keterangan || '-'}</td>
                         ${CAN_ACTION ? '<td class="text-center flex justify-center gap-1">'+btns+'</td>' : ''}
@@ -231,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('action-tanggungan').value = 'update_tanggungan';
             document.getElementById('id-tanggungan').value = r.id;
             
-            ['karyawan_id','nama_anggota','hubungan','pendidikan','pekerjaan','keterangan'].forEach(id => {
+            ['karyawan_id','nama_batih','hubungan','pendidikan_terakhir','pekerjaan','keterangan'].forEach(id => {
                 if(document.getElementById(id)) document.getElementById(id).value = r[id] || '';
             });
             document.getElementById('tempat_lahir_t').value = r.tempat_lahir || '';

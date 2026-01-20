@@ -1,6 +1,6 @@
 <?php
 // pages/export_cv.php
-// FIXED VERSION with Better Error Handling
+// RE-DESIGNED PROFESSIONAL VERSION
 
 declare(strict_types=1);
 error_reporting(E_ALL);
@@ -8,6 +8,7 @@ ini_set('display_errors', 1);
 
 session_start();
 
+// Cek Sesi (Sesuaikan dengan logic login Anda)
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { 
     http_response_code(403); 
     exit('Unauthorized'); 
@@ -28,7 +29,7 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    // Ambil Data Karyawan
+    // 1. Ambil Data Karyawan
     $stmt = $conn->prepare("SELECT * FROM data_karyawan WHERE id = ?");
     $stmt->execute([$id]);
     $k = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -37,17 +38,17 @@ try {
         exit("Data karyawan dengan ID $id tidak ditemukan.");
     }
 
-    // Ambil Data Keluarga
+    // 2. Ambil Data Keluarga
     $stmtKel = $conn->prepare("SELECT * FROM data_keluarga WHERE karyawan_id = ? ORDER BY tanggal_lahir ASC");
     $stmtKel->execute([$id]);
     $keluarga = $stmtKel->fetchAll(PDO::FETCH_ASSOC);
 
-    // Ambil Data Peringatan
+    // 3. Ambil Data Peringatan
     $stmtSP = $conn->prepare("SELECT * FROM data_peringatan WHERE karyawan_id = ? ORDER BY tanggal_sp DESC");
     $stmtSP->execute([$id]);
     $riwayatSP = $stmtSP->fetchAll(PDO::FETCH_ASSOC);
 
-    // Helper: Format Tanggal
+    // Helper: Format Tanggal Indonesia
     function tgl_indo($tanggal){
         if(empty($tanggal) || $tanggal == '0000-00-00') return '-';
         $bulan = array (
@@ -58,7 +59,28 @@ try {
         return $pecahkan[2] . ' ' . $bulan[(int)$pecahkan[1]] . ' ' . $pecahkan[0];
     }
 
-    // Proses Foto - FIXED
+    // ---------------------------------------------------------
+    // IMAGE HANDLING (BASE64) - Agar gambar muncul di PDF
+    // ---------------------------------------------------------
+
+    // A. LOGO PERUSAHAAN (Dari ../assets/images/)
+    $pathLogo = '../assets/images/logo_ptpn.png'; // Pastikan path ini benar
+    $base64Logo = '';
+
+    if (file_exists($pathLogo)) {
+        $type = pathinfo($pathLogo, PATHINFO_EXTENSION);
+        $data = file_get_contents($pathLogo);
+        $base64Logo = 'data:image/' . $type . ';base64,' . base64_encode($data);
+    } else {
+        // Fallback Logo SVG jika file tidak ditemukan
+        $base64Logo = 'data:image/svg+xml;base64,' . base64_encode('
+        <svg width="80" height="80" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="40" cy="40" r="38" fill="#006064"/>
+            <text x="40" y="45" font-family="Arial" font-size="20" font-weight="bold" fill="white" text-anchor="middle">PTPN</text>
+        </svg>');
+    }
+
+    // B. FOTO PROFIL
     $pathFoto = '../uploads/profil/' . ($k['foto_profil'] ?? '');
     $base64Foto = '';
     
@@ -71,22 +93,17 @@ try {
         }
     }
     
-    // Fallback jika foto tidak ada
+    // Fallback Foto Kosong
     if (empty($base64Foto)) {
+        $base64Foto = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='; // 1x1 pixel grey
+        // Atau gunakan SVG placeholder
         $base64Foto = 'data:image/svg+xml;base64,' . base64_encode('
         <svg width="150" height="200" xmlns="http://www.w3.org/2000/svg">
-            <rect width="150" height="200" fill="#e5e7eb"/>
-            <text x="50%" y="50%" font-family="Arial" font-size="14" fill="#9ca3af" text-anchor="middle" dy=".3em">No Photo</text>
+            <rect width="150" height="200" fill="#f3f4f6"/>
+            <circle cx="75" cy="80" r="30" fill="#d1d5db"/>
+            <path d="M75 120 Q35 120 35 160 L115 160 Q115 120 75 120" fill="#d1d5db"/>
         </svg>');
     }
-
-    // Logo PTPN IV
-    $logoPTPN = 'data:image/svg+xml;base64,' . base64_encode('
-    <svg width="80" height="80" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="40" cy="40" r="38" fill="#0891b2" stroke="#0e7490" stroke-width="2"/>
-        <text x="40" y="35" font-family="Arial" font-size="24" font-weight="bold" fill="white" text-anchor="middle">PTPN</text>
-        <text x="40" y="55" font-family="Arial" font-size="16" font-weight="bold" fill="#ecfeff" text-anchor="middle">IV</text>
-    </svg>');
 
     ob_start();
 ?>
@@ -96,446 +113,487 @@ try {
     <meta charset="UTF-8">
     <title>CV_<?= htmlspecialchars($k['nama_lengkap']) ?></title>
     <style>
-        @page { margin: 20px; }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { 
-            font-family: Arial, Helvetica, sans-serif; 
-            font-size: 9.5px; 
-            color: #1f2937; 
-            line-height: 1.5; 
+        @page { margin: 0px; }
+        body {
+            margin: 0px;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: #333;
+            font-size: 10pt;
+            background: #fff;
+            line-height: 1.4;
         }
 
-        .header-wrapper {
-            background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
-            padding: 20px;
-            margin: -20px -20px 20px -20px;
-            border-bottom: 4px solid #06b6d4;
+        /* --- Header Section --- */
+        .header-bg {
+            background-color: #006064; /* PTPN Teal Color */
+            color: #fff;
+            padding: 30px 40px;
+            height: 140px; /* Fixed height for header */
         }
-
-        .header-content { width: 100%; }
         
-        .logo-section {
+        .logo-container {
             float: left;
-            width: 90px;
-            padding-right: 15px;
+            width: 80px;
         }
-
+        
         .logo-img {
             width: 70px;
-            height: 70px;
-            border: 3px solid rgba(255,255,255,0.3);
+            height: auto;
+            background: #fff;
             border-radius: 50%;
+            padding: 2px;
         }
 
-        .company-section {
-            margin-left: 90px;
+        .company-info {
+            float: left;
+            margin-left: 20px;
+            margin-top: 5px;
         }
 
         .company-name {
-            font-size: 18px;
+            font-size: 16pt;
             font-weight: bold;
-            color: white;
-            margin-bottom: 3px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
         }
 
-        .company-subtitle {
-            font-size: 11px;
-            color: #e0f2fe;
-            margin-bottom: 2px;
+        .company-sub {
+            font-size: 9pt;
+            opacity: 0.9;
+            margin-top: 2px;
+        }
+
+        .doc-label {
+            float: right;
+            text-align: right;
+            margin-top: 10px;
         }
 
         .doc-title {
-            font-size: 13px;
-            color: #fef3c7;
+            font-size: 24pt;
             font-weight: bold;
-            margin-top: 8px;
-            text-transform: uppercase;
+            letter-spacing: 2px;
+            opacity: 0.2; /* Watermark effect text */
+            color: #ffffff;
+        }
+        
+        /* --- Content Container --- */
+        .container {
+            padding: 30px 40px;
         }
 
-        .profile-card {
-            background: #ecfeff;
-            border: 2px solid #06b6d4;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 15px;
-            clear: both;
-        }
-
-        .profile-info {
-            float: left;
-            width: 65%;
-            padding-right: 15px;
+        /* --- Profile Summary Section --- */
+        .profile-header {
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 20px;
         }
 
         .profile-photo {
-            float: right;
-            width: 35%;
-            text-align: center;
+            float: left;
+            width: 110px;
+            height: 140px;
+            border: 1px solid #ddd;
+            padding: 3px;
+            border-radius: 4px;
         }
-
-        .foto-profil {
-            width: 120px;
-            height: 160px;
-            border: 3px solid #0891b2;
-            border-radius: 8px;
+        
+        .profile-photo img {
+            width: 100%;
+            height: 100%;
             object-fit: cover;
         }
 
-        .employee-name {
-            font-size: 16px;
-            font-weight: bold;
-            color: #0e7490;
-            margin-bottom: 5px;
-            border-bottom: 2px solid #06b6d4;
-            padding-bottom: 5px;
-        }
-
-        .employee-id {
-            font-size: 10px;
-            color: #0891b2;
-            font-weight: bold;
-            background: #cffafe;
-            padding: 3px 8px;
-            border-radius: 4px;
-            display: inline-block;
-            margin-bottom: 8px;
-        }
-
-        .info-row {
-            margin-bottom: 5px;
-            clear: both;
-        }
-
-        .info-label {
-            float: left;
-            width: 140px;
-            font-weight: bold;
-            color: #0e7490;
-            padding: 3px 0;
-        }
-
-        .info-colon {
-            float: left;
-            width: 15px;
-        }
-
-        .info-value {
-            margin-left: 155px;
-            color: #374151;
-        }
-
-        .section-header {
-            background: linear-gradient(to right, #0891b2, #06b6d4);
-            color: white;
-            padding: 8px 12px;
-            margin: 15px 0 10px 0;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 11px;
-            text-transform: uppercase;
-            clear: both;
-        }
-
-        .content-box {
-            background: #f0fdfa;
-            border-left: 4px solid #0891b2;
-            padding: 12px;
-            margin-bottom: 12px;
-        }
-
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-            font-size: 9px;
-        }
-
-        .data-table thead {
-            background: linear-gradient(to right, #0891b2, #06b6d4);
-            color: white;
-        }
-
-        .data-table th {
-            padding: 7px;
-            text-align: center;
-            font-weight: bold;
-            border: 1px solid #0891b2;
-        }
-
-        .data-table td {
-            padding: 6px;
-            border: 1px solid #d1d5db;
-            background: white;
-        }
-
-        .data-table tbody tr:nth-child(even) {
-            background: #f0fdfa;
-        }
-
-        .badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 8px;
-        }
-
-        .badge-tetap { background: #d1fae5; color: #065f46; }
-        .badge-sp1 { background: #dbeafe; color: #1e40af; }
-        .badge-sp2 { background: #fed7aa; color: #9a3412; }
-        .badge-sp3 { background: #fecaca; color: #991b1b; }
-
-        .signature-section {
-            margin-top: 25px;
-            text-align: right;
-            padding-right: 20px;
-            clear: both;
-        }
-
-        .signature-box {
-            display: inline-block;
-            text-align: center;
-            min-width: 200px;
-        }
-
-        .signature-line {
-            border-top: 1px solid #374151;
-            margin-top: 60px;
+        .profile-title {
+            margin-left: 140px; /* Offset for photo */
             padding-top: 5px;
         }
 
-        .footer {
-            margin-top: 20px;
-            padding-top: 10px;
-            border-top: 2px solid #0891b2;
-            text-align: center;
-            font-size: 8px;
-            color: #6b7280;
+        .name-big {
+            font-size: 20pt;
+            font-weight: bold;
+            color: #006064;
+            text-transform: uppercase;
+            margin-bottom: 5px;
         }
 
-        .highlight {
-            background: #fef3c7;
-            padding: 2px 4px;
-            border-radius: 2px;
+        .position-big {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #555;
+            background: #f0fdfa;
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border-left: 4px solid #006064;
         }
 
-        .clearfix::after {
+        .id-badge {
+            margin-top: 8px;
+            font-size: 9pt;
+            color: #666;
+        }
+        
+        .id-badge span {
+            font-weight: bold;
+            color: #006064;
+        }
+
+        /* --- Grid Layout (Two Columns) --- */
+        .row::after {
             content: "";
-            display: table;
             clear: both;
+            display: table;
+        }
+
+        .col-left {
+            float: left;
+            width: 48%;
+        }
+
+        .col-right {
+            float: right;
+            width: 48%;
+        }
+
+        /* --- Section Styling --- */
+        .section-title {
+            font-size: 11pt;
+            font-weight: bold;
+            color: #006064;
+            text-transform: uppercase;
+            border-bottom: 1px solid #006064;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+            margin-top: 10px;
+        }
+
+        .info-table {
+            width: 100%;
+            font-size: 9pt;
+            border-collapse: collapse;
+        }
+
+        .info-table td {
+            padding: 4px 0;
+            vertical-align: top;
+        }
+
+        .info-label {
+            width: 35%;
+            color: #666;
+            font-weight: bold;
+        }
+
+        .info-sep {
+            width: 10px;
+            text-align: center;
+        }
+
+        .info-val {
+            color: #333;
+        }
+
+        /* --- Data Tables (Family & SP) --- */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+            margin-top: 5px;
+        }
+
+        .data-table th {
+            background-color: #006064;
+            color: #fff;
+            padding: 8px;
+            text-align: left;
+            font-weight: normal;
+            font-size: 8.5pt;
+        }
+
+        .data-table td {
+            border-bottom: 1px solid #eee;
+            padding: 8px;
+            color: #444;
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: #fcfcfc;
+        }
+
+        .badge {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 7.5pt;
+            font-weight: bold;
+        }
+        .bg-green { background: #d1fae5; color: #065f46; }
+        .bg-blue { background: #dbeafe; color: #1e40af; }
+        .bg-orange { background: #ffedd5; color: #9a3412; }
+        .bg-red { background: #fee2e2; color: #991b1b; }
+
+        /* --- Footer & Signature --- */
+        .footer-info {
+            margin-top: 40px;
+            text-align: right;
+            font-size: 9pt;
+        }
+        
+        .signature-area {
+            display: inline-block;
+            width: 200px;
+            text-align: center;
+        }
+        
+        .sign-line {
+            margin-top: 70px;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            font-weight: bold;
+        }
+
+        .page-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #f9fafb;
+            padding: 10px 40px;
+            font-size: 8pt;
+            color: #999;
+            border-top: 1px solid #eee;
+            text-align: center;
         }
     </style>
 </head>
 <body>
 
-    <div class="header-wrapper">
-        <div class="header-content clearfix">
-            <div class="logo-section">
-                <img src="<?= $logoPTPN ?>" class="logo-img" alt="Logo">
-            </div>
-            <div class="company-section">
-                <div class="company-name">PTPN IV - REGIONAL 3</div>
-                <div class="company-subtitle">PT Perkebunan Nusantara IV (Persero)</div>
-                <div class="company-subtitle">Jl. Letjen Suprapto No.2, Medan, Sumatera Utara</div>
-                <div class="doc-title">CURRICULUM VITAE KARYAWAN</div>
-            </div>
+    <div class="header-bg">
+        <div class="logo-container">
+            <img src="<?= $base64Logo ?>" class="logo-img" alt="Logo">
+        </div>
+        <div class="company-info">
+            <div class="company-name">PTPN IV - Regional 3</div>
+            <div class="company-sub">PT Perkebunan Nusantara IV (Persero)</div>
+            <div class="company-sub">Human Capital Management System</div>
+        </div>
+        <div class="doc-label">
+            <div class="doc-title">CV</div>
+            <div style="color: #b2dfdb; font-size: 9pt;">EMPLOYEE DATA SHEET</div>
         </div>
     </div>
 
-    <div class="profile-card clearfix">
-        <div class="profile-info">
-            <div class="employee-name"><?= strtoupper(htmlspecialchars($k['nama_lengkap'])) ?></div>
-            <div class="employee-id">SAP ID: <?= htmlspecialchars($k['id_sap']) ?></div>
-            
-            <div class="info-row clearfix">
-                <div class="info-label">NIK KTP</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><?= htmlspecialchars($k['nik_ktp'] ?: '-') ?></div>
+    <div class="container">
+        
+        <div class="profile-header row">
+            <div class="profile-photo">
+                <img src="<?= $base64Foto ?>" alt="Foto Profil">
             </div>
-            <div class="info-row clearfix">
-                <div class="info-label">Tempat, Tgl Lahir</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><?= htmlspecialchars($k['tempat_lahir'] ?: '-') ?>, <?= tgl_indo($k['tanggal_lahir']) ?></div>
-            </div>
-            <div class="info-row clearfix">
-                <div class="info-label">Jenis Kelamin</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><?= $k['gender'] == 'L' ? 'Laki-Laki' : 'Perempuan' ?></div>
-            </div>
-            <div class="info-row clearfix">
-                <div class="info-label">Agama</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><?= htmlspecialchars($k['agama'] ?: '-') ?></div>
-            </div>
-            <div class="info-row clearfix">
-                <div class="info-label">Status Pernikahan</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><?= htmlspecialchars($k['s_kel'] ?: '-') ?></div>
-            </div>
-            <div class="info-row clearfix">
-                <div class="info-label">No. Handphone</div>
-                <div class="info-colon">:</div>
-                <div class="info-value"><strong><?= htmlspecialchars($k['no_hp'] ?: '-') ?></strong></div>
+            <div class="profile-title">
+                <div class="name-big"><?= htmlspecialchars($k['nama_lengkap']) ?></div>
+                <div class="position-big"><?= htmlspecialchars($k['jabatan_real'] ?: 'Posisi Belum Diatur') ?></div>
+                <div class="id-badge">
+                    SAP ID: <span><?= htmlspecialchars($k['id_sap']) ?></span> &nbsp;|&nbsp; 
+                    NIK: <span><?= htmlspecialchars($k['nik_ktp']) ?></span>
+                </div>
             </div>
         </div>
-        <div class="profile-photo">
-            <img src="<?= $base64Foto ?>" class="foto-profil" alt="Foto">
-            <div style="margin-top: 5px; font-size: 8px; color: #6b7280;">Foto Karyawan</div>
-        </div>
-    </div>
 
-    <div class="section-header">DATA KEPEGAWAIAN</div>
-    <div class="content-box">
-        <div class="info-row clearfix">
-            <div class="info-label">Jabatan Real</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><strong class="highlight"><?= htmlspecialchars($k['jabatan_real'] ?: '-') ?></strong></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">Jabatan SAP</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['jabatan_sap'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">Afdeling / Unit</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['afdeling'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">Status Karyawan</div>
-            <div class="info-colon">:</div>
-            <div class="info-value">
-                <span class="badge badge-tetap"><?= htmlspecialchars($k['status_karyawan']) ?></span>
+        <div class="row">
+            <div class="col-left">
+                <div class="section-title">Data Pribadi</div>
+                <table class="info-table">
+                    <tr>
+                        <td class="info-label">Tempat, Tgl Lahir</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['tempat_lahir']) ?>, <?= tgl_indo($k['tanggal_lahir']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Jenis Kelamin</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= $k['gender'] == 'L' ? 'Laki-Laki' : 'Perempuan' ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Agama</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['agama']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Status Nikah</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['s_kel']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">No. Ponsel</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['no_hp']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Alamat Email</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['email_pribadi'] ?? '-') ?></td>
+                    </tr>
+                </table>
+
+                <div class="section-title" style="margin-top: 25px;">Data Keuangan</div>
+                <table class="info-table">
+                    <tr>
+                        <td class="info-label">Bank</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['nama_bank']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">No. Rekening</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['no_rekening']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">NPWP</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['npwp']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">BPJS Kes</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['bpjs_id']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">BPJS TK</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['jamsostek_id']) ?></td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="col-right">
+                <div class="section-title">Data Kepegawaian</div>
+                <table class="info-table">
+                    <tr>
+                        <td class="info-label">Unit/Afdeling</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['afdeling']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Jabatan SAP</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['jabatan_sap']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Status</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val">
+                            <span class="badge bg-green"><?= htmlspecialchars($k['status_karyawan']) ?></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">Grade/Gol</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= htmlspecialchars($k['person_grade']) ?> / <?= htmlspecialchars($k['phdp_golongan']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">TMT Masuk</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= tgl_indo($k['tmt_kerja']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">TMT MBT</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val"><?= tgl_indo($k['tmt_mbt']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="info-label">TMT Pensiun</td>
+                        <td class="info-sep">:</td>
+                        <td class="info-val" style="color: #b91c1c; font-weight: bold;"><?= tgl_indo($k['tmt_pensiun']) ?></td>
+                    </tr>
+                </table>
             </div>
         </div>
-        <div class="info-row clearfix">
-            <div class="info-label">Grade / Golongan</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['person_grade'] ?: '-') ?> / <?= htmlspecialchars($k['phdp_golongan'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">TMT Masuk Kerja</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><strong><?= tgl_indo($k['tmt_kerja']) ?></strong></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">TMT MBT</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= tgl_indo($k['tmt_mbt']) ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">TMT Pensiun</div>
-            <div class="info-colon">:</div>
-            <div class="info-value" style="color: #dc2626; font-weight: bold;"><?= tgl_indo($k['tmt_pensiun']) ?></div>
-        </div>
-    </div>
 
-    <div class="section-header">DATA KEUANGAN & ASURANSI</div>
-    <div class="content-box">
-        <div class="info-row clearfix">
-            <div class="info-label">Rekening Bank</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['nama_bank'] ?: '-') ?> - <?= htmlspecialchars($k['no_rekening'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">Nama Pemilik Rek</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['nama_pemilik_rekening'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">NPWP</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['npwp'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">BPJS Kesehatan</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['bpjs_id'] ?: '-') ?></div>
-        </div>
-        <div class="info-row clearfix">
-            <div class="info-label">BPJS Ketenagakerjaan</div>
-            <div class="info-colon">:</div>
-            <div class="info-value"><?= htmlspecialchars($k['jamsostek_id'] ?: '-') ?></div>
-        </div>
-    </div>
+        <div style="clear:both; margin-bottom: 20px;"></div>
 
-    <div class="section-header">DATA KELUARGA / TANGGUNGAN</div>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th style="width: 5%;">No</th>
-                <th style="width: 25%;">Nama Lengkap</th>
-                <th style="width: 12%;">Hubungan</th>
-                <th style="width: 23%;">Tempat, Tgl Lahir</th>
-                <th style="width: 13%;">Pendidikan</th>
-                <th style="width: 22%;">Pekerjaan</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($keluarga)): ?>
-                <tr><td colspan="6" style="text-align: center; color: #9ca3af; font-style: italic;">Tidak ada data tanggungan keluarga</td></tr>
-            <?php else: ?>
-                <?php $no=1; foreach($keluarga as $row): ?>
+        <div class="section-title">Data Keluarga (Tanggungan)</div>
+        <table class="data-table">
+            <thead>
                 <tr>
-                    <td style="text-align: center;"><?= $no++ ?></td>
-                    <td><?= htmlspecialchars($row['nama_anggota']) ?></td>
-                    <td style="text-align: center;"><span class="badge badge-tetap"><?= htmlspecialchars($row['hubungan']) ?></span></td>
-                    <td><?= htmlspecialchars($row['tempat_lahir'] ?: '-') ?>, <?= !empty($row['tanggal_lahir']) ? date('d-m-Y', strtotime($row['tanggal_lahir'])) : '-' ?></td>
-                    <td style="text-align: center;"><?= htmlspecialchars($row['pendidikan'] ?: '-') ?></td>
-                    <td><?= htmlspecialchars($row['pekerjaan'] ?: '-') ?></td>
+                    <th width="5%">No</th>
+                    <th width="30%">Nama Anggota Keluarga</th>
+                    <th width="15%">Hubungan</th>
+                    <th width="20%">TTL</th>
+                    <th width="15%">Pendidikan</th>
+                    <th width="15%">Pekerjaan</th>
                 </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php if (empty($keluarga)): ?>
+                    <tr><td colspan="6" align="center" style="font-style: italic; color: #999;">Tidak ada data keluarga tercatat</td></tr>
+                <?php else: ?>
+                    <?php $no=1; foreach($keluarga as $row): ?>
+                    <tr>
+                        <td align="center"><?= $no++ ?></td>
+                        <td><?= htmlspecialchars($row['nama_anggota']) ?></td>
+                        <td align="center"><span class="badge bg-blue"><?= htmlspecialchars($row['hubungan']) ?></span></td>
+                        <td><?= htmlspecialchars($row['tempat_lahir']) ?>, <?= date('d-m-Y', strtotime($row['tanggal_lahir'])) ?></td>
+                        <td><?= htmlspecialchars($row['pendidikan']) ?></td>
+                        <td><?= htmlspecialchars($row['pekerjaan']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
 
-    <div class="section-header">RIWAYAT SURAT PERINGATAN</div>
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th style="width: 5%;">No</th>
-                <th style="width: 20%;">No. Surat</th>
-                <th style="width: 12%;">Jenis SP</th>
-                <th style="width: 15%;">Tanggal SP</th>
-                <th style="width: 15%;">Masa Berlaku</th>
-                <th style="width: 33%;">Pelanggaran</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php if (empty($riwayatSP)): ?>
-                <tr><td colspan="6" style="text-align: center; color: #10b981; font-weight: bold;">Tidak ada riwayat surat peringatan</td></tr>
-            <?php else: ?>
-                <?php $no=1; foreach($riwayatSP as $row): 
-                    $badgeClass = 'badge-sp1';
-                    if($row['jenis_sp'] == 'SP2') $badgeClass = 'badge-sp2';
-                    if($row['jenis_sp'] == 'SP3') $badgeClass = 'badge-sp3';
-                ?>
+        <div class="section-title" style="margin-top: 25px;">Riwayat Surat Peringatan (SP)</div>
+        <table class="data-table">
+            <thead>
                 <tr>
-                    <td style="text-align: center;"><?= $no++ ?></td>
-                    <td><?= htmlspecialchars($row['no_surat']) ?></td>
-                    <td style="text-align: center;"><span class="badge <?= $badgeClass ?>"><?= htmlspecialchars($row['jenis_sp']) ?></span></td>
-                    <td style="text-align: center;"><?= date('d M Y', strtotime($row['tanggal_sp'])) ?></td>
-                    <td style="text-align: center;"><?= !empty($row['masa_berlaku']) ? date('d M Y', strtotime($row['masa_berlaku'])) : 'Permanen' ?></td>
-                    <td style="font-size: 8px;"><?= htmlspecialchars($row['pelanggaran'] ?: '-') ?></td>
+                    <th width="5%">No</th>
+                    <th width="20%">Nomor Surat</th>
+                    <th width="10%">Jenis</th>
+                    <th width="15%">Tgl Efektif</th>
+                    <th width="15%">Berakhir</th>
+                    <th width="35%">Pelanggaran</th>
                 </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                <?php if (empty($riwayatSP)): ?>
+                    <tr><td colspan="6" align="center" style="font-style: italic; color: #10b981;">- Tidak ada riwayat pelanggaran (Clean Record) -</td></tr>
+                <?php else: ?>
+                    <?php $no=1; foreach($riwayatSP as $row): 
+                        $badgeClass = match($row['jenis_sp']) {
+                            'SP1' => 'bg-blue',
+                            'SP2' => 'bg-orange',
+                            'SP3' => 'bg-red',
+                            default => 'bg-green'
+                        };
+                    ?>
+                    <tr>
+                        <td align="center"><?= $no++ ?></td>
+                        <td><?= htmlspecialchars($row['no_surat']) ?></td>
+                        <td align="center"><span class="badge <?= $badgeClass ?>"><?= htmlspecialchars($row['jenis_sp']) ?></span></td>
+                        <td><?= date('d M Y', strtotime($row['tanggal_sp'])) ?></td>
+                        <td><?= !empty($row['masa_berlaku']) ? date('d M Y', strtotime($row['masa_berlaku'])) : 'Permanen' ?></td>
+                        <td><?= htmlspecialchars($row['pelanggaran']) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                <?php endif; ?>
+            </tbody>
+        </table>
 
-    <div class="signature-section">
-        <div class="signature-box">
-            <div>Medan, <?= tgl_indo(date('Y-m-d')) ?></div>
-            <div class="signature-line">
-                <strong><?= htmlspecialchars($k['nama_lengkap']) ?></strong><br>
-                <small style="color: #6b7280;">Karyawan Yang Bersangkutan</small>
+        <div class="footer-info">
+            <div class="signature-area">
+                <div style="margin-bottom: 10px;">Medan, <?= tgl_indo(date('Y-m-d')) ?></div>
+                <div style="font-size: 8pt; color: #666;">Dicetak oleh Sistem</div>
+                <div class="sign-line">
+                    <?= htmlspecialchars($k['nama_lengkap']) ?><br>
+                    <span style="font-weight: normal; font-size: 8pt;">Karyawan</span>
+                </div>
             </div>
         </div>
+
     </div>
 
-    <div class="footer">
-        <div>Dokumen ini dicetak otomatis oleh Sistem Informasi SDM PTPN IV Regional 3</div>
-        <div>Tanggal Cetak: <?= date('d F Y, H:i:s') ?> WIB</div>
+    <div class="page-footer">
+        Dicetak melalui Sistem Informasi SDM PTPN IV Regional 3 pada <?= date('d/m/Y H:i') ?> WIB. <br>
+        Dokumen ini sah dan dihasilkan secara komputerisasi.
     </div>
 
 </body>
@@ -545,22 +603,27 @@ try {
 
     $options = new Options();
     $options->set('isHtml5ParserEnabled', true);
-    $options->set('isRemoteEnabled', true);
-    $options->set('defaultFont', 'Arial');
-    $options->set('chroot', realpath('../'));
+    $options->set('isRemoteEnabled', true); // Penting untuk gambar
+    $options->set('defaultFont', 'Helvetica');
+    $options->set('chroot', realpath('../')); // Izin akses folder parent
     
     $dompdf = new Dompdf($options);
     $dompdf->loadHtml($html);
+    
+    // Set paper size A4
     $dompdf->setPaper('A4', 'portrait');
+    
     $dompdf->render();
 
-    $filename = 'CV_' . str_replace(' ', '_', $k['nama_lengkap']) . '_' . date('Ymd') . '.pdf';
-    $dompdf->stream($filename, ['Attachment' => 0]);
+    $filename = 'CV_' . preg_replace('/[^A-Za-z0-9]/', '_', $k['nama_lengkap']) . '.pdf';
+    $dompdf->stream($filename, ['Attachment' => 0]); // 0 = Preview di browser, 1 = Download
     
 } catch (Throwable $e) {
     http_response_code(500);
-    echo "<h2>Error Details:</h2>";
-    echo "<pre>" . htmlspecialchars($e->getMessage()) . "</pre>";
-    echo "<pre>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+    echo "<div style='font-family: monospace; background: #fee; padding: 20px; border: 1px solid red;'>";
+    echo "<h3 style='color: red; margin-top: 0;'>Terjadi Kesalahan Sistem</h3>";
+    echo "<strong>Pesan Error:</strong> " . htmlspecialchars($e->getMessage()) . "<br><br>";
+    echo "<strong>Lokasi:</strong> " . $e->getFile() . " baris " . $e->getLine();
+    echo "</div>";
 }
 ?>
