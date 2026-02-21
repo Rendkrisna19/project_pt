@@ -4,47 +4,52 @@
 $currentPage = $currentPage ?? 'dashboard';
 $userName    = $_SESSION['user_nama'] ?? 'User';
 $userRole    = $_SESSION['user_role'] ?? 'viewer'; 
+$userId      = $_SESSION['user_id'] ?? 0;
+
+// --- PERBAIKAN: Ambil Foto Langsung dari DB (Agar Realtime) ---
+// Kita buka koneksi sebentar khusus untuk sidebar agar foto selalu update
+if (!isset($pdo)) {
+    require_once '../config/database.php';
+    $db_side   = new Database();
+    $pdo_side  = $db_side->getConnection();
+} else {
+    $pdo_side = $pdo;
+}
+
+$stmt_img = $pdo_side->prepare("SELECT foto_profil, nama_lengkap FROM users WHERE id = ? LIMIT 1");
+$stmt_img->execute([$userId]);
+$userData = $stmt_img->fetch(PDO::FETCH_ASSOC);
+$userFoto = $userData['foto_profil'] ?? null;
+$userName = $userData['nama_lengkap'] ?? $userName; // Update nama jika berubah
+// -------------------------------------------------------------
 
 // Helper function menu aktif
 function navClass($key, $current) {
-    // Mempertahankan style aktif dengan efek glowing cyan
     return $key === $current
         ? 'bg-gradient-to-r from-cyan-500/20 to-transparent border-l-4 border-cyan-400 text-white shadow-[0_0_15px_rgba(6,182,212,0.3)] font-medium tracking-wide'
         : 'border-l-4 border-transparent text-slate-400 hover:bg-white/5 transition-all duration-300'; 
 }
 
-// Logika Dropdown (Array Menu)
+// Array Menu Keys (TIDAK DIRUBAH)
 $PEM_KEYS    = ['pemeliharaan_tm', 'pemeliharaan_tu','pemeliharaan_tk', 'pemeliharaan_tbm1','pemeliharaan_tbm2','pemeliharaan_tbm3', 'pemeliharaan_pn','pemeliharaan_mn'];
 $GUDANG_KEYS = ['stok_gudang', 'alat_panen', 'stok_barang_gudang'];
 $LM_KEYS     = ['lm76', 'lm77', 'lm_biaya'];
 $SDM_KEYS    = ['data_karyawan']; 
 
-// Cek apakah dropdown harus terbuka berdasarkan halaman aktif
 $isPemOpen    = in_array($currentPage, $PEM_KEYS);
 $isGudangOpen = in_array($currentPage, $GUDANG_KEYS);
 $isLmOpen     = in_array($currentPage, $LM_KEYS);
 $isSdmOpen    = in_array($currentPage, $SDM_KEYS); 
 ?>
 
-<div x-show="sidebarOpen" 
-     x-transition:enter="transition-opacity ease-linear duration-300"
-     x-transition:enter-start="opacity-0"
-     x-transition:enter-end="opacity-100"
-     x-transition:leave="transition-opacity ease-linear duration-300"
-     x-transition:leave-start="opacity-100"
-     x-transition:leave-end="opacity-0"
-     @click="sidebarOpen = false"
-     class="fixed inset-0 z-40 bg-slate-900/80 backdrop-blur-sm md:hidden" 
-     style="display: none;"></div>
+<div x-show="sidebarOpen" @click="sidebarOpen = false" class="fixed inset-0 z-40 bg-slate-900/80 backdrop-blur-sm md:hidden" style="display: none;"></div>
 
 <aside :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
        class="fixed inset-y-0 left-0 z-50 w-72 bg-[#021019] text-white transition-transform duration-300 ease-in-out shadow-2xl md:translate-x-0 flex flex-col border-r border-cyan-900/30">
 
     <div class="absolute inset-0 z-0 pointer-events-none overflow-hidden">
         <div class="absolute inset-0 bg-gradient-to-b from-[#0c4a6e] via-[#021019] to-[#020617] opacity-90"></div>
-        <div class="absolute inset-0 opacity-[0.05]" 
-             style="background-image: url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 100 100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 50 C 25 75, 75 75, 100 50 C 75 25, 25 25, 0 50 Z\' fill=\'none\' stroke=\'%2322d3ee\' stroke-width=\'2\'/%3E%3C/svg%3E'); background-size: 30px 30px;">
-        </div>
+        <div class="absolute inset-0 opacity-[0.05]" style="background-image: url('data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 100 100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 50 C 25 75, 75 75, 100 50 C 75 25, 25 25, 0 50 Z\' fill=\'none\' stroke=\'%2322d3ee\' stroke-width=\'2\'/%3E%3C/svg%3E'); background-size: 30px 30px;"></div>
     </div>
 
     <div class="relative z-10 flex flex-col h-full">
@@ -57,21 +62,39 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                     <p class="text-[9px] text-cyan-400 uppercase tracking-widest">System</p>
                 </div>
             </div>
-            <button @click="sidebarOpen = false" class="md:hidden text-cyan-200 hover:text-white">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
+            <button @click="sidebarOpen = false" class="md:hidden text-cyan-200 hover:text-white"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
 
         <div class="px-5 py-6">
-             <div class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-900/20 to-slate-900/20 border border-cyan-500/10 backdrop-blur-sm">
-                <div class="w-9 h-9 rounded-full bg-cyan-700 flex items-center justify-center text-white font-bold shadow-inner">
-                    <?= strtoupper(substr($userName, 0, 1)) ?>
+             <a href="profile.php" class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-900/20 to-slate-900/20 border border-cyan-500/10 backdrop-blur-sm hover:bg-white/5 hover:border-cyan-500/30 transition-all cursor-pointer group relative overflow-hidden">
+                
+                <div class="relative">
+                    <?php 
+                    // Path Foto (Pastikan folder 'uploads/profil' ada di luar folder 'pages')
+                    $fotoPath = "../uploads/profil/" . ($userFoto ?? 'default.png');
+                    
+                    // Cek file fisik
+                    if (!empty($userFoto) && file_exists($fotoPath)): 
+                    ?>
+                        <img src="<?= $fotoPath ?>?t=<?= time() ?>" class="w-10 h-10 rounded-full object-cover border-2 border-cyan-500/50 shadow-md bg-white">
+                    <?php else: ?>
+                        <div class="w-10 h-10 rounded-full bg-cyan-700 flex items-center justify-center text-white font-bold shadow-inner border-2 border-cyan-600">
+                            <?= strtoupper(substr($userName, 0, 1)) ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="absolute -bottom-1 -right-1 bg-white text-cyan-700 rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity border border-cyan-200">
+                        <i data-lucide="pencil" class="w-3 h-3"></i>
+                    </div>
                 </div>
-                <div class="overflow-hidden">
-                    <p class="text-sm font-semibold truncate text-cyan-50"><?= htmlspecialchars($userName) ?></p>
-                    <p class="text-[10px] text-cyan-300/70 uppercase"><?= htmlspecialchars($userRole) ?></p>
+
+                <div class="overflow-hidden flex-1">
+                    <p class="text-sm font-semibold truncate text-cyan-50 group-hover:text-cyan-300 transition-colors"><?= htmlspecialchars($userName) ?></p>
+                    <p class="text-[10px] text-cyan-300/70 uppercase flex items-center gap-1">
+                        <?= htmlspecialchars($userRole) ?> <i data-lucide="chevron-right" class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                    </p>
                 </div>
-            </div>
+            </a>
         </div>
 
         <nav class="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pb-6">
@@ -92,8 +115,7 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
             </div>
 
             <div x-data="{ open: <?= $isPemOpen ? 'true' : 'false' ?> }">
-                <button @click="open = !open" type="button" 
-                    class="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-400 hover:text-cyan-300 hover:bg-white/5 rounded-r-lg transition-all group">
+                <button @click="open = !open" type="button" class="flex items-center justify-between w-full px-4 py-3 text-sm font-medium text-slate-400 hover:text-cyan-300 hover:bg-white/5 rounded-r-lg transition-all group">
                     <div class="flex items-center">
                         <i data-lucide="gauge" class="w-5 h-5 mr-3 group-hover:text-cyan-400 transition-colors"></i>
                         <span>Anggaran vs Real.</span>
@@ -222,6 +244,10 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 <a href="users.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('users', $currentPage) ?>">
                     <i data-lucide="users" class="w-5 h-5 mr-3 group-hover:text-gray-200 transition-colors <?= $currentPage=='users'?'text-white':'' ?>"></i>
                     <span>Data User</span>
+                </a>
+                <a href="maintenance.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('maintenance', $currentPage) ?>">
+                    <i data-lucide="shield-check" class="w-5 h-5 mr-3 group-hover:text-red-400 transition-colors <?= $currentPage=='maintenance'?'text-white':'' ?>"></i>
+                    <span>Maintenance & Backup</span>
                 </a>
             <?php endif; ?>
 

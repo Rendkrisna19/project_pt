@@ -33,10 +33,23 @@
         <div class="p-3 bg-cyan-100 rounded-lg text-cyan-700">
             <i class="ti ti-calendar-event text-2xl"></i>
         </div>
+        
         <div>
             <h3 class="text-lg font-bold text-slate-800">Monitoring MBT</h3>
             <p class="text-sm text-slate-500">Masa Berlaku Tunjangan Karyawan</p>
         </div>
+
+        <div class="flex gap-2 ml-auto">
+            <button onclick="doExport('excel')" class="bg-cyan-700 hover:bg-cyan-800 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition shadow-sm">
+                <i class="ti ti-file-spreadsheet"></i> Excel
+            </button>
+            
+            <button onclick="doExport('pdf')" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition shadow-sm">
+                <i class="ti ti-file-type-pdf"></i> PDF
+            </button>
+        </div>
+    </div>
+
     </div>
 
     <div class="bg-white p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row gap-4 items-center justify-between shadow-sm">
@@ -118,6 +131,23 @@ async function loadAfdelingMBT() {
             document.getElementById('f_afdeling_mbt').innerHTML = html;
         }
     } catch(e) { console.error("Gagal load afdeling", e); }
+}
+
+// Function Export MBT
+function doExport(type) {
+    const year = document.getElementById('f_year_mbt').value;
+    const afd  = document.getElementById('f_afdeling_mbt').value;
+    const q    = document.getElementById('q-mbt').value;
+    
+    let url = '';
+    if(type === 'excel') {
+        url = `./cetak/mbt_excel.php?year=${year}&afdeling=${afd}&q=${q}`;
+    } else {
+        url = `./cetak/mbt_pdf.php?year=${year}&afdeling=${afd}&q=${q}`;
+    }
+    
+    // Buka di tab baru agar tidak mengganggu halaman monitoring
+    window.open(url, '_blank');
 }
 
 // Main Load Function
@@ -213,5 +243,7 @@ async function loadMBT() {
         console.error(e); 
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-red-500">Gagal memuat data.</td></tr>';
     }
+
+    
 }
 </script>

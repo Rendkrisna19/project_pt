@@ -73,6 +73,7 @@ try {
         $_SESSION['user_username'] = $user['username'];
         $_SESSION['user_nik']      = $user['nik'];
         $_SESSION['user_nama']     = $user['nama_lengkap'];
+        $_SESSION['user_foto'] = $row['foto_profil'];
         $_SESSION['user_role']     = $user['role'];
         $_SESSION['loggedin']      = true;
         

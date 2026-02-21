@@ -1,16 +1,17 @@
 <?php
 // pages/data_karyawan_crud.php
-// VERSI FULL: Karyawan + MBT + Tanggungan + SP (Fixed)
+// VERSI FULL MODIFIKASI: KEBUN TEXT, STATUS KELUARGA, & IMPORT 30 KOLOM
+// ✅ FIX: Error status_tax → status_pajak
+// ✅ FIX: No Rekening format (prevent decimal dari Excel)
 
 session_start();
 header('Content-Type: application/json');
 
-// Matikan display error agar JSON tidak rusak jika ada notice
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 error_reporting(E_ALL);
 
-require_once '../vendor/autoload.php'; 
+require_once '../vendor/autoload.php';
 require_once '../config/database.php';
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -18,7 +19,8 @@ use PhpOffice\PhpSpreadsheet\Shared\Date;
 
 // 1. CEK AUTH
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
-    echo json_encode(['success'=>false, 'message'=>'Unauthorized']); exit;
+    echo json_encode(['success' => false, 'message' => 'Unauthorized']);
+    exit;
 }
 
 $db = new Database();
@@ -28,25 +30,16 @@ $action = $_POST['action'] ?? '';
 $role = $_SESSION['user_role'] ?? 'viewer';
 
 // 2. CEK PERMISSION
-// Input Actions
-$inputActions = [
-    'store', 'import_excel_lib', 
-    'store_tanggungan', 
-    'store_peringatan'
-];
-
-// Admin Actions
-$adminActions = [
-    'update', 'delete', 
-    'update_tanggungan', 'delete_tanggungan', 
-    'update_peringatan', 'delete_peringatan'
-];
+$inputActions = ['store', 'import_excel_lib', 'store_tanggungan', 'store_peringatan'];
+$adminActions = ['update', 'delete', 'update_tanggungan', 'delete_tanggungan', 'update_peringatan', 'delete_peringatan'];
 
 if (in_array($action, $inputActions) && ($role !== 'admin' && $role !== 'staf')) {
-    echo json_encode(['success'=>false, 'message'=>'Akses Ditolak']); exit;
+    echo json_encode(['success' => false, 'message' => 'Akses Ditolak']);
+    exit;
 }
 if (in_array($action, $adminActions) && $role !== 'admin') {
-    echo json_encode(['success'=>false, 'message'=>'Admin only']); exit;
+    echo json_encode(['success' => false, 'message' => 'Admin only']);
+    exit;
 }
 
 try {
@@ -58,8 +51,8 @@ try {
         $q = isset($_POST['q']) ? trim($_POST['q']) : '';
         $page = isset($_POST['page']) ? (int)$_POST['page'] : 1;
         $limit = isset($_POST['limit']) ? (int)$_POST['limit'] : 10;
-        $viewType = $_POST['view_type'] ?? 'active'; 
-        
+        $viewType = $_POST['view_type'] ?? 'active';
+
         $f_afdeling = $_POST['f_afdeling'] ?? '';
         $f_kebun    = $_POST['f_kebun'] ?? '';
 
@@ -67,7 +60,8 @@ try {
         if ($limit < 1) $limit = 10;
         $offset = ($page - 1) * $limit;
 
-        $sqlBase = "FROM data_karyawan k LEFT JOIN md_kebun mk ON k.kebun_id = mk.id WHERE 1=1";
+        // PERUBAHAN: Hapus JOIN md_kebun
+        $sqlBase = "FROM data_karyawan k WHERE 1=1";
         $params = [];
 
         // Logic Pensiun
@@ -78,7 +72,7 @@ try {
         }
 
         if ($q) {
-            $sqlBase .= " AND (k.nama_lengkap LIKE :q OR k.id_sap LIKE :q OR k.jabatan_real LIKE :q)";
+            $sqlBase .= " AND (k.nama_lengkap LIKE :q OR k.id_sap LIKE :q OR k.kebun_id LIKE :q)";
             $params[':q'] = "%$q%";
         }
         if ($f_afdeling) {
@@ -86,6 +80,7 @@ try {
             $params[':afd'] = $f_afdeling;
         }
         if ($f_kebun) {
+            // PERUBAHAN: Filter kebun sekarang teks
             $sqlBase .= " AND k.kebun_id = :kebun";
             $params[':kebun'] = $f_kebun;
         }
@@ -94,15 +89,18 @@ try {
         $stmtCount->execute($params);
         $totalRows = $stmtCount->fetch(PDO::FETCH_ASSOC)['total'];
 
-        $sql = "SELECT k.*, mk.nama_kebun $sqlBase ORDER BY k.nama_lengkap ASC LIMIT $limit OFFSET $offset";
+        // PERUBAHAN: Select semua, tidak perlu ambil nama_kebun dari tabel lain
+        $sql = "SELECT k.* $sqlBase ORDER BY k.nama_lengkap ASC LIMIT $limit OFFSET $offset";
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mappedData = array_map(function($row) {
+        $mappedData = array_map(function ($row) {
             $row['sap_id']          = $row['id_sap'];
             $row['nama_karyawan']   = $row['nama_lengkap'];
             $row['foto_karyawan']   = $row['foto_profil'];
+            // Mapping nama_kebun dari kebun_id (karena sekarang teks)
+            $row['nama_kebun']      = $row['kebun_id'];
             return $row;
         }, $data);
 
@@ -112,18 +110,18 @@ try {
 
     // B. LIST OPTIONS (DROPDOWN)
     if ($action === 'list_options') {
-        $stmtKebun = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC");
-        $kebun = $stmtKebun->fetchAll(PDO::FETCH_ASSOC);
-        
+        // PERUBAHAN: Ambil DISTINCT dari data_karyawan, bukan master
+        $stmtKebun = $conn->query("SELECT DISTINCT kebun_id FROM data_karyawan WHERE kebun_id IS NOT NULL AND kebun_id != '' ORDER BY kebun_id ASC");
+        $kebun = $stmtKebun->fetchAll(PDO::FETCH_COLUMN);
+
         $stmtAfd = $conn->query("SELECT DISTINCT afdeling FROM data_karyawan WHERE afdeling IS NOT NULL AND afdeling != '' ORDER BY afdeling ASC");
         $afdeling = $stmtAfd->fetchAll(PDO::FETCH_COLUMN);
 
-        echo json_encode(['success'=>true, 'kebun'=>$kebun, 'afdeling'=>$afdeling]);
+        echo json_encode(['success' => true, 'kebun' => $kebun, 'afdeling' => $afdeling]);
         exit;
     }
 
-    // C. LIST KARYAWAN SIMPLE (UNTUK DROPDOWN SP & TANGGUNGAN)
-    // *** INI YANG SEBELUMNYA HILANG DAN MENYEBABKAN ERROR JSON ***
+    // C. LIST KARYAWAN SIMPLE
     if ($action === 'list_karyawan_simple') {
         $sql = "SELECT id, id_sap, nama_lengkap as nama_karyawan 
                 FROM data_karyawan 
@@ -137,19 +135,19 @@ try {
     }
 
     // ============================================================
-    // D. MODUL MBT (MONITORING MASA BERLAKU TUNJANGAN) - RESTORED
+    // D. MODUL MBT (MONITORING MASA BERLAKU TUNJANGAN)
     // ============================================================
     if ($action === 'list_mbt') {
         $q = isset($_POST['q']) ? trim($_POST['q']) : '';
         $year = isset($_POST['year']) ? (int)$_POST['year'] : date('Y');
         $f_afdeling = $_POST['f_afdeling'] ?? '';
 
-        $sql = "SELECT k.*, mk.nama_kebun, 
+        // PERUBAHAN: Hapus Join md_kebun, pakai kebun_id langsung
+        $sql = "SELECT k.*, k.kebun_id as nama_kebun, 
                 DATEDIFF(k.tmt_mbt, CURDATE()) as sisa_hari 
                 FROM data_karyawan k
-                LEFT JOIN md_kebun mk ON k.kebun_id = mk.id
                 WHERE k.tmt_mbt IS NOT NULL";
-        
+
         $params = [];
 
         if ($year) {
@@ -166,39 +164,59 @@ try {
         }
 
         $sql .= " ORDER BY k.tmt_mbt ASC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mappedData = array_map(function($row) {
+        $mappedData = array_map(function ($row) {
             $row['sap_id'] = $row['id_sap'];
             $row['nama_karyawan'] = $row['nama_lengkap'];
             $row['foto_karyawan'] = $row['foto_profil'];
             return $row;
         }, $data);
-        
-        echo json_encode(['success'=>true, 'data'=>$mappedData]);
+
+        echo json_encode(['success' => true, 'data' => $mappedData]);
         exit;
     }
 
     // ============================================================
-    // E. CRUD KARYAWAN (STORE/UPDATE/DELETE/IMPORT)
+    // E. CRUD KARYAWAN (STORE/UPDATE/DELETE)
     // ============================================================
     if ($action === 'store' || $action === 'update') {
         $id = $_POST['id'] ?? null;
-        
+
+        // ✅ FIX: Mapping Form ke DB (status_pajak sesuai kolom DB asli)
         $fieldMap = [
-            'sap_id' => 'id_sap', 'nama_karyawan' => 'nama_lengkap', 'nik_ktp' => 'nik_ktp',
-            'gender' => 'gender', 'tempat_lahir' => 'tempat_lahir', 'tgl_lahir' => 'tanggal_lahir',
-            'person_grade' => 'person_grade', 'phdp_golongan' => 'phdp_golongan', 'status_keluarga' => 's_kel',
-            'jabatan_sap' => 'jabatan_sap', 'jabatan_real' => 'jabatan_real', 'afdeling' => 'afdeling',
-            'kebun_id' => 'kebun_id', 'status_karyawan' => 'status_karyawan', 'tmt_kerja' => 'tmt_kerja',
-            'tmt_mbt' => 'tmt_mbt', 'tmt_pensiun' => 'tmt_pensiun', 'tax_id' => 'tax_id',
-            'bpjs_id' => 'bpjs_id', 'jamsostek_id' => 'jamsostek_id', 'nama_bank' => 'nama_bank',
-            'no_rekening' => 'no_rekening', 'nama_pemilik_rekening' => 'nama_pemilik_rekening',
-            'no_hp' => 'no_hp', 'agama' => 'agama', 'status_pajak' => 'status_pajak',
-            'pendidikan_terakhir'=> 'pendidikan_terakhir', 'jurusan' => 'jurusan', 'institusi' => 'institusi'
+            'sap_id' => 'id_sap',
+            'nama_karyawan' => 'nama_lengkap',
+            'nik_ktp' => 'nik_ktp',
+            'gender' => 'gender',
+            'tempat_lahir' => 'tempat_lahir',
+            'tgl_lahir' => 'tanggal_lahir',
+            'person_grade' => 'person_grade',
+            'phdp_golongan' => 'phdp_golongan',
+            'status_keluarga' => 's_kel',
+            'jabatan_sap' => 'jabatan_sap',
+            'jabatan_real' => 'jabatan_real',
+            'afdeling' => 'afdeling',
+            'kebun_id' => 'kebun_id', // Text
+            'status_karyawan' => 'status_karyawan',
+            'tmt_kerja' => 'tmt_kerja',
+            'tmt_mbt' => 'tmt_mbt',
+            'tmt_pensiun' => 'tmt_pensiun',
+            'tax_id' => 'tax_id',
+            'bpjs_id' => 'bpjs_id',
+            'jamsostek_id' => 'jamsostek_id',
+            'nama_bank' => 'nama_bank',
+            'no_rekening' => 'no_rekening',
+            'nama_pemilik_rekening' => 'nama_pemilik_rekening',
+            'no_hp' => 'no_hp',
+            'agama' => 'agama',
+            'status_pajak' => 'status_pajak',
+            'pendidikan_terakhir' => 'pendidikan_terakhir',
+            'jurusan' => 'jurusan',
+            'institusi' => 'institusi'
         ];
 
         $params = [];
@@ -209,7 +227,7 @@ try {
         foreach ($fieldMap as $formField => $dbCol) {
             $val = isset($_POST[$formField]) && $_POST[$formField] !== '' ? $_POST[$formField] : null;
             if ($formField === 'gender' && !empty($val)) $val = strtoupper(substr($val, 0, 1));
-            
+
             $params[":$dbCol"] = $val;
             $dbCols[] = $dbCol;
             $dbVals[] = ":$dbCol";
@@ -218,7 +236,7 @@ try {
 
         // Upload Foto
         $foto_name = null;
-        if (!empty($_FILES['foto_karyawan']['name'])) { 
+        if (!empty($_FILES['foto_karyawan']['name'])) {
             $dir = "../uploads/profil/";
             if (!is_dir($dir)) mkdir($dir, 0777, true);
             $ext = pathinfo($_FILES['foto_karyawan']['name'], PATHINFO_EXTENSION);
@@ -229,7 +247,7 @@ try {
 
         // Upload Dokumen
         $doc_name = null;
-        if (!empty($_FILES['dokumen_file']['name'])) { 
+        if (!empty($_FILES['dokumen_file']['name'])) {
             $dirDoc = "../uploads/dokumen/";
             if (!is_dir($dirDoc)) mkdir($dirDoc, 0777, true);
             $extDoc = pathinfo($_FILES['dokumen_file']['name'], PATHINFO_EXTENSION);
@@ -241,24 +259,30 @@ try {
         if ($action === 'store') {
             $colsStr = implode(',', $dbCols);
             $valsStr = implode(',', $dbVals);
-            if ($foto_name) { $colsStr .= ",foto_profil"; $valsStr .= ",:foto"; }
-            if ($doc_name)  { $colsStr .= ",dokumen_path"; $valsStr .= ",:doc"; }
+            if ($foto_name) {
+                $colsStr .= ",foto_profil";
+                $valsStr .= ",:foto";
+            }
+            if ($doc_name) {
+                $colsStr .= ",dokumen_path";
+                $valsStr .= ",:doc";
+            }
             $colsStr .= ",created_at,updated_at";
             $valsStr .= ",NOW(),NOW()";
 
             $stmt = $conn->prepare("INSERT INTO data_karyawan ($colsStr) VALUES ($valsStr)");
             $stmt->execute($params);
-
         } else {
             if ($foto_name) $updateSets[] = "foto_profil = :foto";
             if ($doc_name)  $updateSets[] = "dokumen_path = :doc";
             $updateSets[] = "updated_at = NOW()";
-            
+
             $params[':id'] = $id;
             $stmt = $conn->prepare("UPDATE data_karyawan SET " . implode(',', $updateSets) . " WHERE id = :id");
             $stmt->execute($params);
         }
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
     if ($action === 'delete') {
@@ -267,65 +291,136 @@ try {
         $stmt->execute([$id]);
         $old = $stmt->fetchColumn();
         if ($old && file_exists("../uploads/profil/$old")) unlink("../uploads/profil/$old");
-        
+
         $conn->prepare("DELETE FROM data_karyawan WHERE id=?")->execute([$id]);
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
+    // ============================================================
+    // F. IMPORT EXCEL LIB (FULL VERSION TANPA LOOKUP)
+    // ============================================================
     if ($action === 'import_excel_lib') {
         if (empty($_FILES['file_excel']['name'])) {
-            echo json_encode(['success'=>false, 'message'=>'File tidak ditemukan']); exit;
+            echo json_encode(['success' => false, 'message' => 'File tidak ditemukan']);
+            exit;
         }
+
         $fileTmp = $_FILES['file_excel']['tmp_name'];
         try {
+            // 1. Load Excel
             $spreadsheet = IOFactory::load($fileTmp);
             $sheet = $spreadsheet->getActiveSheet();
             $rows = $sheet->toArray(null, true, true, true);
-            $inserted = 0; $rowIdx = 0;
 
-            $stmtInsert = $conn->prepare("INSERT INTO data_karyawan 
+            // PERUBAHAN: Tidak ada lookup kebunMap, text langsung masuk
+
+            // 2. Query Insert Full (✅ FIX: status_pajak, bukan status_tax)
+            $query = "INSERT INTO data_karyawan 
                 (id_sap, old_pers_no, nama_lengkap, nik_ktp, gender, tempat_lahir, tanggal_lahir, 
                  person_grade, phdp_golongan, s_kel, jabatan_sap, jabatan_real, 
-                 afdeling, status_karyawan, tmt_kerja, tmt_mbt, tmt_pensiun, tax_id, bpjs_id, 
-                 jamsostek_id, nama_bank, no_rekening, nama_pemilik_rekening, no_hp, agama, 
-                 status_pajak, pendidikan_terakhir, jurusan, institusi,
+                 kebun_id, afdeling, status_karyawan, tmt_kerja, tmt_mbt, tmt_pensiun, 
+                 tax_id, bpjs_id, jamsostek_id, nama_bank, no_rekening, nama_pemilik_rekening, 
+                 no_hp, agama, status_pajak, pendidikan_terakhir, jurusan, institusi,
                  created_at, updated_at) 
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(),NOW())
-                ON DUPLICATE KEY UPDATE nama_lengkap=VALUES(nama_lengkap), updated_at=NOW()");
+                 VALUES 
+                 (?, ?, ?, ?, ?, ?, ?, 
+                  ?, ?, ?, ?, ?, 
+                  ?, ?, ?, ?, ?, ?, 
+                  ?, ?, ?, ?, ?, ?, 
+                  ?, ?, ?, ?, ?, ?, 
+                  NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE 
+                 nama_lengkap=VALUES(nama_lengkap), jabatan_real=VALUES(jabatan_real), 
+                 kebun_id=VALUES(kebun_id), status_karyawan=VALUES(status_karyawan), 
+                 updated_at=NOW()";
+
+            $stmtInsert = $conn->prepare($query);
+            $inserted = 0;
+            $rowIdx = 0;
+
+            // Helper Format Tanggal
+            $fmtDate = function ($val) {
+                if (empty($val) || $val == '-') return null;
+                try {
+                    if (is_numeric($val)) {
+                        return Date::excelToDateTimeObject($val)->format('Y-m-d');
+                    }
+                    return date('Y-m-d', strtotime(str_replace('/', '-', $val)));
+                } catch (Exception $e) {
+                    return null;
+                }
+            };
+
+            // ✅ FIX: Helper untuk format No Rekening (prevent desimal)
+            // ✅ FIX: Helper untuk format No Rekening (prevent desimal)
+            $fmtNoRek = function ($val) {
+                if (empty($val) || $val == '-') return null;
+                $val = trim($val);
+                if (is_numeric($val)) {
+                    return number_format((float)$val, 0, '', ''); // Hilangkan .00
+                }
+                return preg_replace('/[^0-9]/', '', $val);
+            };
 
             foreach ($rows as $row) {
                 $rowIdx++;
+                // Skip Header (Baris 1) & Data Kosong
                 if ($rowIdx <= 1 || empty(trim($row['A']))) continue;
 
-                $fmtDate = function($val) {
-                    if (empty($val)) return null;
-                    if (is_numeric($val)) return Date::excelToDateTimeObject($val)->format('Y-m-d');
-                    return date('Y-m-d', strtotime(str_replace('/','-', $val)));
-                };
-                
+                // Format Gender
                 $gender = strtoupper(substr(trim($row['E']), 0, 1));
-                if($gender !== 'L' && $gender !== 'P') $gender = '';
+                if ($gender !== 'L' && $gender !== 'P') $gender = null;
 
                 $vals = [
-                    trim($row['A']), trim($row['B']), trim($row['C']), trim($row['D']), $gender,
-                    trim($row['F']), $fmtDate($row['G']), trim($row['H']), trim($row['I']), trim($row['J']),
-                    trim($row['K']), trim($row['L']), trim($row['M']), trim($row['N']), $fmtDate($row['O']),
-                    $fmtDate($row['P']), $fmtDate($row['Q']), trim($row['R']), trim($row['S']), trim($row['T']),
-                    trim($row['U']), trim($row['V']), trim($row['W']), trim($row['X']), trim($row['Y']),
-                    trim($row['Z']), trim($row['AA']), trim($row['AB']), trim($row['AC'])
+                    trim($row['A']), // id_sap
+                    trim($row['B']), // old_pers_no
+                    trim($row['C']), // nama_lengkap
+                    trim($row['D']), // nik_ktp
+                    $gender,         // gender
+                    trim($row['F']), // tempat_lahir
+                    $fmtDate($row['G']), // tanggal_lahir
+
+                    trim($row['H']), // person_grade
+                    trim($row['I']), // phdp_golongan
+                    trim($row['J']), // s_kel (Status Keluarga - SUDAH FIX)
+                    trim($row['K']), // jabatan_sap
+                    trim($row['L']), // jabatan_real
+
+                    strtoupper(trim($row['M'])), // kebun_id (LANGSUNG TEXT)
+                    trim($row['N']), // afdeling
+                    trim($row['O']), // status_karyawan
+                    $fmtDate($row['P']), // tmt_kerja
+                    $fmtDate($row['Q']), // tmt_mbt
+                    $fmtDate($row['R']), // tmt_pensiun
+
+                    trim($row['S']), // tax_id
+                    trim($row['T']), // bpjs_id
+                    trim($row['U']), // jamsostek_id
+                    trim($row['V']), // nama_bank
+                    $fmtNoRek($row['W']), // ✅ FIX: no_rekening (hilangkan desimal)
+                    trim($row['X']), // nama_pemilik_rekening
+
+                    trim($row['Y']), // no_hp
+                    trim($row['Z']), // agama
+                    trim($row['AA']), // status_pajak (PTKP) - ✅ FIXED
+                    trim($row['AB']), // pendidikan_terakhir
+                    trim($row['AC']), // jurusan
+                    trim($row['AD']) // institusi
                 ];
+
                 $stmtInsert->execute($vals);
                 $inserted++;
             }
-            echo json_encode(['success'=>true, 'message'=>"Import $inserted data selesai."]);
+            echo json_encode(['success' => true, 'message' => "Import $inserted data selesai."]);
         } catch (Exception $e) {
-            echo json_encode(['success'=>false, 'message'=>$e->getMessage()]);
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
         }
         exit;
     }
 
     // ============================================================
-    // F. MODUL TANGGUNGAN / KELUARGA
+    // G. MODUL TANGGUNGAN / KELUARGA
     // ============================================================
     if ($action === 'list_tanggungan') {
         $q = isset($_POST['q']) ? trim($_POST['q']) : '';
@@ -338,14 +433,15 @@ try {
         $sql .= " ORDER BY dk.nama_lengkap ASC";
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
-        echo json_encode(['success'=>true, 'data'=>$stmt->fetchAll(PDO::FETCH_ASSOC)]); exit;
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        exit;
     }
 
     if ($action === 'store_tanggungan' || $action === 'update_tanggungan') {
         $id = $_POST['id'] ?? null;
         $fields = ['karyawan_id', 'nama_batih', 'hubungan', 'tempat_lahir', 'tanggal_lahir', 'pendidikan_terakhir', 'pekerjaan', 'keterangan'];
         $params = [];
-        foreach($fields as $f) $params[":$f"] = $_POST[$f] ?? null;
+        foreach ($fields as $f) $params[":$f"] = $_POST[$f] ?? null;
 
         if ($action === 'store_tanggungan') {
             $cols = implode(',', $fields) . ',created_at';
@@ -354,36 +450,39 @@ try {
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
         } else {
-            $set = []; foreach($fields as $f) $set[] = "$f = :$f";
+            $set = [];
+            foreach ($fields as $f) $set[] = "$f = :$f";
             $sql = "UPDATE data_keluarga SET " . implode(',', $set) . " WHERE id = :id";
             $params[':id'] = $id;
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
         }
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
     if ($action === 'delete_tanggungan') {
         $id = $_POST['id'];
         $conn->prepare("DELETE FROM data_keluarga WHERE id=?")->execute([$id]);
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
     // ============================================================
-    // G. MODUL PERINGATAN (SP)
+    // H. MODUL PERINGATAN (SP)
     // ============================================================
     if ($action === 'list_peringatan') {
         $q = isset($_POST['q']) ? trim($_POST['q']) : '';
         $f_afdeling = isset($_POST['f_afdeling']) ? trim($_POST['f_afdeling']) : '';
 
+        // PERUBAHAN: Hapus JOIN md_kebun, pakai dk.kebun_id langsung
         $sql = "SELECT dp.*, 
-                       dk.id_sap, dk.nama_lengkap, dk.afdeling, dk.status_karyawan,
-                       mk.nama_kebun
+                        dk.id_sap, dk.nama_lengkap, dk.afdeling, dk.status_karyawan,
+                        dk.kebun_id as nama_kebun
                 FROM data_peringatan dp 
                 LEFT JOIN data_karyawan dk ON dp.karyawan_id = dk.id 
-                LEFT JOIN md_kebun mk ON dk.kebun_id = mk.id
                 WHERE 1=1";
-        
+
         $params = [];
 
         if ($q) {
@@ -396,37 +495,18 @@ try {
         }
 
         $sql .= " ORDER BY dp.tanggal_sp DESC";
-        
+
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $mappedData = array_map(function($row) {
-            return [
-                'id' => $row['id'],
-                'karyawan_id' => $row['karyawan_id'],
-                'sap_id' => $row['id_sap'],
-                'nama_karyawan' => $row['nama_lengkap'],
-                'afdeling' => $row['afdeling'],
-                'nama_kebun' => $row['nama_kebun'],
-                'status_karyawan' => $row['status_karyawan'],
-                'no_surat' => $row['no_surat'],
-                'jenis_sp' => $row['jenis_sp'],
-                'tanggal_sp' => $row['tanggal_sp'],
-                'masa_berlaku' => $row['masa_berlaku'],
-                'pelanggaran' => $row['pelanggaran'],
-                'sanksi' => $row['sanksi'],
-                'file_scan' => $row['file_scan']
-            ];
-        }, $data);
-
-        echo json_encode(['success'=>true, 'data'=>$mappedData]); 
+        echo json_encode(['success' => true, 'data' => $data]);
         exit;
     }
 
     if ($action === 'store_peringatan' || $action === 'update_peringatan') {
         $id = $_POST['id'] ?? null;
-        
+
         // Upload File SP
         $file_name = null;
         if (!empty($_FILES['file_scan']['name'])) {
@@ -442,32 +522,42 @@ try {
             $cek = $conn->prepare("SELECT file_scan FROM data_peringatan WHERE id=?");
             $cek->execute([$id]);
             $old = $cek->fetchColumn();
-            if($old && file_exists("../uploads/sp/$old")) @unlink("../uploads/sp/$old");
+            if ($old && file_exists("../uploads/sp/$old")) @unlink("../uploads/sp/$old");
         }
 
         $fields = ['karyawan_id', 'no_surat', 'jenis_sp', 'tanggal_sp', 'masa_berlaku', 'pelanggaran', 'sanksi'];
         $params = [];
-        foreach($fields as $f) $params[":$f"] = $_POST[$f] ?? null;
+        foreach ($fields as $f) $params[":$f"] = $_POST[$f] ?? null;
 
         if ($action === 'store_peringatan') {
-            $cols = implode(',', $fields); 
+            $cols = implode(',', $fields);
             $vals = implode(',', array_keys($params));
-            if ($file_name) { $cols .= ",file_scan"; $vals .= ",:file"; $params[':file'] = $file_name; }
-            $cols .= ",created_at"; $vals .= ",NOW()";
-            
+            if ($file_name) {
+                $cols .= ",file_scan";
+                $vals .= ",:file";
+                $params[':file'] = $file_name;
+            }
+            $cols .= ",created_at";
+            $vals .= ",NOW()";
+
             $sql = "INSERT INTO data_peringatan ($cols) VALUES ($vals)";
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
         } else {
-            $set = []; foreach($fields as $f) $set[] = "$f = :$f";
-            if ($file_name) { $set[] = "file_scan = :file"; $params[':file'] = $file_name; }
-            
+            $set = [];
+            foreach ($fields as $f) $set[] = "$f = :$f";
+            if ($file_name) {
+                $set[] = "file_scan = :file";
+                $params[':file'] = $file_name;
+            }
+
             $sql = "UPDATE data_peringatan SET " . implode(',', $set) . " WHERE id = :id";
             $params[':id'] = $id;
             $stmt = $conn->prepare($sql);
             $stmt->execute($params);
         }
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
     if ($action === 'delete_peringatan') {
@@ -476,14 +566,49 @@ try {
         $stmt->execute([$id]);
         $old = $stmt->fetchColumn();
         if ($old && file_exists("../uploads/sp/$old")) unlink("../uploads/sp/$old");
-        
+
         $conn->prepare("DELETE FROM data_peringatan WHERE id=?")->execute([$id]);
-        echo json_encode(['success'=>true]); exit;
+        echo json_encode(['success' => true]);
+        exit;
     }
 
+    // 6. DELETE ALL (RESET DATA) - NEW FEATURE
+    if ($action === 'delete_all') {
+        $secret_code = $_POST['code'] ?? '';
+
+        // VALIDASI KODE RAHASIA
+        if ($secret_code !== '5013100') {
+            echo json_encode(['success' => false, 'message' => 'Kode Konfirmasi Salah! Data aman.']);
+            exit;
+        }
+
+        // Jika kode benar, lanjut hapus...
+        $conn->exec("SET FOREIGN_KEY_CHECKS = 0");
+
+        // Hapus file fisik
+        $stmt = $conn->query("SELECT foto_profil, dokumen_path FROM data_karyawan");
+        while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            if (!empty($r['foto_profil']) && file_exists("../uploads/profil/" . $r['foto_profil'])) @unlink("../uploads/profil/" . $r['foto_profil']);
+            if (!empty($r['dokumen_path']) && file_exists("../uploads/dokumen/" . $r['dokumen_path'])) @unlink("../uploads/dokumen/" . $r['dokumen_path']);
+        }
+
+        // Hapus file SP
+        $stmtSp = $conn->query("SELECT file_scan FROM data_peringatan");
+        while ($r = $stmtSp->fetch(PDO::FETCH_ASSOC)) {
+            if (!empty($r['file_scan']) && file_exists("../uploads/sp/" . $r['file_scan'])) @unlink("../uploads/sp/" . $r['file_scan']);
+        }
+
+        $conn->exec("TRUNCATE TABLE data_keluarga");
+        $conn->exec("TRUNCATE TABLE data_peringatan");
+        $conn->exec("TRUNCATE TABLE data_history_jabatan");
+        $conn->exec("TRUNCATE TABLE data_karyawan");
+
+        $conn->exec("SET FOREIGN_KEY_CHECKS = 1");
+        echo json_encode(['success' => true, 'message' => 'Sukses! Semua data telah dihapus.']);
+        exit;
+    }
 } catch (PDOException $e) {
-    echo json_encode(['success'=>false, 'message'=>'Database Error: '.$e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'Database Error: ' . $e->getMessage()]);
 } catch (Exception $e) {
-    echo json_encode(['success'=>false, 'message'=>'System Error: '.$e->getMessage()]);
+    echo json_encode(['success' => false, 'message' => 'System Error: ' . $e->getMessage()]);
 }
-?>

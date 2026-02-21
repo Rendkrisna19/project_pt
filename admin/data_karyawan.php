@@ -1,6 +1,6 @@
 <?php
 // pages/data_karyawan.php
-// ENHANCED VERSION: Multi-Tab System (Data Karyawan, Monitoring MBT, Tanggungan, Surat Peringatan)
+// FULL VERSION: Karyawan, MBT, Tanggungan, SP, History Jabatan
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { 
@@ -27,58 +27,66 @@ $activeTab = $_GET['tab'] ?? 'karyawan';
 ?>
 
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
 <style>
+  /* Global Sticky & Table Styles */
   .sticky-container { max-height: 70vh; overflow: auto; border: 1px solid #cbd5e1; border-radius: 0.75rem; background: #fff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
   table.table-grid { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 2000px; }
   table.table-grid th, table.table-grid td { padding: 0.75rem; font-size: 0.85rem; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; white-space: nowrap; vertical-align: middle; }
-  table.table-grid thead th { position: sticky; top: 0; background: #0e7490; color: #fff; z-index: 10; font-weight: 700; text-transform: uppercase; font-size: 0.75rem; height: 50px; }
-  table.table-grid tbody tr:hover td { background-color: #ecfeff; } 
-  .avatar-sm { width: 36px; height: 36px; object-fit: cover; border-radius: 50%; border: 2px solid #e2e8f0; }
-  .tab-btn { padding: 0.75rem 1.5rem; border-bottom: 3px solid transparent; font-weight: 600; transition: all 0.3s; }
+  
+  /* Default Sticky Header (Cyan) */
+  table.table-grid thead th { position: sticky; top: 0; background: #0e7490; color: #fff; z-index: 40; font-weight: 700; text-transform: uppercase; height: 50px; }
+  
+  /* Tab Navigation Styles */
+  .tab-btn { padding: 0.75rem 1.5rem; border-bottom: 3px solid transparent; font-weight: 600; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
   .tab-btn.active { border-bottom-color: #0891b2; color: #0891b2; background: #ecfeff; }
-  .tab-btn:hover { background: #f0fdfa; }
+  .tab-btn:hover { background: #f0fdfa; color: #155e75; }
 </style>
 
-<div class="space-y-6">
+<div class="space-y-6 pb-10">
     <div class="flex justify-between items-center">
-        <div>
-            <h1 class="text-2xl font-bold text-cyan-900">Manajemen Data Kepegawaian</h1>
-            <p class="text-slate-500 text-sm">Kelola data karyawan, monitoring MBT, tanggungan keluarga, dan surat peringatan.</p>
-        </div>
+    <div>
+        <h1 class="text-2xl font-bold text-cyan-900">Manajemen Data Kepegawaian</h1>
+        <p class="text-slate-500 text-sm">Pusat data karyawan, mutasi, promosi, dan sanksi.</p>
     </div>
 
-    <!-- TAB NAVIGATION -->
+    <div>
+        <img src="../assets/images/baground.png" alt="Logo Header" class="h-[165px] w-auto object-contain -mt-2">
+    </div>
+</div>
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="flex border-b border-gray-200 overflow-x-auto">
             <a href="?tab=karyawan" class="tab-btn <?= $activeTab == 'karyawan' ? 'active' : 'text-gray-600' ?>">
-                <i class="ti ti-users mr-2"></i>Data Karyawan
+                <i class="ti ti-users"></i> Data Karyawan
             </a>
             <a href="?tab=mbt" class="tab-btn <?= $activeTab == 'mbt' ? 'active' : 'text-gray-600' ?>">
-                <i class="ti ti-calendar-event mr-2"></i>Monitoring MBT
+                <i class="ti ti-calendar-event"></i> Monitoring MBT
+            </a>
+            <a href="?tab=history" class="tab-btn <?= $activeTab == 'history' ? 'active' : 'text-gray-600' ?>">
+                <i class="ti ti-history"></i> History Jabatan
             </a>
             <a href="?tab=tanggungan" class="tab-btn <?= $activeTab == 'tanggungan' ? 'active' : 'text-gray-600' ?>">
-                <i class="ti ti-users-group mr-2"></i>Data Tanggungan
+                <i class="ti ti-users-group"></i> Tanggungan
             </a>
             <a href="?tab=peringatan" class="tab-btn <?= $activeTab == 'peringatan' ? 'active' : 'text-gray-600' ?>">
-                <i class="ti ti-alert-triangle mr-2"></i>Surat Peringatan
+                <i class="ti ti-alert-triangle"></i> Surat Peringatan
             </a>
         </div>
     </div>
 
-    <!-- TAB CONTENT -->
     <div id="tab-content">
-        <?php if ($activeTab == 'karyawan'): ?>
-            <?php include 'tabs/tab_karyawan.php'; ?>
-        <?php elseif ($activeTab == 'mbt'): ?>
-            <?php include 'tabs/tab_mbt.php'; ?>
-        <?php elseif ($activeTab == 'tanggungan'): ?>
-            <?php include 'tabs/tab_tanggungan.php'; ?>
-        <?php elseif ($activeTab == 'peringatan'): ?>
-            <?php include 'tabs/tab_peringatan.php'; ?>
-        <?php endif; ?>
+        <?php 
+        switch ($activeTab) {
+            case 'karyawan':    include 'tabs/tab_karyawan.php'; break;
+            case 'mbt':         include 'tabs/tab_mbt.php'; break;
+            case 'history':     include 'tabs/tab_history.php'; break; // FILE BARU
+            case 'tanggungan':  include 'tabs/tab_tanggungan.php'; break;
+            case 'peringatan':  include 'tabs/tab_peringatan.php'; break;
+            default:            include 'tabs/tab_karyawan.php'; break;
+        }
+        ?>
     </div>
 </div>
 
 <?php include_once '../layouts/footer.php'; ?>
-
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>

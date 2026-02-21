@@ -369,9 +369,9 @@ include_once '../layouts/header.php';
         </div>
     </div>
 
-    <div class="filter-bar">
+   <div class="filter-bar">
         <div class="filter-item">
-            <label>Tahun</label>
+            <label for="f-tahun">Tahun Periode</label>
             <select id="f-tahun" class="filter-select">
                 <?php 
                 $tahunSaatIni = date('Y');
@@ -381,8 +381,9 @@ include_once '../layouts/header.php';
                 <?php endfor; ?>
             </select>
         </div>
+        
         <div class="filter-item">
-            <label>Bulan</label>
+            <label for="f-bulan">Bulan</label>
             <select id="f-bulan" class="filter-select">
                 <option value="">Semua Bulan (YTD)</option>
                 <?php foreach($bulanList as $idx => $b): ?>
@@ -390,21 +391,22 @@ include_once '../layouts/header.php';
                 <?php endforeach; ?>
             </select>
         </div>
-        <div class="filter-item" style="flex: 1.5;">
-            <label>Unit Kebun</label>
+        
+        <div class="filter-item">
+            <label for="f-kebun">Unit Kebun</label>
             <select id="f-kebun" class="filter-select">
                 <option value="">Semua Kebun</option>
                 <?php foreach($opsiKebun as $k): ?><option value="<?= htmlspecialchars($k) ?>"><?= htmlspecialchars($k) ?></option><?php endforeach; ?>
             </select>
         </div>
-        <div class="filter-item" style="flex: 1.5;">
-            <label>Afdeling</label>
+        
+        <div class="filter-item">
+            <label for="f-afdeling">Afdeling / Divisi</label>
             <select id="f-afdeling" class="filter-select">
                 <option value="">Semua Afdeling</option>
                 <?php foreach($opsiAfdeling as $a): ?><option value="<?= htmlspecialchars($a) ?>"><?= htmlspecialchars($a) ?></option><?php endforeach; ?>
             </select>
         </div>
-        <button id="btn-refresh" class="filter-btn"><i data-lucide="filter" class="w-4 h-4"></i> Terapkan Filter</button>
     </div>
 
     <div class="mb-2 text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
@@ -565,8 +567,18 @@ const App = {
         bulan: document.getElementById('f-bulan'),
         tahun: document.getElementById('f-tahun')
     },
-    init() {
-        document.getElementById('btn-refresh').addEventListener('click', () => this.loadAll());
+   init() {
+        // --- LOGIKA FILTER OTOMATIS ---
+        // Loop semua elemen filter dan tambahkan event listener 'change'
+        Object.values(this.filters).forEach(inputElement => {
+            inputElement.addEventListener('change', () => {
+                // Opsional: Reset paginasi ke halaman 1 jika filter berubah (jika perlu)
+                // this.currentPage = 1; 
+                this.loadAll();
+            });
+        });
+
+        // Load data pertama kali saat halaman dibuka
         this.loadAll();
         this.initWeather();
     },

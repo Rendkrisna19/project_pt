@@ -68,7 +68,6 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
                 <div class="hidden md:flex items-center gap-3">
                     <img src="../assets/images/logo3.png" onerror="this.style.display='none'" alt="Logo 1" class="h-10 w-auto rounded-md p-1 transition-transform duration-200">
                     <img src="../assets/images/logo4.png" onerror="this.style.display='none'" alt="Logo 2" class="h-10 w-auto rounded-md p-1 transition-transform duration-200">
-                    <img src="../assets/images/logo5.png" onerror="this.style.display='none'" alt="Logo 3" class="h-20 w-auto rounded-md p-1 transition-transform duration-200">
                 </div>
             </div>
 

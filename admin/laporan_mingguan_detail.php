@@ -85,8 +85,8 @@ include_once '../layouts/header.php';
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
             <div class="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                <a href="laporan_mingguan.php" class="hover:text-[#059fd3] flex items-center gap-1 transition-colors">
-                    <i class="ti ti-arrow-left"></i> Kembali ke Arsip
+                <a href="laporan_mingguan.php" class="text-base font-bold text-slate-400 hover:text-cyan-600 mb-2 flex items-center gap-2 transition">
+                    <i class="ti ti-arrow-left text-base font-bold text"></i> Kembali ke Arsip
                 </a>
                 <span>/</span>
                 <span>Detail</span>
