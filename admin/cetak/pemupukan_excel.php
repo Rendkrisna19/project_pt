@@ -1,10 +1,6 @@
 <?php
 // pages/cetak/pemupukan_excel.php
-// Excel Pemupukan – hormati semua filter (Unit, Kebun, Tanggal, Bulan, Jenis, Rayon, Keterangan)
-// Menabur & Angkutan: RAYON, NO AU-58/NO SPB, KETERANGAN
-// Kompatibel kolom:
-//   - Menabur: no_au_58 | no_au58 | catatan (dialias ke no_au_58)
-//   - Angkutan: no_spb (baru) | no_au_58 | no_au58 | catatan (semua dialias ke no_spb)
+// Excel Pemupukan – Tema Cyan, Sinkronisasi Filter Full
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
@@ -19,6 +15,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Color;
 
 function qstr($v){ return trim((string)$v); }
 function qintOrEmpty($v){ return ($v===''||$v===null) ? '' : (int)$v; }
@@ -27,24 +24,26 @@ try{
   $db  = new Database();
   $pdo = $db->getConnection();
 
-  // ===== Filters
+  // ===== Filters (Sinkron dengan pemupukan.php)
   $tab        = $_GET['tab'] ?? 'menabur';
   if (!in_array($tab, ['menabur','angkutan'], true)) $tab = 'menabur';
+  
   $f_unit_id  = qintOrEmpty($_GET['unit_id']      ?? '');
   $f_kebun_id = qintOrEmpty($_GET['kebun_id']     ?? '');
   $f_tanggal  = qstr($_GET['tanggal']             ?? '');
   $f_bulan    = qstr($_GET['bulan']               ?? '');
+  $f_tahun    = qstr($_GET['tahun']               ?? ''); // Filter tahun ditambahkan
   $f_jenis    = qstr($_GET['jenis_pupuk']         ?? '');
 
-  // Filter teks legacy
-  $f_rayon        = qstr($_GET['rayon']        ?? '');
-  $f_keterangan   = qstr($_GET['keterangan']   ?? '');
-
-  // Filter ID baru (opsional, mirip PDF)
+  // Filter ID Relasi
   $f_rayon_id      = qintOrEmpty($_GET['rayon_id']        ?? '');
   $f_apl_id        = qintOrEmpty($_GET['apl_id']          ?? '');
   $f_keterangan_id = qintOrEmpty($_GET['keterangan_id']   ?? '');
   $f_gudang_id     = qintOrEmpty($_GET['gudang_asal_id']  ?? '');
+
+  // Filter teks legacy (opsional fallback)
+  $f_rayon        = qstr($_GET['rayon']        ?? '');
+  $f_keterangan   = qstr($_GET['keterangan']   ?? '');
 
   // ===== Deteksi kolom di DB
   $cacheCols=[];
@@ -120,7 +119,7 @@ try{
 
     $selectSupir = $hasSupirAngkut ? ", a.supir" : ", NULL AS supir";
 
-    // JOIN master baru (rayon/gudang/keterangan)
+    // JOIN master baru
     $selectRayon  = $hasRayonIdA  ? ", r.nama AS rayon_nama"        : "";
     $joinRayon    = $hasRayonIdA  ? " LEFT JOIN md_rayon r ON r.id = a.rayon_id" : "";
     $selectGudang = $hasGudangIdA ? ", g.nama AS gudang_asal_nama"  : "";
@@ -134,19 +133,35 @@ try{
       if($hasKebunAngkutId){ $where.=" AND a.kebun_id=:kid"; $p[':kid']=(int)$f_kebun_id; }
       elseif($hasKebunAngkutKod){ $where.=" AND a.kebun_kode=:kkod"; $p[':kkod']=(string)($idToKode[(int)$f_kebun_id]??''); }
     }
-    if($f_tanggal!==''){ $where.=" AND a.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
-    if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(a.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
+    
+    // Logika Filter Tanggal, Tahun, Bulan
+    if ($f_tanggal !== '') {
+        $where .= " AND a.tanggal = :tgl";
+        $p[':tgl'] = $f_tanggal;
+    } else {
+        if ($f_tahun !== '') {
+            $where .= " AND YEAR(a.tanggal) = :thn";
+            $p[':thn'] = $f_tahun;
+        }
+        if ($f_bulan !== '' && ctype_digit((string)$f_bulan)) {
+            $where .= " AND MONTH(a.tanggal) = :bln";
+            $p[':bln'] = (int)$f_bulan;
+        }
+    }
+    
     if($f_jenis!==''){ $where.=" AND a.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
 
-    // Filter Rayon/Keterangan via ID atau fallback teks (mirip PDF)
+    // Filter Rayon/Keterangan via ID atau fallback teks
     if ($f_rayon_id !== '' && $hasRayonIdA) {
       $where .= " AND a.rayon_id = :rid"; $p[':rid'] = $f_rayon_id;
     } elseif ($f_rayon !== '' && $hasRayonAngkutan) {
       $where .= " AND a.rayon LIKE :ry"; $p[':ry'] = "%$f_rayon%";
     }
+    
     if ($f_gudang_id !== '' && $hasGudangIdA) {
       $where .= " AND a.gudang_asal_id = :gid"; $p[':gid'] = $f_gudang_id;
     }
+    
     if ($f_keterangan_id !== '' && $hasKetIdA) {
       $where .= " AND a.keterangan_id = :kid"; $p[':kid'] = $f_keterangan_id;
     } elseif ($f_keterangan !== '' && $hasKeteranganAngkutan) {
@@ -188,15 +203,13 @@ try{
     elseif($hasTTAngka)$joinTT=" LEFT JOIN md_tahun_tanam tt ON tt.tahun=m.tahun_tanam ";
 
     $selectTahun   = $hasTahunMenabur ? ", m.tahun AS tahun_input" : ", YEAR(m.tanggal) AS tahun_input";
-    $selectAPL_Old = $aplCol ? ", m.`$aplCol` AS apl_text" : ", NULL AS apl_text"; // teks APL lama
+    $selectAPL_Old = $aplCol ? ", m.`$aplCol` AS apl_text" : ", NULL AS apl_text";
 
-    // Alias No AU-58
     $selectNoAU = '';
     if     ($hasNoAU58MenaburMain) $selectNoAU = ", m.no_au_58";
     elseif ($hasNoAU58MenaburAlt)  $selectNoAU = ", m.no_au58 AS no_au_58";
     elseif ($hasCatatanMenabur)    $selectNoAU = ", m.catatan AS no_au_58";
 
-    // JOIN master baru (rayon/apl/keterangan)
     $selectRayon  = $hasRayonIdM ? ", r.nama AS rayon_nama" : "";
     $joinRayon    = $hasRayonIdM ? " LEFT JOIN md_rayon r ON r.id = m.rayon_id" : "";
     $selectAplNew = $hasAplIdM   ? ", apl.nama AS apl_nama" : "";
@@ -210,11 +223,24 @@ try{
       if($hasKebunMenaburId){ $where.=" AND m.kebun_id=:kid"; $p[':kid']=(int)$f_kebun_id; }
       elseif($hasKebunMenaburKod){ $where.=" AND m.kebun_kode=:kkod"; $p[':kkod']=(string)($idToKode[(int)$f_kebun_id]??''); }
     }
-    if($f_tanggal!==''){ $where.=" AND m.tanggal=:tgl"; $p[':tgl']=$f_tanggal; }
-    if($f_bulan!=='' && ctype_digit($f_bulan)){ $where.=" AND MONTH(m.tanggal)=:bln"; $p[':bln']=(int)$f_bulan; }
+    
+    // Logika Filter Tanggal, Tahun, Bulan
+    if ($f_tanggal !== '') {
+        $where .= " AND m.tanggal = :tgl";
+        $p[':tgl'] = $f_tanggal;
+    } else {
+        if ($f_tahun !== '') {
+            $where .= " AND YEAR(m.tanggal) = :thn";
+            $p[':thn'] = $f_tahun;
+        }
+        if ($f_bulan !== '' && ctype_digit((string)$f_bulan)) {
+            $where .= " AND MONTH(m.tanggal) = :bln";
+            $p[':bln'] = (int)$f_bulan;
+        }
+    }
+    
     if($f_jenis!==''){ $where.=" AND m.jenis_pupuk=:jp"; $p[':jp']=$f_jenis; }
 
-    // Filter Rayon/APL/Keterangan via ID atau fallback teks (mirip PDF)
     if ($f_rayon_id !== '' && $hasRayonIdM) {
       $where .= " AND m.rayon_id = :rid"; $p[':rid'] = $f_rayon_id;
     } elseif ($f_rayon !== '' && $hasRayonMenabur) {
@@ -259,24 +285,25 @@ try{
   $cols=[]; for($i=0;$i<=$lastColIndex;$i++){ $cols[]=\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1); }
   $C1=$cols[0]; $CL=$cols[$lastColIndex];
 
-  // Brand header
+  // Brand header - Tema Cyan-500 (#06B6D4)
   $sheet->mergeCells($C1.'1:'.$CL.'1'); $sheet->setCellValue($C1.'1','PTPN 4 REGIONAL 3');
   $sheet->getStyle($C1.'1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB('FFFFFF');
   $sheet->getStyle($C1.'1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-  $sheet->getStyle($C1.'1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('059669');
+  $sheet->getStyle($C1.'1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('06B6D4');
 
-  // Subjudul
+  // Subjudul - Tema Cyan-600 (#0891B2)
   $sheet->mergeCells($C1.'2:'.$CL.'2'); $sheet->setCellValue($C1.'2', $judul);
-  $sheet->getStyle($C1.'2')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('065F46');
+  $sheet->getStyle($C1.'2')->getFont()->setBold(true)->setSize(12)->getColor()->setRGB('0891B2');
   $sheet->getStyle($C1.'2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-  // Ringkasan filter (termasuk ID baru)
+  // Ringkasan filter
   $sheet->mergeCells($C1.'3:'.$CL.'3');
   $sheet->setCellValue($C1.'3', 'Filter: '
     .'tab='.$tab
     .' | unit_id='.($f_unit_id===''?'Semua':$f_unit_id)
     .' | kebun_id='.($f_kebun_id===''?'Semua':$f_kebun_id)
     .' | tanggal='.($f_tanggal?:'Semua')
+    .' | tahun='.($f_tahun?:'Semua')
     .' | bulan='.($f_bulan?:'Semua')
     .' | jenis='.($f_jenis?:'Semua')
     .' | rayon_id='.($f_rayon_id?:'Semua')
@@ -287,11 +314,11 @@ try{
   $sheet->getStyle($C1.'3')->getFont()->setSize(10)->getColor()->setRGB('666666');
   $sheet->getStyle($C1.'3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-  // Header table
+  // Header table - Tema Cyan-100 (#CFFAFE) Font Cyan-900 (#164E63)
   $r=5; foreach($headers as $i=>$h){ $sheet->setCellValue($cols[$i].$r,$h); }
-  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFont()->setBold(true);
+  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFont()->setBold(true)->getColor()->setRGB('164E63');
   $sheet->getStyle($C1.$r.':'.$CL.$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E8F4EF');
+  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('CFFAFE');
   $sheet->getStyle($C1.$r.':'.$CL.$r)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
   $r++;
 
@@ -306,9 +333,8 @@ try{
   } else {
     foreach($rows as $row){
       if ($tab==='angkutan'){
-        // Tampilkan nama master jika ada, fallback ke teks lama
-        $rayonDisplay  = $row['rayon_nama']       ?? ($row['rayon']        ?? '');
-        $gudangDisplay = $row['gudang_asal_nama'] ?? ($row['gudang_asal']  ?? '');
+        $rayonDisplay  = $row['rayon_nama']       ?? ($row['rayon']        ?? '-');
+        $gudangDisplay = $row['gudang_asal_nama'] ?? ($row['gudang_asal']  ?? '-');
         $ketDisplay    = $row['keterangan_text']  ?? ($row['keterangan']   ?? '');
 
         $vals=[
@@ -319,36 +345,35 @@ try{
           (string)($row['tanggal'] ?? ''),
           (string)($row['jenis_pupuk'] ?? ''),
           (float) ($row['jumlah'] ?? 0),
-          (string)($row['no_spb'] ?? ''),   // alias SPB
+          (string)($row['no_spb'] ?? ''),
           (string)$ketDisplay,
           (string)($row['supir'] ?? ''),
         ];
         $tot_jumlah += (float)($row['jumlah'] ?? 0);
 
       } else {
-        // Menabur: APL prioritas ke master (apl_nama), fallback apl_text (lama)
-        $rayonDisplay = $row['rayon_nama'] ?? ($row['rayon'] ?? '');
+        $rayonDisplay = $row['rayon_nama'] ?? ($row['rayon'] ?? '-');
         $aplDisplay   = $row['apl_nama']   ?? ($row['apl_text'] ?? '-');
         $ketDisplay   = $row['keterangan_text'] ?? ($row['keterangan'] ?? '');
 
         $dosis = (array_key_exists('dosis',$row) && $row['dosis']!==null && $row['dosis']!=='') ? (float)$row['dosis'] : null;
 
         $vals=[
-          (string)($row['tahun_input'] ?? ''),                                        // Tahun
-          (string)($row['kebun_nama'] ?? ($row['kebun_kode'] ?? '-')),               // Kebun
-          (string)($row['unit_nama'] ?? '-'),                                        // Unit
-          (string)($row['t_tanam'] ?? '-'),                                          // T.TANAM
-          (string)($row['blok'] ?? ''),                                              // Blok
-          (string)$rayonDisplay,                                                     // Rayon (master/teks)
-          (string)($row['tanggal'] ?? ''),                                           // Tanggal
-          (string)($row['jenis_pupuk'] ?? ''),                                       // Jenis
-          (string)$aplDisplay,                                                       // APL (master/teks)
-          $dosis,                                                                     // Dosis
-          (float)($row['jumlah'] ?? 0),                                              // Jumlah
-          (float)($row['luas'] ?? 0),                                                // Luas
-          (int)  ($row['invt_pokok'] ?? 0),                                          // Invt
-          (string)($row['no_au_58'] ?? ''),                                          // No AU-58
-          (string)$ketDisplay,                                                       // Keterangan (master/teks)
+          (string)($row['tahun_input'] ?? ''),
+          (string)($row['kebun_nama'] ?? ($row['kebun_kode'] ?? '-')),
+          (string)($row['unit_nama'] ?? '-'),
+          (string)($row['t_tanam'] ?? '-'),
+          (string)($row['blok'] ?? ''),
+          (string)$rayonDisplay,
+          (string)($row['tanggal'] ?? ''),
+          (string)($row['jenis_pupuk'] ?? ''),
+          (string)$aplDisplay,
+          $dosis,
+          (float)($row['jumlah'] ?? 0),
+          (float)($row['luas'] ?? 0),
+          (int)  ($row['invt_pokok'] ?? 0),
+          (string)($row['no_au_58'] ?? ''),
+          (string)$ketDisplay,
         ];
         if($dosis!==null){ $tot_dosis += $dosis; $cnt_dosis++; }
         $tot_jumlah += (float)($row['jumlah'] ?? 0);
@@ -360,10 +385,8 @@ try{
       $sheet->getStyle($C1.$r.':'.$CL.$r)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 
       if ($tab==='angkutan'){
-        // Kolom Jumlah (index 6)
         $sheet->getStyle($cols[6].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
       } else {
-        // Dosis, Jumlah, Luas, Invt (index 9..12)
         foreach([9,10,11,12] as $idx){
           $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
         }
@@ -377,38 +400,46 @@ try{
     $sheet->mergeCells($cols[0].$r.':'.$cols[5].$r);
     $sheet->setCellValue($cols[0].$r,'TOTAL JUMLAH (Kg)');
     $sheet->getStyle($cols[0].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-    $sheet->getStyle($cols[0].$r)->getFont()->setBold(true);
-    $sheet->setCellValue($cols[6].$r,$tot_jumlah);   // kolom Jumlah
+    $sheet->getStyle($cols[0].$r)->getFont()->setBold(true)->getColor()->setRGB('164E63');
+    
+    $sheet->setCellValue($cols[6].$r,$tot_jumlah);
     $sheet->getStyle($cols[6].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+    $sheet->getStyle($cols[6].$r)->getFont()->setBold(true)->getColor()->setRGB('164E63');
   } else {
     $avg_dosis = $cnt_dosis ? ($tot_dosis/$cnt_dosis) : 0;
-    $sheet->mergeCells($cols[0].$r.':'.$cols[8].$r); // sampai kolom APL
+    $sheet->mergeCells($cols[0].$r.':'.$cols[8].$r); 
     $sheet->setCellValue($cols[0].$r,'TOTAL');
     $sheet->getStyle($cols[0].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-    $sheet->getStyle($cols[0].$r)->getFont()->setBold(true);
-    $sheet->setCellValue($cols[9].$r,$avg_dosis);     // Dosis rata2
-    $sheet->setCellValue($cols[10].$r,$tot_jumlah);   // Jumlah
-    $sheet->setCellValue($cols[11].$r,$tot_luas);     // Luas
-    $sheet->setCellValue($cols[12].$r,$tot_invt);     // Invt
+    $sheet->getStyle($cols[0].$r)->getFont()->setBold(true)->getColor()->setRGB('164E63');
+    
+    $sheet->setCellValue($cols[9].$r,$avg_dosis);
+    $sheet->setCellValue($cols[10].$r,$tot_jumlah);
+    $sheet->setCellValue($cols[11].$r,$tot_luas);
+    $sheet->setCellValue($cols[12].$r,$tot_invt);
+    
     foreach([9,10,11,12] as $idx){
       $sheet->getStyle($cols[$idx].$r)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+      $sheet->getStyle($cols[$idx].$r)->getFont()->setBold(true)->getColor()->setRGB('164E63');
     }
   }
+  
+  // Styling Baris Total - Tema Cyan-50 (#ECFEFF)
   $sheet->getStyle($C1.$r.':'.$CL.$r)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('F1FAF6');
+  $sheet->getStyle($C1.$r.':'.$CL.$r)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('ECFEFF');
 
   foreach($cols as $c){ $sheet->getColumnDimension($c)->setAutoSize(true); }
 
-  // ===== Nama file ikut filter (termasuk ID baru)
+  // ===== Nama file ikut filter (ditambah tahun)
   $fname='Pemupukan_Kimia_'.$tab;
   if($f_unit_id!=='')      $fname.='_UNIT-'.$f_unit_id;
   if($f_kebun_id!=='')     $fname.='_KEBUN-'.$f_kebun_id;
   if($f_tanggal!=='')      $fname.='_TGL-'.$f_tanggal;
+  if($f_tahun!=='')        $fname.='_THN-'.$f_tahun;
   if($f_bulan!=='')        $fname.='_BLN-'.$f_bulan;
   if($f_jenis!=='')        $fname.='_JENIS-'.preg_replace('/[^A-Za-z0-9_\-]/','',$f_jenis);
   if($f_rayon_id!=='')     $fname.='_RAYONID-'.$f_rayon_id;
   if($f_apl_id!=='')       $fname.='_APLID-'.$f_apl_id;
-  if($f_keterangan_id!=='')$fname.='_KETID-'.$f_keterangan_id;
+  if($f_keterangan_id!=='') $fname.='_KETID-'.$f_keterangan_id;
   if($f_gudang_id!=='')    $fname.='_GUDANGID-'.$f_gudang_id;
   $fname.='.xlsx';
 

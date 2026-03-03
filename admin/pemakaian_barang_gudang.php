@@ -109,14 +109,14 @@ table.table-grid tfoot td { position: sticky; bottom: 0; background: #f0f9ff; co
         <div>
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
             <select id="f_kebun" class="i-select filter-input">
-                <option value="">— Semua Kebun —</option>
+                <option value="">Semua Kebun</option>
                 <?php foreach($kebuns as $k): ?><option value="<?= $k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?>
             </select>
         </div>
         <div>
             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Jenis Bahan</label>
             <select id="f_bahan" class="i-select filter-input">
-                <option value="">— Semua Bahan —</option>
+                <option value="">Semua Bahan</option>
                 <?php foreach($bahans as $b): ?><option value="<?= $b['id'] ?>"><?= htmlspecialchars($b['nama']) ?></option><?php endforeach; ?>
             </select>
         </div>

@@ -1,6 +1,5 @@
 <?php
-// pemupukan.php — MODIFIKASI FULL: Role Access, Grid Style, Auto Filter
-
+    
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
 
@@ -335,7 +334,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
         <select id="f_bulan" class="i-select filter-input">
-            <option value="">— Semua Bulan —</option>
+            <option value="">Semua Bulan</option>
             <?php foreach($bulanList as $num=>$name): ?>
                 <option value="<?= $num ?>" <?= (int)$f_bulan===$num ? 'selected' : '' ?>><?= $name ?></option>
             <?php endforeach; ?>
@@ -345,7 +344,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">APL</label>
         <select id="f_apl_id" class="i-select filter-input">
-            <option value="">— Semua APL —</option>
+            <option value=""> Semua APL</option>
             <?php foreach($apls as $a): ?>
                 <option value="<?= $a['id'] ?>" <?= (int)$f_apl_id===$a['id'] ? 'selected' : '' ?>><?= htmlspecialchars($a['nama']) ?></option>
             <?php endforeach; ?>
@@ -355,7 +354,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Keterangan</label>
         <select id="f_keterangan_id" class="i-select filter-input">
-            <option value="">— Semua Ket —</option>
+            <option value="">Semua Ket</option>
             <?php foreach($keterangans as $k): ?>
                 <option value="<?= $k['id'] ?>" <?= (int)$f_keterangan_id===$k['id'] ? 'selected' : '' ?>><?= htmlspecialchars($k['keterangan']) ?></option>
             <?php endforeach; ?>
@@ -369,7 +368,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit</label>
         <select id="f_unit_id" class="i-select filter-input">
-            <option value="">— Semua Unit —</option>
+            <option value="">Semua Unit</option>
             <?php foreach($units as $u): ?>
                 <option value="<?= $u['id'] ?>" <?= (int)$f_unit_id===$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
             <?php endforeach; ?>
@@ -378,7 +377,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
         <select id="f_kebun_id" class="i-select filter-input">
-            <option value="">— Semua Kebun —</option>
+            <option value="">Semua Kebun</option>
             <?php foreach($kebuns as $k): ?>
                 <option value="<?= $k['id'] ?>" <?= (int)$f_kebun_id===$k['id'] ? 'selected' : '' ?>><?= htmlspecialchars($k['nama_kebun']) ?></option>
             <?php endforeach; ?>
@@ -387,7 +386,7 @@ if(!isset($_GET['fetch_table'])) {
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Jenis Pupuk</label>
         <select id="f_jenis" class="i-select filter-input">
-            <option value="">— Semua Jenis —</option>
+            <option value="">Semua Jenis</option>
             <?php foreach($pupuks as $jp): ?>
                 <option value="<?= htmlspecialchars($jp) ?>" <?= $f_jenis===$jp ? 'selected' : '' ?>><?= htmlspecialchars($jp) ?></option>
             <?php endforeach; ?>

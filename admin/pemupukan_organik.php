@@ -1,6 +1,6 @@
 <?php
 // admin/pemupukan_organik.php
-// MODIFIKASI FULL: Staf Bisa Input (Tambah), Tapi Tidak Bisa Edit/Hapus
+// MODIFIKASI FULL: Staf Bisa Input (Tambah), Tapi Tidak Bisa Edit/Hapus, FIX Outline & Bug JS
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -190,7 +190,7 @@ include_once '../layouts/header.php';
 <style>
   /* --- CONTAINER & TABLE GRID STYLE (TM Style) --- */
   .sticky-container {
-    max-height: 70vh; /* Tinggi maksimal area scroll */
+    max-height: 70vh; 
     overflow: auto;
     border: 1px solid #cbd5e1;
     border-radius: 0.75rem;
@@ -206,7 +206,6 @@ include_once '../layouts/header.php';
     min-width: 1600px; 
   }
 
-  /* Garis Grid Penuh */
   table.table-grid th, 
   table.table-grid td {
     padding: 0.65rem 0.75rem;
@@ -222,11 +221,10 @@ include_once '../layouts/header.php';
     border-right: none;
   }
 
-  /* Header Sticky */
   table.table-grid thead th {
     position: sticky;
     top: 0;
-    background: #059fd3; /* Warna Biru */
+    background: #059fd3; 
     color: #fff;
     z-index: 10;
     font-weight: 700;
@@ -237,11 +235,10 @@ include_once '../layouts/header.php';
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
   }
 
-  /* Footer Sticky (TOTAL) */
   table.table-grid tfoot td {
     position: sticky;
     bottom: 0;
-    background: #0370a2ff; /* Warna Hijau Muda */
+    background: #0370a2ff; 
     color: #ffffffff;
     z-index: 10;
     font-weight: 700;
@@ -266,6 +263,27 @@ include_once '../layouts/header.php';
   button:disabled { opacity: 0.5; cursor: not-allowed !important; }
   .btn-icon { background: transparent; border: none; padding: 0.25rem; cursor: pointer; }
   .text-right { text-align: right; }
+
+  /* ===== FIX: CUSTOM INPUT & SELECT STYLES (OUTLINE) ===== */
+  .i-input, .i-select {
+    width: 100%;
+    border: 1px solid #cbd5e1; /* Warna border abu-abu terang */
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    outline: none;
+    transition: all 0.2s ease-in-out;
+    background-color: #f8fafc;
+    color: #334155;
+  }
+  .i-input:focus, .i-select:focus {
+    border-color: #06b6d4; /* Warna cyan saat fokus */
+    background-color: #ffffff;
+    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15); /* Efek glow/ring */
+  }
+  .i-select {
+      appearance: auto; /* Memastikan icon panah dropdown terlihat */
+  }
 </style>
 
 <div class="space-y-6">
@@ -310,7 +328,7 @@ include_once '../layouts/header.php';
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Periode</label>
         <select name="periode" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">— Semua Bulan —</option>
+            <option value="">Semua Bulan</option>
             <?php foreach ($bulanList as $k=>$v): ?>
                 <option value="<?= $k ?>" <?= (string)$f_periode===(string)$k ? 'selected' : '' ?>><?= $v ?></option>
             <?php endforeach; ?>
@@ -319,7 +337,7 @@ include_once '../layouts/header.php';
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
         <select name="kebun_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">— Semua Kebun —</option>
+            <option value=""> Semua Kebun </option>
             <?php foreach ($kebun as $k): ?>
                 <option value="<?= (int)$k['id'] ?>" <?= ($f_kebun_id!=='' && (int)$f_kebun_id===(int)$k['id'])?'selected':'' ?>><?= htmlspecialchars($k['nama_kebun']) ?></option>
             <?php endforeach; ?>
@@ -328,7 +346,7 @@ include_once '../layouts/header.php';
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit / Defisi</label>
         <select name="unit_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">— Semua Unit —</option>
+            <option value="">Semua Unit</option>
             <?php foreach ($units as $u): ?>
                 <option value="<?= (int)$u['id'] ?>" <?= ($f_unit_id!=='' && (int)$f_unit_id===(int)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
             <?php endforeach; ?>
@@ -337,7 +355,7 @@ include_once '../layouts/header.php';
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Jenis Pupuk</label>
         <select name="jenis_pupuk" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">— Semua Jenis —</option>
+            <option value="">Semua Jenis</option>
             <?php foreach ($pupuk as $jp): ?>
                 <option value="<?= htmlspecialchars($jp) ?>" <?= ($f_jenis_pupuk===$jp?'selected':'') ?>><?= htmlspecialchars($jp) ?></option>
             <?php endforeach; ?>
@@ -489,7 +507,7 @@ include_once '../layouts/header.php';
                     <?php if ($canAction): ?><td></td><?php endif; ?>
                 <?php endif; ?>
             </tr>
-        </footer>
+        </tfoot>
         <?php endif; ?>
     </table>
   </div>
@@ -520,33 +538,29 @@ include_once '../layouts/header.php';
     </div>
 
     <form id="crud-form" novalidate>
-      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
-      <input type="hidden" name="action" id="form-action">
-      <input type="hidden" name="tab" id="form-tab" value="<?= htmlspecialchars($tab) ?>">
-      <input type="hidden" name="id" id="form-id">
-
+      
       <div id="group-angkutan" class="<?= $tab==='angkutan' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
-                <select id="kebun_id_angkutan" name="kebun_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+                <select id="kebun_id_angkutan" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Rayon</label>
-                <select id="rayon_id_angkutan" name="rayon_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
+                <select id="rayon_id_angkutan" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit Tujuan *</label>
-                <select name="unit_tujuan_id" id="unit_tujuan_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+                <select id="unit_tujuan_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Gudang Asal *</label>
-                <select name="asal_gudang_id" id="asal_gudang_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select>
+                <select id="asal_gudang_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select>
             </div>
-            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" name="tanggal" id="tanggal_angkutan" class="i-input" required></div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" id="tanggal_angkutan" class="i-input" required></div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Jenis Pupuk *</label>
-                <select name="jenis_pupuk" id="jenis_pupuk_angkutan" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
+                <select id="jenis_pupuk_angkutan" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
             </div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" name="jumlah" id="jumlah_angkutan" class="i-input"></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">No SPB</label><input type="text" name="no_spb" id="no_spb_angkutan" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" id="jumlah_angkutan" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">No SPB</label><input type="text" id="no_spb_angkutan" class="i-input"></div>
             <div class="md:col-span-2"><label class="block text-xs font-bold text-gray-600 mb-1">Keterangan</label>
-                <select name="keterangan_id" id="keterangan_id_angkutan" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
+                <select id="keterangan_id_angkutan" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
             </div>
         </div>
       </div>
@@ -554,35 +568,39 @@ include_once '../layouts/header.php';
       <div id="group-menabur" class="<?= $tab==='menabur' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
-                <select name="unit_id" id="unit_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+                <select id="unit_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Kebun</label>
-                <select id="kebun_id_menabur" name="kebun_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+                <select id="kebun_id_menabur" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Blok *</label>
-                <select name="blok" id="blok" class="i-select" required><option value="">— Pilih Unit Dulu —</option></select>
+                <select id="blok" class="i-select" required><option value="">— Pilih Unit Dulu —</option></select>
             </div>
-            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" name="tanggal" id="tanggal_menabur" class="i-input" required></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Tahun</label><input type="number" name="tahun" id="tahun" class="i-input" placeholder="YYYY"></div>
+            <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tanggal *</label><input type="date" id="tanggal_menabur" class="i-input" required></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Tahun</label><input type="number" id="tahun" class="i-input" placeholder="YYYY"></div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Jenis Pupuk *</label>
-                <select name="jenis_pupuk" id="jenis_pupuk_menabur" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
+                <select id="jenis_pupuk_menabur" class="i-select" required><option value="">— Pilih —</option><?php foreach ($pupuk as $p): ?><option value="<?= htmlspecialchars($p) ?>"><?= htmlspecialchars($p) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Tahun Tanam</label>
-                <input type="number" name="t_tanam" id="t_tanam" class="w-full border rounded px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-cyan-500" placeholder="YYYY">
+                <input type="number" id="t_tanam" class="i-input" placeholder="YYYY">
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Rayon</label>
-                <select name="rayon_id" id="rayon_id_menabur" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
+                <select id="rayon_id_menabur" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
             </div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Dosis</label><input type="number" step="0.01" name="dosis" id="dosis" class="i-input"></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" name="jumlah" id="jumlah_menabur" class="i-input"></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Luas (Ha)</label><input type="number" step="0.01" name="luas" id="luas" class="i-input"></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Invt. Pokok</label><input type="number" step="1" name="invt_pokok" id="invt_pokok" class="i-input"></div>
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">No AU-58</label><input type="text" name="no_au_58" id="no_au_58_menabur" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Dosis</label><input type="number" step="0.01" id="dosis" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Jumlah (Kg)</label><input type="number" step="0.01" id="jumlah_menabur" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Luas (Ha)</label><input type="number" step="0.01" id="luas" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Invt. Pokok</label><input type="number" step="1" id="invt_pokok" class="i-input"></div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">No AU-58</label><input type="text" id="no_au_58_menabur" class="i-input"></div>
             <div class="md:col-span-3"><label class="block text-xs font-bold text-gray-600 mb-1">Keterangan</label>
-                <select name="keterangan_id" id="keterangan_id_menabur" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
+                <select id="keterangan_id_menabur" class="i-select"><option value="">— Opsional —</option><?php foreach ($keterangans as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['keterangan']) ?></option><?php endforeach; ?></select>
             </div>
         </div>
       </div>
+
+      <input type="hidden" id="form-action">
+      <input type="hidden" id="form-tab" value="<?= htmlspecialchars($tab) ?>">
+      <input type="hidden" id="form-id">
 
       <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
         <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 transition">Batal</button>
@@ -666,26 +684,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
 
                 if (tab==='angkutan'){
-                    $('#kebun_id_angkutan').value     = row.kebun_id ?? '';
-                    $('#rayon_id').value              = row.rayon_id ?? '';
-                    $('#unit_tujuan_id').value        = row.unit_tujuan_id ?? '';
-                    $('#asal_gudang_id').value        = row.asal_gudang_id ?? '';
-                    $('#tanggal_angkutan').value      = row.tanggal ?? '';
-                    $('#jenis_pupuk_angkutan').value  = row.jenis_pupuk ?? '';
-                    $('#jumlah_angkutan').value       = row.jumlah ?? '';
-                    $('#keterangan_id').value         = row.keterangan_id ?? '';
+                    $('#kebun_id_angkutan').value      = row.kebun_id ?? '';
+                    $('#rayon_id_angkutan').value      = row.rayon_id ?? ''; 
+                    $('#unit_tujuan_id').value         = row.unit_tujuan_id ?? '';
+                    $('#asal_gudang_id').value         = row.asal_gudang_id ?? '';
+                    $('#tanggal_angkutan').value       = row.tanggal ?? '';
+                    $('#jenis_pupuk_angkutan').value   = row.jenis_pupuk ?? '';
+                    $('#jumlah_angkutan').value        = row.jumlah ?? '';
+                    $('#no_spb_angkutan').value        = row.no_spb ?? '';
+                    $('#keterangan_id_angkutan').value = row.keterangan_id ?? ''; 
                 } else {
-                    $('#kebun_id_menabur').value      = row.kebun_id ?? '';
-                    $('#unit_id').value               = row.unit_id ?? '';
+                    $('#kebun_id_menabur').value       = row.kebun_id ?? '';
+                    $('#unit_id').value                = row.unit_id ?? '';
                     await refreshBlok();
-                    $('#blok').value                  = row.blok ?? '';
-                    $('#tanggal_menabur').value       = row.tanggal ?? '';
-                    $('#t_tanam').value               = row.t_tanam ?? '';
-                    $('#luas').value                  = row.luas ?? '';
-                    $('#jenis_pupuk_menabur').value   = row.jenis_pupuk ?? '';
-                    $('#dosis').value                 = row.dosis ?? '';
-                    $('#jumlah_menabur').value        = row.jumlah ?? '';
-                    $('#invt_pokok').value            = row.invt_pokok ?? '';
+                    $('#blok').value                   = row.blok ?? '';
+                    $('#tanggal_menabur').value        = row.tanggal ?? '';
+                    $('#t_tanam').value                = row.t_tanam ?? '';
+                    $('#tahun').value                  = row.tahun ?? '';
+                    $('#luas').value                   = row.luas ?? '';
+                    $('#jenis_pupuk_menabur').value    = row.jenis_pupuk ?? '';
+                    $('#dosis').value                  = row.dosis ?? '';
+                    $('#jumlah_menabur').value         = row.jumlah ?? '';
+                    $('#invt_pokok').value             = row.invt_pokok ?? '';
+                    $('#no_au_58_menabur').value       = row.no_au_58 ?? '';
+                    $('#rayon_id_menabur').value       = row.rayon_id ?? '';
+                    $('#keterangan_id_menabur').value  = row.keterangan_id ?? '';
                 }
                 open();
             }
@@ -707,44 +730,68 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        // ✅ FIX: Logic Pengiriman Data Baru Menggunakan Instance FormData Bersih
         form.addEventListener('submit',(e)=>{
             e.preventDefault();
             const tab = $('#form-tab').value;
-            const fd  = new FormData(form);
-            fd.set('action', $('#form-action').value);
-            fd.set('tab', tab);
+            
+            // Buat FormData Kosong agar tidak mengambil input dari tab yang hidden
+            const fd = new FormData();
+            
+            // Variabel dasar
+            fd.append('csrf_token', '<?= htmlspecialchars($CSRF) ?>');
+            fd.append('action', $('#form-action').value);
+            fd.append('tab', tab);
+            fd.append('id', $('#form-id').value);
 
-            if (tab==='angkutan'){
-                fd.set('kebun_id', $('#kebun_id_angkutan').value);
-                fd.set('rayon_id', $('#rayon_id').value);
-                fd.set('unit_tujuan_id', $('#unit_tujuan_id').value);
-                fd.set('asal_gudang_id', $('#asal_gudang_id').value);
-                fd.set('tanggal', $('#tanggal_angkutan').value);
-                fd.set('jenis_pupuk', $('#jenis_pupuk_angkutan').value);
-                fd.set('jumlah', $('#jumlah_angkutan').value || '');
-                fd.set('keterangan_id', $('#keterangan_id').value || '');
+            // Append field sesuai tab
+            if (tab === 'angkutan'){
+                fd.append('kebun_id', $('#kebun_id_angkutan').value);
+                fd.append('rayon_id', $('#rayon_id_angkutan').value);
+                fd.append('unit_tujuan_id', $('#unit_tujuan_id').value);
+                fd.append('asal_gudang_id', $('#asal_gudang_id').value);
+                fd.append('tanggal', $('#tanggal_angkutan').value);
+                fd.append('jenis_pupuk', $('#jenis_pupuk_angkutan').value);
+                fd.append('jumlah', $('#jumlah_angkutan').value || '');
+                fd.append('no_spb', $('#no_spb_angkutan').value || '');
+                fd.append('keterangan_id', $('#keterangan_id_angkutan').value || '');
             } else {
-                fd.set('kebun_id', $('#kebun_id_menabur').value);
-                fd.set('tanggal', $('#tanggal_menabur').value);
-                fd.set('t_tanam', $('#t_tanam').value || '');
-                fd.set('jenis_pupuk', $('#jenis_pupuk_menabur').value);
-                fd.set('dosis', $('#dosis').value || '');
-                fd.set('jumlah', $('#jumlah_menabur').value || '');
-                fd.set('luas', $('#luas').value || '');
-                fd.set('invt_pokok', $('#invt_pokok').value || '');
+                fd.append('unit_id', $('#unit_id').value);
+                fd.append('kebun_id', $('#kebun_id_menabur').value);
+                fd.append('blok', $('#blok').value);
+                fd.append('tanggal', $('#tanggal_menabur').value);
+                fd.append('tahun', $('#tahun').value || '');
+                fd.append('jenis_pupuk', $('#jenis_pupuk_menabur').value);
+                fd.append('t_tanam', $('#t_tanam').value || '');
+                fd.append('rayon_id', $('#rayon_id_menabur').value || '');
+                fd.append('dosis', $('#dosis').value || '');
+                fd.append('jumlah', $('#jumlah_menabur').value || '');
+                fd.append('luas', $('#luas').value || '');
+                fd.append('invt_pokok', $('#invt_pokok').value || '');
+                fd.append('no_au_58', $('#no_au_58_menabur').value || '');
+                fd.append('keterangan_id', $('#keterangan_id_menabur').value || '');
             }
 
-            fetch('pemupukan_organik_crud.php',{method:'POST', body:fd})
-            .then(r=>r.json()).then(j=>{
-                if (j.success){ close(); Swal.fire({icon:'success', title:'Berhasil', timer:1200, showConfirmButton:false}).then(()=>location.reload()); }
-                else { Swal.fire('Gagal', j.message||'Error', 'error'); }
+            fetch('pemupukan_organik_crud.php', { method:'POST', body: fd })
+            .then(r => r.json()).then(j => {
+                if (j.success){ 
+                    close(); 
+                    Swal.fire({icon:'success', title:'Berhasil', timer:1200, showConfirmButton:false}).then(()=>location.reload()); 
+                } else { 
+                    Swal.fire('Gagal', j.message||'Error', 'error'); 
+                }
+            }).catch(err => {
+                Swal.fire('Error', 'Terjadi kesalahan sistem.', 'error');
             });
         });
     }
     
+    // Auto-fill tahun dari tanggal menabur
     $('#tanggal_menabur')?.addEventListener('change', e=>{
         const y = e.target.value.slice(0,4);
         if(y && $('#tahun') && !$('#tahun').value) $('#tahun').value=y;
     });
 });
 </script>
+
+<?php include_once '../layouts/footer.php'; ?>
