@@ -105,11 +105,10 @@ include_once '../layouts/header.php';
   .delta-neg { color: #16a34a; font-weight: 700; }
   .cell-anggaran { background: rgba(5, 159, 211, 0.04); font-weight: 600; color: #0c4a6e; }
 
-  /* Toolbar Grid Updated (Tanpa Button Column) */
-  .toolbar { display: grid; grid-template-columns: repeat(12, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
-  .toolbar > * { grid-column: span 12; }
+  /* Toolbar Grid Responsif */
+  .toolbar { display: grid; grid-template-columns: 1fr; gap: 0.75rem; margin-bottom: 1.5rem; }
   @media (min-width: 768px){
-    /* Layout baru agar input full width */
+    .toolbar { grid-template-columns: repeat(12, 1fr); }
     .toolbar > .col-thn { grid-column: span 2; }
     .toolbar > .col-afd { grid-column: span 2; }
     .toolbar > .col-jns { grid-column: span 3; }
@@ -117,46 +116,47 @@ include_once '../layouts/header.php';
     .toolbar > .col-src { grid-column: span 3; }
   }
 
-  .btn { display: inline-flex; align-items: center; gap: 0.45rem; border: none; background: #059fd3; color: #fff; border-radius: 0.5rem; padding: 0.5rem 1rem; transition: all 0.2s; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
+  /* Diperbesar agar pas di tap jari (mobile) */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; border: none; background: #059fd3; color: #fff; border-radius: 0.5rem; padding: 0.6rem 1rem; transition: all 0.2s; font-size: 0.875rem; font-weight: 500; cursor: pointer; }
   .btn:hover { background: #0386b3; }
   .btn-gray { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-  .act { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 0.375rem; border: 1px solid #e5e7eb; background: #fff; color: #4b5563; cursor: pointer; transition: 0.2s; }
+  .act { display: inline-grid; place-items: center; width: 36px; height: 36px; border-radius: 0.375rem; border: 1px solid #e5e7eb; background: #fff; color: #4b5563; cursor: pointer; transition: 0.2s; }
   .act:hover { background: #f9fafb; border-color: #d1d5db; }
 </style>
 
 <div class="space-y-6">
-  <div class="flex justify-between items-center">
-  <h1 class="text-2xl font-bold text-gray-800">
-      Pemeliharaan TU
-      <span id="loading-indicator" class="text-sm font-normal text-blue-600 hidden ml-2">
-          <i class="ti ti-loader animate-spin"></i> Memuat...
-      </span>
-  </h1>
+  <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+    <h1 class="text-2xl font-bold text-gray-800 flex items-center flex-wrap">
+        Pemeliharaan TU
+        <span id="loading-indicator" class="text-sm font-normal text-blue-600 hidden ml-2">
+            <i class="ti ti-loader animate-spin"></i> Memuat...
+        </span>
+    </h1>
 
-  <div class="flex gap-2">
-      <button onclick="exportData('excel')" class="btn shadow-sm" style="background-color: #236f9eff;">
-          <i class="ti ti-file-spreadsheet"></i> <span class="hidden md:inline">Excel</span>
-      </button>
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <button onclick="exportData('excel')" class="btn shadow-sm flex-1 md:flex-none" style="background-color: #236f9eff;">
+            <i class="ti ti-file-spreadsheet"></i> <span>Excel</span>
+        </button>
 
-      <button onclick="exportData('pdf')" class="btn shadow-sm" style="background-color: #ef4444a7;">
-          <i class="ti ti-file-type-pdf"></i> <span class="hidden md:inline">PDF</span>
-      </button>
+        <button onclick="exportData('pdf')" class="btn shadow-sm flex-1 md:flex-none" style="background-color: #ef4444a7;">
+            <i class="ti ti-file-type-pdf"></i> <span>PDF</span>
+        </button>
 
-      <?php if ($canInput): ?>
-        <button id="btn-add" class="btn shadow-md"><i class="ti ti-plus"></i> Tambah Data</button>
-      <?php endif; ?>
+        <?php if ($canInput): ?>
+          <button id="btn-add" class="btn shadow-md w-full sm:w-auto mt-2 sm:mt-0"><i class="ti ti-plus"></i> Tambah Data</button>
+        <?php endif; ?>
+    </div>
   </div>
-</div>
 
-  <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-100 toolbar">
+  <div class="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100 toolbar">
     <div class="col-thn">
       <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Tahun</label>
       <input type="number" id="f_tahun" min="2000" max="2100" value="<?= date('Y') ?>" 
-             class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 outline-none transition">
+             class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none transition">
     </div>
     <div class="col-afd">
       <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">AFD</label>
-      <select id="f_afd" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 outline-none transition">
+      <select id="f_afd" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none transition">
         <option value="">— Semua AFD —</option>
         <?php foreach($AFDS as $a): ?>
           <option value="<?= $a ?>"><?= $a ?></option>
@@ -165,7 +165,7 @@ include_once '../layouts/header.php';
     </div>
     <div class="col-jns">
       <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Jenis Pekerjaan</label>
-      <select id="f_jenis" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 outline-none transition">
+      <select id="f_jenis" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none transition">
         <option value="">— Semua Jenis —</option>
         <?php foreach($jenisMaster as $jn): ?>
           <option value="<?= htmlspecialchars($jn) ?>"><?= htmlspecialchars($jn) ?></option>
@@ -174,7 +174,7 @@ include_once '../layouts/header.php';
     </div>
     <div class="col-hk">
       <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">HK</label>
-      <select id="f_hk" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 outline-none transition">
+      <select id="f_hk" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 outline-none transition">
         <option value="">— Semua HK —</option>
         <?php foreach($TENAGA as $t): ?>
           <option value="<?= htmlspecialchars($t['kode']) ?>"><?= htmlspecialchars($t['kode']) ?></option>
@@ -184,7 +184,7 @@ include_once '../layouts/header.php';
     <div class="col-src">
       <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Pencarian (Ket)</label>
       <div class="relative">
-        <input id="f_ket" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 pl-9 focus:ring-2 focus:ring-blue-200 outline-none transition" placeholder="Cari keterangan...">
+        <input id="f_ket" class="filter-input w-full border border-gray-300 rounded-lg px-3 py-2 pl-9 text-sm focus:ring-2 focus:ring-blue-200 outline-none transition" placeholder="Cari keterangan...">
         <i class="ti ti-search absolute left-3 top-2.5 text-gray-400"></i>
       </div>
     </div>
@@ -194,8 +194,8 @@ include_once '../layouts/header.php';
       <div class="text-sm text-gray-600 font-medium" id="filter-info">
           Menampilkan data...
       </div>
-      <div id="loading-indicator" class="hidden text-blue-600 text-sm font-bold flex items-center gap-1">
-          <i class="ti ti-loader animate-spin"></i> Memuat...
+      <div class="text-xs text-blue-500 italic md:hidden flex items-center gap-1 font-semibold">
+          <i class="ti ti-hand-two-fingers"></i> Geser tabel <i class="ti ti-arrow-right"></i>
       </div>
   </div>
 
@@ -234,79 +234,60 @@ include_once '../layouts/header.php';
 <script>
 
 function exportData(type) {
-    // 1. Cek apakah elemen ada sebelum mengambil value agar tidak error
     const getVal = (id) => {
         const el = document.getElementById(id);
         return el ? el.value : '';
     };
 
-    // 2. Gunakan ID yang SESUAI dengan HTML di atas (f_tahun, f_afd, dst)
     const params = new URLSearchParams({
-        action: 'export',          // Tambahkan action jika diperlukan di PHP
-        tahun:  getVal('f_tahun'), // SEBELUMNYA: filter_tahun (Salah)
-        afd:    getVal('f_afd'),   // SEBELUMNYA: filter_kebun (Salah)
-        jenis:  getVal('f_jenis'), // SEBELUMNYA: filter_jenis (Benar, tapi cek lagi)
-        hk:     getVal('f_hk'),    // SEBELUMNYA: filter_hk (Benar)
-        ket:    getVal('f_ket')    // SEBELUMNYA: filter_ket (Benar)
+        action: 'export',
+        tahun:  getVal('f_tahun'),
+        afd:    getVal('f_afd'),
+        jenis:  getVal('f_jenis'),
+        hk:     getVal('f_hk'),
+        ket:    getVal('f_ket')
     });
 
-    // Tentukan file tujuan
     const baseUrl = 'cetak/'; 
     const file = type === 'pdf' ? 'pemeliharaan_tu_pdf.php' : 'pemeliharaan_tu_excel.php';
-    
-    // Buka di tab baru
     window.open(baseUrl + file + '?' + params.toString(), '_blank');
 }
 
-
-
 document.addEventListener('DOMContentLoaded', ()=>{
-  // --- MODIFIKASI LOGIC JS ---
-  // Mengambil variable dari PHP
-  const CAN_ACTION = <?= $canAction ? 'true' : 'false' ?>; // Untuk edit/delete
-  const CAN_INPUT  = <?= $canInput ? 'true' : 'false' ?>;  // Untuk tambah data
+  const CAN_ACTION = <?= $canAction ? 'true' : 'false' ?>;
+  const CAN_INPUT  = <?= $canInput ? 'true' : 'false' ?>;
 
   const CSRF    = '<?= htmlspecialchars($CSRF) ?>';
   const months  = <?= json_encode($monthKeys) ?>;
   const COLS_TOTAL = <?= $COLS_TOTAL ?>;
 
-  // Helper Formatter
   const nf      = (n)=> Number(n||0).toLocaleString('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2});
   const dash    = (n)=> (Number(n||0)===0 ? '<span class="text-gray-300">—</span>' : nf(n));
   const dashPct = (n)=> (Number(n||0)===0 ? '<span class="text-gray-300">—</span>' : `${nf(n)}%`);
 
-  // Elements
   const btnAdd    = document.getElementById('btn-add');
   const tbody     = document.getElementById('tm-body');
   const loader    = document.getElementById('loading-indicator');
   const infoDiv   = document.getElementById('filter-info');
   
-  // Filter Inputs
   const inpTahun  = document.getElementById('f_tahun');
   const inpAfd    = document.getElementById('f_afd');
   const inpJenis  = document.getElementById('f_jenis');
   const inpHk     = document.getElementById('f_hk');
   const inpKet    = document.getElementById('f_ket');
 
-  // MODIFIKASI: Event listener hanya dipasang jika user boleh input
   if (btnAdd && CAN_INPUT) {
       btnAdd.addEventListener('click', ()=> openForm({ unit_kode: inpAfd.value || 'AFD01', tahun: inpTahun.value }));
   }
 
-  // Rayon Logic
   const rayonA_AFDS = ['AFD02','AFD03','AFD04','AFD05','AFD06'];
   const rayonB_AFDS = ['AFD01','AFD07','AFD08','AFD09','AFD10'];
 
-  // --- CORE FUNCTION: Fetch Data Realtime ---
   async function fetchData() {
-    // UI State: Loading
     loader.classList.remove('hidden');
     tbody.style.opacity = '0.5';
-    
-    // Update Info Text
     infoDiv.innerHTML = `Menampilkan Data Tahun <b>${inpTahun.value}</b> ${inpAfd.value ? '• ' + inpAfd.value : ''}`;
 
-    // Build Params
     const qs = new URLSearchParams({
       action: 'list',
       tahun:  inpTahun.value,
@@ -335,19 +316,16 @@ document.addEventListener('DOMContentLoaded', ()=>{
     }
   }
 
-  // --- RENDERING TABLE (Sama persis logicnya) ---
   function renderTable(data) {
     const rows  = data.rows || [];
     const order = data.jenis_order || [];
     const kebunNama = data.kebun_nama || 'Sei Rokan';
     
-    // Empty check
     if(rows.length === 0 && order.length === 0) {
        tbody.innerHTML = `<tr><td colspan="${COLS_TOTAL}" class="text-center py-10 text-gray-400 italic">Tidak ada data ditemukan untuk filter ini.</td></tr>`;
        return;
     }
 
-    // Grouping
     const byJenis = {};
     order.forEach(jn => byJenis[jn] = []);
     rows.forEach(r=>{
@@ -369,7 +347,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           continue; 
       }
 
-      // accumulator jenis & rayon
       const sumJenis = {anggaran:0, jumlah:0};
       const sumRY = {'RY A':{anggaran:0,jumlah:0}, 'RY B':{anggaran:0,jumlah:0}};
       const perBulanJenis = Object.fromEntries(months.map(m=>[m,0]));
@@ -386,7 +363,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         sumJenis.anggaran += Number(r.anggaran_tahun||0);
         sumJenis.jumlah   += jml;
 
-        // Rayon label logic
         const unit = r.unit_kode || '';
         let rayonLabel = r.rayon_nama || '';
         const isRayonA = rayonA_AFDS.includes(unit);
@@ -409,7 +385,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
             <td>${kebunNama}</td>
             <td>${rayonLabel||''}</td>
             <td><span class="px-2 py-1 rounded bg-blue-100 text-blue-800 text-xs font-bold">${r.unit_kode||''}</span></td>
-            <td class="text-gray-600 italic">${r.ket||''}</td>
+            <td class="text-gray-600 italic whitespace-normal min-w-[150px] md:min-w-fit">${r.ket||''}</td>
             <td>${r.hk||''}</td>
             <td>${r.satuan||''}</td>
             <td class="text-right cell-anggaran">${dash(r.anggaran_tahun)}</td>
@@ -427,7 +403,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           </tr>`;
       }
 
-      // Subtotal per jenis
       const deltaJenis = (sumJenis.jumlah - sumJenis.anggaran);
       html += `
         <tr class="sum-jenis text-sm">
@@ -441,7 +416,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         </tr>
       `;
 
-      // Subtotal Rayon A
       if (sumRY['RY A'].anggaran > 0 || sumRY['RY A'].jumlah > 0) {
         const dRYA = sumRY['RY A'].jumlah - sumRY['RY A'].anggaran;
         html += `
@@ -456,7 +430,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
           </tr>`;
       }
 
-      // Subtotal Rayon B
       if (sumRY['RY B'].anggaran > 0 || sumRY['RY B'].jumlah > 0) {
         const dRYB = sumRY['RY B'].jumlah - sumRY['RY B'].anggaran;
         html += `
@@ -470,15 +443,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
             ${CAN_ACTION ? '<td></td>' : ''}
           </tr>`;
       }
-    } // end for order
+    } 
     
     tbody.innerHTML = html;
     
-    // Re-bind actions hanya jika boleh aksi
     if (CAN_ACTION) bindActions();
   }
 
-  // --- ACTION BINDING (Edit/Delete) ---
   function bindActions(){
       tbody.querySelectorAll('[data-edit]').forEach(b=>{
         b.addEventListener('click', ()=> openForm(JSON.parse(b.dataset.edit||'{}')));
@@ -497,14 +468,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
           fd.append('id',id);
           const r = await fetch('pemeliharaan_tu_crud.php',{method:'POST',body:fd});
           const jj=await r.json();
-          if (jj.success){ Swal.fire('Berhasil','Data dihapus','success'); fetchData(); } // Panggil fetchData() bukan reload
+          if (jj.success){ Swal.fire('Berhasil','Data dihapus','success'); fetchData(); }
           else { Swal.fire('Gagal',jj.message||'Error','error'); }
         });
       });
   }
 
-  // --- EVENT LISTENERS (Auto Filter) ---
-  // 1. Debounce function untuk text input
   function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -513,86 +482,88 @@ document.addEventListener('DOMContentLoaded', ()=>{
     };
   }
 
-  // 2. Pasang Listener
   const filters = [inpTahun, inpAfd, inpJenis, inpHk];
   filters.forEach(el => el.addEventListener('change', fetchData));
-  
-  // Khusus pencarian text pakai debounce 500ms agar tidak spam request
   inpKet.addEventListener('input', debounce(fetchData, 500));
 
-  // Load awal
   fetchData();
 
-  /* ===== Modal (Create/Update) Logic Tetap Sama ===== */
+  /* ===== MODIFIKASI MODAL FORM UNTUK MOBILE ===== */
   let MODAL=null;
   function modalTpl(){return `
-<div id="tm-modal" class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-  <div class="bg-white rounded-2xl w-full max-w-5xl shadow-2xl transform transition-all scale-100">
-    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50 rounded-t-2xl">
-      <h3 id="tm-title" class="font-bold text-xl text-gray-800">Form TM</h3>
+<div id="tm-modal" class="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-3 sm:p-4 backdrop-blur-sm transition-opacity">
+  <div class="bg-white rounded-xl sm:rounded-2xl w-full max-w-5xl shadow-2xl transform transition-all scale-100 flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+    
+    <div class="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-gray-100 bg-gray-50 rounded-t-xl sm:rounded-t-2xl shrink-0">
+      <h3 id="tm-title" class="font-bold text-lg sm:text-xl text-gray-800">Form TU</h3>
       <button id="tm-x" class="text-gray-400 hover:text-gray-600 text-2xl transition">&times;</button>
     </div>
-    <form id="tm-form" class="p-6 grid grid-cols-12 gap-4 max-h-[80vh] overflow-y-auto">
+
+    <form id="tm-form" class="p-4 sm:p-6 grid grid-cols-12 gap-3 sm:gap-4 overflow-y-auto">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
       <input type="hidden" name="action" value="store">
       <input type="hidden" name="id" value="">
       
-      <div class="col-span-2">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Tahun</label>
-        <input name="tahun" type="number" min="2000" max="2100" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required value="<?= date('Y') ?>">
+      <div class="col-span-6 md:col-span-2">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Tahun</label>
+        <input name="tahun" type="number" min="2000" max="2100" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required value="<?= date('Y') ?>">
       </div>
-      <div class="col-span-2">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">AFD</label>
-        <select name="unit_kode" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
+      <div class="col-span-6 md:col-span-2">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">AFD</label>
+        <select name="unit_kode" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" required>
           <?php foreach($AFDS as $a){ echo '<option value="'.$a.'">'.$a.'</option>'; } ?>
         </select>
       </div>
-      <div class="col-span-3">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Rayon</label>
-        <select name="rayon_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+      <div class="col-span-12 md:col-span-3">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Rayon</label>
+        <select name="rayon_id" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
           <option value="">— Pilih —</option>
           <?php foreach($conn->query("SELECT id,nama FROM md_rayon ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC) as $x){ echo '<option value="'.$x['id'].'">'.htmlspecialchars($x['nama']).'</option>'; } ?>
         </select>
       </div>
-      <div class="col-span-5">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Jenis Pekerjaan</label>
-        <input id="jenis_text" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" list="jenis_datalist" placeholder="Ketik untuk mencari..." autocomplete="off" required>
+      <div class="col-span-12 md:col-span-5">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Jenis Pekerjaan</label>
+        <input id="jenis_text" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none" list="jenis_datalist" placeholder="Ketik untuk mencari..." autocomplete="off" required>
         <datalist id="jenis_datalist">
           <?php foreach($JENIS_ROWS as $jr){ echo '<option data-id="'.$jr['id'].'" value="'.htmlspecialchars($jr['nama']).'"></option>'; } ?>
         </datalist>
         <input type="hidden" name="jenis_id" id="jenis_id">
       </div>
-      <div class="col-span-3">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">HK (Tenaga)</label>
-        <select name="hk_id" id="hk_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+      <div class="col-span-12 md:col-span-3">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">HK (Tenaga)</label>
+        <select name="hk_id" id="hk_id" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
           <option value="">— Pilih —</option>
           <?php foreach($TENAGA as $t){ echo '<option value="'.$t['id'].'">'.htmlspecialchars($t['kode']).'</option>'; } ?>
         </select>
         <input type="hidden" name="hk" id="hk_hidden" value="">
       </div>
-      <div class="col-span-2">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Satuan</label>
-        <input name="satuan" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ha/Kg">
+      <div class="col-span-12 md:col-span-2">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Satuan</label>
+        <input name="satuan" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ha/Kg">
       </div>
-      <div class="col-span-7">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Anggaran 1 Tahun</label>
-        <input name="anggaran_tahun" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-3 py-2 font-mono font-bold text-blue-800 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
+      <div class="col-span-12 md:col-span-7">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Anggaran 1 Tahun</label>
+        <input name="anggaran_tahun" inputmode="decimal" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 font-mono font-bold text-blue-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0.00">
       </div>
-      <div class="col-span-12 border-t my-2"></div>
-      <div class="col-span-12 text-sm font-bold text-gray-500 mb-1">Realisasi Bulanan</div>
+
+      <div class="col-span-12 border-t border-gray-200 my-1 sm:my-2"></div>
+      <div class="col-span-12 text-[12px] sm:text-sm font-bold text-gray-500 mb-0">Realisasi Bulanan</div>
+      
       <?php foreach($monthKeys as $m): ?>
-        <div class="col-span-2">
-          <label class="text-xs font-bold text-gray-500 uppercase block text-center"><?= strtoupper($m) ?></label>
-          <input name="<?= $m ?>" inputmode="decimal" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm text-right focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
+        <div class="col-span-4 md:col-span-2">
+          <label class="text-[10px] sm:text-xs font-bold text-gray-500 uppercase block text-center mb-1"><?= strtoupper($m) ?></label>
+          <input name="<?= $m ?>" inputmode="decimal" class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs sm:text-sm text-right focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0">
         </div>
       <?php endforeach; ?>
-      <div class="col-span-12 mt-2">
-        <label class="text-xs font-bold text-gray-600 uppercase mb-1 block">Keterangan</label>
-        <textarea name="ket" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Catatan tambahan..."></textarea>
+
+      <div class="col-span-12 mt-1 sm:mt-2">
+        <label class="text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1 block">Keterangan</label>
+        <textarea name="ket" rows="2" class="w-full border border-gray-300 rounded-lg px-2 sm:px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Catatan tambahan..."></textarea>
       </div>
-      <div class="col-span-12 flex justify-end gap-3 mt-4 pt-4 border-t border-gray-100">
-        <button type="button" id="tm-cancel" class="btn btn-gray px-5">Batal</button>
-        <button class="btn px-6 shadow-lg shadow-blue-500/30">Simpan Data</button>
+
+      <div class="col-span-12 flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-2 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100 shrink-0">
+        <button type="button" id="tm-cancel" class="btn btn-gray w-full sm:w-auto px-5">Batal</button>
+        <button class="btn w-full sm:w-auto px-6 shadow-lg shadow-blue-500/30">Simpan Data</button>
       </div>
     </form>
   </div>
@@ -605,7 +576,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const F=document.getElementById('tm-form'); const T=document.getElementById('tm-title');
 
     F.action.value = d.id ? 'update' : 'store';
-    if (!d.id && (!d.unit_kode)) d.unit_kode = inpAfd.value || 'AFD01'; // Ambil dari filter aktif jika baru
+    if (!d.id && (!d.unit_kode)) d.unit_kode = inpAfd.value || 'AFD01'; 
 
     ['id','tahun','satuan','anggaran_tahun','ket',
       'jan','feb','mar','apr','mei','jun','jul','agu','sep','okt','nov','des'
@@ -649,7 +620,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       hidHK.value = e.target.options[e.target.selectedIndex]?.text || '';
     });
 
-    T.textContent = (d.id?'Edit':'Tambah')+' Data TM';
+    T.textContent = (d.id?'Edit':'Tambah')+' Data TU';
 
     const close=()=>MODAL.remove();
     document.getElementById('tm-x').onclick=close;
@@ -668,14 +639,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const j = await r.json();
       if (j.success){
         await Swal.fire('Berhasil', j.message||'Tersimpan','success');
-        close(); fetchData(); // Panggil fetchData() agar table refresh tanpa reload
+        close(); fetchData(); 
       } else {
         Swal.fire('Gagal', (j.errors||[]).map(x=>'• '+x).join('<br>') || j.message || 'Error', 'error');
       }
     }
   }
 
-  // MODIFIKASI: Shortcut hanya aktif jika boleh input
   if (CAN_INPUT) {
     document.addEventListener('keydown', (e)=>{ 
         if (e.key==='n' && (e.ctrlKey||e.metaKey)){ 
