@@ -410,7 +410,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       .catch(()=>{ tbody.innerHTML = '<tr><td colspan="13" class="text-center py-10 text-red-500">Gagal memuat data</td></tr>'; });
   }
 
-  // Load awal
+// Load awal
   refresh();
   
   // Event listener realtime filter

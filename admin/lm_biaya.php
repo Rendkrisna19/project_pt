@@ -203,28 +203,32 @@ include_once '../layouts/header.php';
 
 <div class="space-y-6">
   
-  <div class="flex items-center justify-between">
-    <h1 class="text-2xl font-bold text-gray-800">LM Biaya (Grouping per Unit)</h1>
-    <?php if ($canInput): ?>
-      <button id="btn-add" class="px-4 py-2 bg-[#0097e6] text-white rounded-md hover:bg-[#0086cc] flex items-center gap-2 shadow-sm transition font-medium text-sm">
-          <i class="ti ti-plus"></i> Tambah
-      </button>
-    <?php endif; ?>
+  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">LM Biaya (Grouping per Unit)</h1>
+        <p class="text-sm text-gray-500 mt-1">Laporan biaya operasional dan HPP</p>
+    </div>
+    
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <a href="cetak/lm_biaya_pdf.php?<?= http_build_query($_GET) ?>" target="_blank" class="flex-1 md:flex-none justify-center px-4 h-10 bg-[#dc2626] text-white rounded-md hover:bg-[#b91c1c] flex items-center gap-2 text-sm font-medium shadow-sm transition">
+            <i class="ti ti-file-type-pdf"></i> Export PDF
+        </a>
+        <a href="cetak/lm_biaya_excel.php?<?= http_build_query($_GET) ?>" class="flex-1 md:flex-none justify-center px-4 h-10 bg-[#0891b2] text-white rounded-md hover:bg-[#0e7490] flex items-center gap-2 text-sm font-medium shadow-sm transition">
+            <i class="ti ti-file-spreadsheet"></i> Export Excel
+        </a>
+        
+        <?php if ($canInput): ?>
+            <button id="btn-add" class="w-full sm:w-auto justify-center px-5 h-10 bg-[#0097e6] text-white rounded-md hover:bg-[#0086cc] flex items-center gap-2 shadow-sm transition font-medium text-sm mt-2 sm:mt-0 md:ml-2">
+                <i class="ti ti-plus"></i> Tambah
+            </button>
+        <?php endif; ?>
+    </div>
   </div>
 
-  <div class="flex gap-2">
-    <a href="cetak/lm_biaya_pdf.php?<?= http_build_query($_GET) ?>" target="_blank" class="px-4 py-2 bg-[#dc2626] text-white rounded-md hover:bg-[#b91c1c] flex items-center gap-2 text-sm font-medium shadow-sm transition">
-        <i class="ti ti-file-type-pdf"></i> Export PDF
-    </a>
-    <a href="cetak/lm_biaya_excel.php?<?= http_build_query($_GET) ?>" class="px-4 py-2 bg-[#0891b2] text-white rounded-md hover:bg-[#0e7490] flex items-center gap-2 text-sm font-medium shadow-sm transition">
-        <i class="ti ti-file-spreadsheet"></i> Export Excel
-    </a>
-  </div>
-
-  <div class="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
-    <form method="get" id="filter-form" class="grid grid-cols-12 gap-4 items-end">
+  <div class="bg-white p-4 md:p-5 rounded-lg shadow-sm border border-gray-200">
+    <form method="get" id="filter-form" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-12 gap-3 md:gap-4 items-end">
       <?php if ($hasKebun): ?>
-      <div class="col-span-12 md:col-span-2">
+      <div class="col-span-1 sm:col-span-1 md:col-span-2">
         <label class="filter-label">Kebun</label>
         <select name="kebun_id" class="filter-input" onchange="this.form.submit()">
             <option value="">Semua Kebun</option>
@@ -232,37 +236,44 @@ include_once '../layouts/header.php';
         </select>
       </div>
       <?php endif; ?>
-      <div class="col-span-12 md:col-span-2">
+      <div class="col-span-1 sm:col-span-1 md:col-span-2">
          <label class="filter-label">Unit/Defisi</label>
          <select name="unit_id" class="filter-input" onchange="this.form.submit()">
             <option value="">Semua Unit</option>
             <?php foreach($units as $u): ?><option value="<?= $u['id'] ?>" <?= ($unit_id == $u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?>
          </select>
       </div>
-      <div class="col-span-12 md:col-span-2">
+      <div class="col-span-1 sm:col-span-1 md:col-span-2">
          <label class="filter-label">Bulan</label>
          <select name="bulan" class="filter-input" onchange="this.form.submit()">
             <option value="Semua Bulan">Semua Bulan</option>
             <?php foreach($bulanList as $b): ?><option value="<?= $b ?>" <?= ($bulan===$b)?'selected':'' ?>><?= $b ?></option><?php endforeach; ?>
          </select>
       </div>
-      <div class="col-span-12 md:col-span-1">
+      <div class="col-span-1 sm:col-span-1 md:col-span-1">
          <label class="filter-label">Tahun</label>
          <select name="tahun" class="filter-input" onchange="this.form.submit()">
             <?php for($y=date('Y')-2;$y<=date('Y')+2;$y++): ?><option value="<?= $y ?>" <?= ($tahun==$y)?'selected':'' ?>><?= $y ?></option><?php endfor; ?>
          </select>
       </div>
-      <div class="col-span-12 md:col-span-<?php echo $hasKebun ? '4' : '6'; ?>">
+      <div class="col-span-1 sm:col-span-2 md:col-span-<?php echo $hasKebun ? '4' : '6'; ?>">
          <label class="filter-label">Pencarian</label>
-         <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" class="filter-input" placeholder="Cari..." onchange="this.form.submit()">
+         <div class="relative">
+            <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" class="filter-input pl-8" placeholder="Cari..." onchange="this.form.submit()">
+            <i class="ti ti-search absolute left-2.5 top-2 text-gray-400"></i>
+         </div>
       </div>
-      <div class="col-span-12 md:col-span-1">
+      <div class="col-span-1 sm:col-span-2 md:col-span-1">
          <label class="filter-label">Baris</label>
          <select name="per_page" class="filter-input text-center" onchange="this.form.submit()">
             <?php foreach([10,25,50,100,200] as $pp): ?><option value="<?= $pp ?>" <?= $per_page===$pp?'selected':'' ?>><?= $pp ?></option><?php endforeach; ?>
          </select>
       </div>
     </form>
+  </div>
+
+  <div class="text-xs text-blue-500 italic md:hidden flex items-center justify-end gap-1 font-semibold w-full mt-[-10px] mb-2">
+      <i class="ti ti-hand-two-fingers"></i> Geser tabel <i class="ti ti-arrow-right"></i>
   </div>
 
   <div class="table-container">
@@ -318,7 +329,7 @@ include_once '../layouts/header.php';
                 <td>
                     <?= htmlspecialchars($r['uraian_pekerjaan']??'-') ?>
                     <?php if(isset($r['is_pupuk']) && $r['is_pupuk']): ?>
-                        <span class="text-xs bg-green-100 text-green-700 px-1 rounded ml-1">Pupuk</span>
+                        <span class="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded ml-1 font-semibold">Pupuk</span>
                     <?php endif; ?>
                 </td>
                 <td class="text-center"><?= htmlspecialchars($r['bulan']) ?></td>
@@ -386,74 +397,87 @@ include_once '../layouts/header.php';
     </table>
   </div>
 
-  <div class="flex items-center justify-between text-sm text-gray-600 mt-2 px-1">
-      <div>Total Data: <?= number_format($total_rows) ?></div>
-      <div class="flex gap-1">
-         <a href="<?= build_url(['page'=>max(1,$page-1)]) ?>" class="px-3 py-1 border rounded hover:bg-gray-100 transition">Prev</a>
-         <a href="<?= build_url(['page'=>min($total_pages,$page+1)]) ?>" class="px-3 py-1 border rounded hover:bg-gray-100 transition">Next</a>
+  <div class="flex flex-col sm:flex-row items-center justify-between text-sm text-gray-600 mt-2 px-1 gap-2">
+      <div class="font-medium">Total Data: <?= number_format($total_rows) ?></div>
+      <div class="flex items-center justify-center gap-1 w-full sm:w-auto">
+         <a href="<?= build_url(['page'=>max(1,$page-1)]) ?>" class="px-4 py-1.5 border border-gray-300 rounded hover:bg-gray-100 transition bg-white text-center flex-1 sm:flex-none">Prev</a>
+         <a href="<?= build_url(['page'=>min($total_pages,$page+1)]) ?>" class="px-4 py-1.5 border border-gray-300 rounded hover:bg-gray-100 transition bg-white text-center flex-1 sm:flex-none">Next</a>
       </div>
   </div>
 
 </div>
 
 <?php if ($canInput): ?>
-<div id="crud-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4 backdrop-blur-sm">
-  <div class="bg-white p-6 rounded-xl shadow-2xl w-full max-w-2xl transform scale-100 transition-all">
-     <div class="flex justify-between items-center mb-5 border-b pb-3">
+<div id="crud-modal" class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-3 sm:p-4 backdrop-blur-sm transition-opacity">
+  <div class="bg-white p-5 sm:p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+     
+     <div class="flex justify-between items-center mb-4 sm:mb-5 border-b border-gray-100 pb-3 shrink-0">
         <h3 class="font-bold text-lg text-gray-800" id="modal-title">Form Data Biaya</h3>
-        <button id="btn-close" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+        <button id="btn-close" class="text-gray-400 hover:text-gray-600 text-2xl leading-none transition">&times;</button>
      </div>
-     <form id="crud-form">
+     
+     <form id="crud-form" class="overflow-y-auto pr-1">
         <input type="hidden" name="csrf_token" value="<?= $CSRF ?>"> 
         <input type="hidden" name="action" id="form-action"> 
         <input type="hidden" name="id" id="form-id">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Unit/Defisi</label>
-                <select name="unit_id" id="unit_id" class="w-full border border-gray-300 p-2 rounded outline-none" required>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
+             
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Unit/Defisi</label>
+                <select name="unit_id" id="unit_id" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm" required>
                     <option value="">-- Pilih Unit --</option>
                     <?php foreach($units as $u) echo "<option value='{$u['id']}'>{$u['nama_unit']}</option>"; ?>
                 </select>
              </div>
+             
              <?php if($hasKebun): ?>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Kebun</label>
-                <select name="kebun_id" id="kebun_id" class="w-full border border-gray-300 p-2 rounded outline-none">
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
+                <select name="kebun_id" id="kebun_id" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm">
                     <option value="">-- Pilih Kebun --</option>
                     <?php foreach($kebuns as $k) echo "<option value='{$k['id']}'>{$k['nama_kebun']}</option>"; ?>
                 </select>
              </div>
              <?php endif; ?>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">No. Alokasi</label>
-                <input name="alokasi" id="alokasi" class="w-full border border-gray-300 p-2 rounded outline-none" required>
+
+             <div class="col-span-1 md:col-span-2 border-t border-gray-100 my-1 md:my-0 md:hidden"></div>
+             
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">No. Alokasi</label>
+                <input name="alokasi" id="alokasi" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm" required>
              </div>
-             <div class="col-span-2">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Uraian Pekerjaan</label>
-                <input name="uraian_pekerjaan" id="uraian_pekerjaan" class="w-full border border-gray-300 p-2 rounded outline-none" required>
+             <div class="col-span-1 md:col-span-2">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Uraian Pekerjaan</label>
+                <input name="uraian_pekerjaan" id="uraian_pekerjaan" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm" required>
              </div>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Bulan</label>
-                <select name="bulan" id="bulan" class="w-full border border-gray-300 p-2 rounded outline-none">
+
+             <div class="col-span-1 md:col-span-2 border-t border-gray-100 my-1 md:my-0 md:hidden"></div>
+             
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
+                <select name="bulan" id="bulan" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm">
                     <?php foreach($bulanList as $b) echo "<option value='$b'>$b</option>"; ?>
                 </select>
              </div>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Tahun</label>
-                <input type="number" name="tahun" id="tahun" value="<?= $tahun ?>" class="w-full border border-gray-300 p-2 rounded outline-none">
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
+                <input type="number" name="tahun" id="tahun" value="<?= $tahun ?>" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm">
              </div>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Anggaran (Rp)</label>
-                <input type="number" step="0.01" name="rencana_bi" id="rencana_bi" class="w-full border border-gray-300 p-2 rounded outline-none">
+             
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Anggaran (Rp)</label>
+                <input type="number" step="0.01" name="rencana_bi" id="rencana_bi" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm">
              </div>
-             <div class="col-span-2 md:col-span-1">
-                <label class="block text-sm font-bold text-gray-600 mb-1">Realisasi (Rp)</label>
-                <input type="number" step="0.01" name="realisasi_bi" id="realisasi_bi" class="w-full border border-gray-300 p-2 rounded outline-none">
+             <div class="col-span-1">
+                <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Realisasi (Rp)</label>
+                <input type="number" step="0.01" name="realisasi_bi" id="realisasi_bi" class="w-full border border-gray-300 p-2 sm:py-2.5 rounded-lg outline-none focus:border-[#0097e6] focus:ring-1 focus:ring-[#0097e6] text-sm">
              </div>
         </div>
-        <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
-            <button type="button" id="btn-cancel" class="px-5 py-2 border border-gray-300 rounded text-gray-600 hover:bg-gray-50 transition">Batal</button>
-            <button type="submit" class="px-5 py-2 bg-[#0097e6] text-white rounded hover:bg-[#0086cc] shadow-md transition">Simpan Data</button>
+        
+        <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-gray-100 shrink-0">
+            <button type="button" id="btn-cancel" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition text-sm font-medium">Batal</button>
+            <button type="submit" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-[#0097e6] text-white rounded-lg hover:bg-[#0086cc] shadow-md shadow-[#0097e6]/30 transition text-sm font-medium">Simpan Data</button>
         </div>
      </form>
   </div>

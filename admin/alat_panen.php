@@ -58,39 +58,39 @@ include_once '../layouts/header.php';
   }
   table.rekap tbody tr:hover td { background-color: #f8fafc; }
   .btn-icon {
-    display: inline-flex; justify-content: center; align-items: center; width: 32px; height: 32px;
+    display: inline-flex; justify-content: center; align-items: center; width: 36px; height: 36px;
     border-radius: .375rem; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; transition: 0.2s;
   }
   .btn-icon:hover { background: #f1f5f9; border-color: #cbd5e1; }
 </style>
 
-<div class="space-y-6 ">
+<div class="space-y-6">
 
-    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         
         <div>
             <h1 class="text-2xl font-extrabold text-slate-800 tracking-tight">Alat Pertanian</h1>
             <p class="text-slate-500 text-sm mt-1 font-medium">Kelola stok alat panen per kebun, unit & periode</p>
         </div>
 
-        <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
             
-            <button id="btn-refresh" class="flex items-center justify-center w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-[#059fd3] transition-all shadow-sm" title="Refresh Data">
-                <i class="ti ti-refresh text-lg"></i>
+            <button id="btn-refresh" class="flex flex-1 md:flex-none items-center justify-center h-10 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-[#059fd3] transition-all shadow-sm" title="Refresh Data">
+                <i class="ti ti-refresh text-lg"></i> <span class="md:hidden ml-2 font-semibold">Refresh</span>
             </button>
 
-            <button id="btn-export-excel" class="flex items-center gap-2 bg-[#008b9c] hover:bg-[#007a8a] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 border-none cursor-pointer">
+            <button id="btn-export-excel" class="flex flex-1 md:flex-none justify-center items-center gap-2 bg-[#008b9c] hover:bg-[#007a8a] text-white px-4 h-10 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 border-none cursor-pointer">
                 <i class="ti ti-file-spreadsheet text-lg"></i> 
                 <span>Excel</span>
             </button>
 
-            <button id="btn-export-pdf" class="flex items-center gap-2 bg-[#d32f2f] hover:bg-[#b71c1c] text-white px-4 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 border-none cursor-pointer">
+            <button id="btn-export-pdf" class="flex flex-1 md:flex-none justify-center items-center gap-2 bg-[#d32f2f] hover:bg-[#b71c1c] text-white px-4 h-10 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 border-none cursor-pointer">
                 <i class="ti ti-file-type-pdf text-lg"></i> 
                 <span>PDF</span>
             </button>
 
             <?php if ($canInput): ?>
-            <button id="btn-add" class="flex items-center gap-2 bg-[#059fd3] hover:bg-[#0487b4] text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 ml-2 border-none cursor-pointer">
+            <button id="btn-add" class="flex w-full sm:w-auto justify-center items-center gap-2 bg-[#059fd3] hover:bg-[#0487b4] text-white px-5 h-10 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 mt-2 sm:mt-0 md:ml-2 border-none cursor-pointer">
                 <i class="ti ti-plus text-lg"></i> 
                 <span>Input Alat</span>
             </button>
@@ -99,23 +99,23 @@ include_once '../layouts/header.php';
         </div>
     </div>
 
-    <div class="bg-white p-5 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200/60 relative overflow-hidden">
+    <div class="bg-white p-4 md:p-5 rounded-xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-200/60 relative overflow-hidden">
         
         <div class="absolute left-0 top-0 bottom-0 w-1 bg-[#059fd3]"></div>
 
-        <div class="flex items-center gap-2 mb-5 pb-2 border-b border-slate-100">
+        <div class="flex items-center gap-2 mb-4 md:mb-5 pb-2 border-b border-slate-100">
             <div class="p-1.5 bg-cyan-50 rounded text-[#059fd3]">
                 <i class="ti ti-filter"></i> 
             </div>
             <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Filter Data</span>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
             
             <div class="group">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Kebun</label>
+                <label class="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Kebun</label>
                 <div class="relative">
-                    <select id="f-kebun" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block p-2.5 outline-none transition-all font-medium cursor-pointer">
+                    <select id="f-kebun" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block px-3 py-2 md:p-2.5 outline-none transition-all font-medium cursor-pointer">
                         <option value="">Semua Kebun</option>
                         <?php foreach ($kebun as $k): ?>
                             <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
@@ -128,9 +128,9 @@ include_once '../layouts/header.php';
             </div>
 
             <div class="group">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Unit</label>
+                <label class="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Unit</label>
                 <div class="relative">
-                    <select id="f-unit" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block p-2.5 outline-none transition-all font-medium cursor-pointer">
+                    <select id="f-unit" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block px-3 py-2 md:p-2.5 outline-none transition-all font-medium cursor-pointer">
                         <option value="">Semua Unit</option>
                         <?php foreach ($units as $u): ?>
                             <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
@@ -143,9 +143,9 @@ include_once '../layouts/header.php';
             </div>
 
             <div class="group">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Jenis Alat</label>
+                <label class="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Jenis Alat</label>
                 <div class="relative">
-                    <select id="f-jenis-alat" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block p-2.5 outline-none transition-all font-medium cursor-pointer">
+                    <select id="f-jenis-alat" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block px-3 py-2 md:p-2.5 outline-none transition-all font-medium cursor-pointer">
                         <option value="">Semua Jenis</option>
                         <?php foreach ($jenisAlatMaster as $jam): ?>
                             <option value="<?= (int)$jam['id'] ?>"><?= htmlspecialchars($jam['nama']) ?></option>
@@ -158,9 +158,9 @@ include_once '../layouts/header.php';
             </div>
 
             <div class="group">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Bulan</label>
+                <label class="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Bulan</label>
                 <div class="relative">
-                    <select id="f-bulan" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block p-2.5 outline-none transition-all font-medium cursor-pointer">
+                    <select id="f-bulan" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block px-3 py-2 md:p-2.5 outline-none transition-all font-medium cursor-pointer">
                         <option value="">Semua Bulan</option>
                         <?php foreach ($bulanList as $b): ?>
                             <option value="<?= $b ?>" <?= ($b === $bulanSekarang) ? 'selected' : '' ?>><?= $b ?></option>
@@ -173,9 +173,9 @@ include_once '../layouts/header.php';
             </div>
 
             <div class="group">
-                <label class="block text-[11px] font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Tahun</label>
+                <label class="block text-[11px] md:text-xs font-bold text-slate-500 uppercase mb-1.5 group-focus-within:text-[#059fd3] transition-colors">Tahun</label>
                 <div class="relative">
-                    <select id="f-tahun" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block p-2.5 outline-none transition-all font-medium cursor-pointer">
+                    <select id="f-tahun" class="w-full appearance-none bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-[#059fd3] focus:border-[#059fd3] block px-3 py-2 md:p-2.5 outline-none transition-all font-medium cursor-pointer">
                         <?php for ($y=$tahunNow-2; $y<=$tahunNow+2; $y++): ?>
                             <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
                         <?php endfor; ?>
@@ -189,82 +189,94 @@ include_once '../layouts/header.php';
         </div>
     </div>
 
-</div>
-
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 px-1">
-    <div class="text-sm text-gray-600 font-medium" id="page-info">Menampilkan 0–0 dari 0 data</div>
-    <div class="flex items-center gap-2">
-      <select id="per-page" class="border rounded-lg px-2 py-1 text-sm">
-        <option value="10">10</option>
-        <option value="25" selected>25</option>
-        <option value="50">50</option>
-        <option value="100">100</option>
-      </select>
-      <div class="inline-flex gap-1 ml-2">
-        <button id="btn-prev" class="px-3 py-1 rounded border text-gray-600 hover:bg-gray-50 text-sm" disabled>Prev</button>
-        <button id="btn-next" class="px-3 py-1 rounded border text-gray-600 hover:bg-gray-50 text-sm" disabled>Next</button>
-      </div>
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
+        <div class="flex flex-col w-full sm:w-auto">
+            <div class="text-sm text-gray-600 font-medium" id="page-info">Menampilkan 0–0 dari 0 data</div>
+            <div class="text-xs text-blue-500 italic md:hidden flex items-center gap-1 font-semibold mt-1">
+                <i class="ti ti-hand-two-fingers"></i> Geser tabel <i class="ti ti-arrow-right"></i>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 self-end sm:self-auto">
+            <span class="text-sm text-gray-600">Tampilkan</span>
+            <select id="per-page" class="border border-gray-300 rounded-lg px-2 py-1 text-sm bg-white">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+            <div class="inline-flex gap-1 ml-1 sm:ml-2">
+                <button id="btn-prev" class="px-3 py-1 rounded border text-gray-600 hover:bg-gray-50 text-sm transition" disabled>Prev</button>
+                <button id="btn-next" class="px-3 py-1 rounded border text-gray-600 hover:bg-gray-50 text-sm transition" disabled>Next</button>
+            </div>
+        </div>
     </div>
-  </div>
 
-  <div class="sticky-container">
-      <table class="rekap">
-        <thead>
-          <tr>
-            <th class="text-left">Kebun</th>
-            <th class="text-left">Unit/Devisi</th>
-            <th class="text-left">Jenis Alat Panen</th>
-            <th class="text-right">Stok Awal</th>
-            <th class="text-right">Mutasi Masuk</th>
-            <th class="text-right">Mutasi Keluar</th>
-            <th class="text-right">Dipakai</th>
-            <th class="text-right">Stok Akhir</th>
-            <th class="text-left">Krani Afdeling</th>
-            <th class="text-left">Catatan</th>
-            <?php if ($canAction): ?>
-              <th class="text-center" style="width: 100px;">Aksi</th>
-            <?php endif; ?>
-          </tr>
-        </thead>
-        <tbody id="tbody-data">
-          <tr><td colspan="<?= $canAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat Data...</td></tr>
-        </tbody>
-      </table>
-  </div>
+    <div class="sticky-container">
+        <table class="rekap">
+            <thead>
+            <tr>
+                <th class="text-left">Kebun</th>
+                <th class="text-left">Unit/Devisi</th>
+                <th class="text-left">Jenis Alat Panen</th>
+                <th class="text-right">Stok Awal</th>
+                <th class="text-right">Mutasi Masuk</th>
+                <th class="text-right">Mutasi Keluar</th>
+                <th class="text-right">Dipakai</th>
+                <th class="text-right">Stok Akhir</th>
+                <th class="text-left">Krani Afdeling</th>
+                <th class="text-left">Catatan</th>
+                <?php if ($canAction): ?>
+                <th class="text-center" style="width: 100px;">Aksi</th>
+                <?php endif; ?>
+            </tr>
+            </thead>
+            <tbody id="tbody-data">
+            <tr><td colspan="<?= $canAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat Data...</td></tr>
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <?php if ($canInput): ?>
-<div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-4xl transform scale-100 transition-transform">
-    <div class="flex justify-between items-center mb-6 border-b pb-4">
-      <h3 id="modal-title" class="text-xl font-bold text-gray-800">Input Alat Pertanian</h3>
-      <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+<div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-3 sm:p-4 backdrop-blur-sm transition-opacity">
+  <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+    
+    <div class="flex justify-between items-center mb-4 sm:mb-6 border-b pb-3 sm:pb-4 shrink-0">
+      <h3 id="modal-title" class="text-lg sm:text-xl font-bold text-gray-800">Input Alat Pertanian</h3>
+      <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600 transition">&times;</button>
     </div>
-    <form id="crud-form" novalidate>
+
+    <form id="crud-form" novalidate class="overflow-y-auto pr-1">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
       <input type="hidden" name="action" id="form-action">
       <input type="hidden" name="id" id="form-id">
       
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
-          <select id="bulan" name="bulan" class="w-full border rounded px-3 py-2 text-sm" required>
-            <?php foreach ($bulanList as $b): ?>
-                <option value="<?= $b ?>" <?= ($b === $bulanSekarang) ? 'selected' : '' ?>><?= $b ?></option>
-            <?php endforeach; ?>
-          </select>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
+        
+        <div class="grid grid-cols-2 gap-3 md:col-span-2">
+            <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
+            <select id="bulan" name="bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
+                <?php foreach ($bulanList as $b): ?>
+                    <option value="<?= $b ?>" <?= ($b === $bulanSekarang) ? 'selected' : '' ?>><?= $b ?></option>
+                <?php endforeach; ?>
+            </select>
+            </div>
+            <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
+            <select id="tahun" name="tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
+                <?php for ($y=$tahunNow-1;$y<=$tahunNow+3;$y++): ?>
+                <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
+                <?php endfor; ?>
+            </select>
+            </div>
         </div>
+
+        <div class="md:col-span-1 border-t border-gray-100 my-1 md:hidden"></div>
+
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
-          <select id="tahun" name="tahun" class="w-full border rounded px-3 py-2 text-sm" required>
-            <?php for ($y=$tahunNow-1;$y<=$tahunNow+3;$y++): ?>
-              <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-            <?php endfor; ?>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
-          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2 text-sm" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
+          <select id="kebun_id" name="kebun_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
             <option value="">-- Pilih Kebun --</option>
             <?php foreach ($kebun as $k): ?>
               <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
@@ -272,8 +284,8 @@ include_once '../layouts/header.php';
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Unit/Devisi</label>
-          <select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2 text-sm" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Unit/Devisi</label>
+          <select id="unit_id" name="unit_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
             <option value="">-- Pilih Unit --</option>
             <?php foreach ($units as $u): ?>
               <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
@@ -281,50 +293,55 @@ include_once '../layouts/header.php';
           </select>
         </div>
         
-        <div class="md:col-span-2">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jenis Alat Pertanian</label>
-          <select id="id_jenis_alat" name="id_jenis_alat" class="w-full border rounded px-3 py-2 text-sm" required>
+        <div class="md:col-span-2 border-t border-gray-100 pt-3 md:border-t-0 md:pt-0">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Jenis Alat Pertanian</label>
+          <select id="id_jenis_alat" name="id_jenis_alat" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
             <option value=""> Pilih Jenis Alat Pertanian </option>
             <?php foreach ($jenisAlatMaster as $jam): ?>
               <option value="<?= (int)$jam['id'] ?>"><?= htmlspecialchars($jam['nama']) ?></option>
             <?php endforeach; ?>
           </select>
-          <p class="text-xs text-gray-400 mt-1">*Pilih dari daftar master alat panen Pertanian</p>
+          <p class="text-[10px] sm:text-[11px] text-gray-400 mt-1 italic">*Pilih dari daftar master alat panen Pertanian</p>
         </div>
         
+        <div class="col-span-1 md:col-span-3 border-t border-gray-100 my-1"></div>
+
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Stok Awal</label>
-          <input type="number" step="0.01" id="stok_awal" name="stok_awal" class="w-full border rounded px-3 py-2 text-sm" value="0">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Stok Awal</label>
+          <input type="number" step="0.01" id="stok_awal" name="stok_awal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" value="0">
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Masuk</label>
-          <input type="number" step="0.01" id="mutasi_masuk" name="mutasi_masuk" class="w-full border rounded px-3 py-2 text-sm" value="0">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Masuk</label>
+          <input type="number" step="0.01" id="mutasi_masuk" name="mutasi_masuk" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" value="0">
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Keluar</label>
-          <input type="number" step="0.01" id="mutasi_keluar" name="mutasi_keluar" class="w-full border rounded px-3 py-2 text-sm" value="0">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Keluar</label>
+          <input type="number" step="0.01" id="mutasi_keluar" name="mutasi_keluar" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" value="0">
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Dipakai</label>
-          <input type="number" step="0.01" id="dipakai" name="dipakai" class="w-full border rounded px-3 py-2 text-sm" value="0">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Dipakai</label>
+          <input type="number" step="0.01" id="dipakai" name="dipakai" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" value="0">
         </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Stok Akhir (Auto)</label>
-          <input type="number" step="0.01" id="stok_akhir" name="stok_akhir" class="w-full border rounded px-3 py-2 bg-gray-100 font-bold text-blue-600 text-sm" readonly>
-        </div>
-        
         <div class="md:col-span-2">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Krani Afdeling</label>
-          <input type="text" id="krani_afdeling" name="krani_afdeling" class="w-full border rounded px-3 py-2 text-sm" placeholder="Nama krani">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Stok Akhir (Auto)</label>
+          <input type="number" step="0.01" id="stok_akhir" name="stok_akhir" class="w-full border border-gray-300 rounded-lg px-3 py-2 bg-slate-100 font-bold text-[#059fd3] text-sm outline-none" readonly>
         </div>
-        <div class="md:col-span-3">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Catatan</label>
-          <input type="text" id="catatan" name="catatan" class="w-full border rounded px-3 py-2 text-sm" placeholder="Catatan tambahan">
+        
+        <div class="col-span-1 md:col-span-3 border-t border-gray-100 my-1"></div>
+
+        <div class="md:col-span-1">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Krani Afdeling</label>
+          <input type="text" id="krani_afdeling" name="krani_afdeling" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" placeholder="Nama krani">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Catatan</label>
+          <input type="text" id="catatan" name="catatan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" placeholder="Catatan tambahan">
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-8 pt-4 border-t">
-        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 text-sm font-medium">Batal</button>
-        <button type="submit" class="px-5 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 text-sm font-medium shadow-lg shadow-cyan-500/30">Simpan Data</button>
+
+      <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-100 shrink-0">
+        <button type="button" id="btn-cancel" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition">Batal</button>
+        <button type="submit" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg bg-[#059fd3] text-white hover:bg-[#0487b4] text-sm font-medium shadow-lg shadow-[#059fd3]/30 transition">Simpan Data</button>
       </div>
     </form>
   </div>
@@ -424,7 +441,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     
     fd.append('order_by','created_at'); fd.append('order_dir','desc');
 
-    tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin"></i> Memuat...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${COLSPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat...</td></tr>`;
 
     fetch('alat_panen_crud.php',{method:'POST',body:fd})
       .then(r=>r.json()).then(j=>{

@@ -99,28 +99,28 @@ include_once '../layouts/header.php';
 
   .btn-action {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; border-radius: 4px; 
+      width: 32px; height: 32px; border-radius: 4px; 
       transition: all 0.2s; border: 1px solid transparent; cursor: pointer;
   }
   .btn-action:hover { background-color: #f1f5f9; border-color: #cbd5e1; }
 </style>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
+  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">Bahan Kimia</h1>
       <p class="text-gray-500 text-sm mt-1">Rekap stok bahan kimia per kebun & periode</p>
     </div>
-    <div class="flex gap-2">
-      <button id="btn-export-excel" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition" title="Export Excel">
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+      <button id="btn-export-excel" class="flex-1 md:flex-none justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition" title="Export Excel">
         <i class="ti ti-file-spreadsheet"></i> Excel
       </button>
-      <button id="btn-export-pdf" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition" title="Cetak PDF">
+      <button id="btn-export-pdf" class="flex-1 md:flex-none justify-center bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition" title="Cetak PDF">
         <i class="ti ti-file-type-pdf"></i> PDF
       </button>
       
       <?php if ($canInput): ?>
-      <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition ml-2">
+      <button id="btn-add" class="w-full sm:w-auto justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
         <i class="ti ti-plus"></i> Input Stok
       </button>
       <?php endif; ?>
@@ -133,7 +133,7 @@ include_once '../layouts/header.php';
     </div>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
       <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Kebun</label>
+        <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Nama Kebun</label>
         <select id="filter-kebun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
           <option value="">Semua Kebun</option>
           <?php foreach($kebun as $k): ?>
@@ -142,7 +142,7 @@ include_once '../layouts/header.php';
         </select>
       </div>
       <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Nama Bahan Kimia</label>
+        <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Nama Bahan Kimia</label>
         <select id="filter-bahan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
           <option value="">Semua Bahan</option>
           <?php foreach($bahan as $b): ?>
@@ -151,7 +151,7 @@ include_once '../layouts/header.php';
         </select>
       </div>
       <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
+        <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
         <select id="filter-bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
           <option value="">Semua Bulan</option>
           <?php foreach ($bulanList as $bl): ?>
@@ -160,7 +160,7 @@ include_once '../layouts/header.php';
         </select>
       </div>
       <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
+        <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
         <select id="filter-tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none">
           <?php for ($y=$tahunNow-3; $y<=$tahunNow+2; $y++): ?>
             <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
@@ -170,11 +170,16 @@ include_once '../layouts/header.php';
     </div>
   </div>
 
-  <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-1">
-     <div class="text-sm text-gray-600 font-medium" id="range-label">Menampilkan 0–0 data</div>
-     <div class="flex items-center gap-2">
+  <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-1">
+     <div class="flex flex-col w-full sm:w-auto">
+        <div class="text-sm text-gray-600 font-medium" id="range-label">Menampilkan 0–0 data</div>
+        <div class="text-xs text-blue-500 italic md:hidden flex items-center gap-1 font-semibold mt-1">
+            <i class="ti ti-hand-two-fingers"></i> Geser tabel <i class="ti ti-arrow-right"></i>
+        </div>
+     </div>
+     <div class="flex items-center gap-2 self-end sm:self-auto">
         <span class="text-sm text-gray-600">Tampilkan</span>
-        <select id="page-size" class="border rounded px-2 py-1 text-sm">
+        <select id="page-size" class="border border-gray-300 rounded px-2 py-1 text-sm bg-white">
           <option value="10" selected>10</option>
           <option value="25">25</option>
           <option value="50">50</option>
@@ -204,79 +209,102 @@ include_once '../layouts/header.php';
           </tr>
         </thead>
         <tbody id="tbody-stok" class="text-gray-800">
-          <tr><td colspan="<?= $showAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
+          <tr><td colspan="<?= $showAction ? 11 : 10 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat data...</td></tr>
         </tbody>
       </table>
   </div>
 
-  <div class="flex flex-col md:flex-row items-center justify-between gap-3 px-1 border-t pt-4">
-      <div id="total-label" class="text-sm text-gray-600 font-medium">Total data: 0</div>
-      <div class="flex items-center gap-1">
-        <button id="btn-first" class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">&laquo; First</button>
-        <button id="btn-prev"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">&lsaquo; Prev</button>
-        <span id="page-info" class="px-3 text-sm text-gray-600 font-medium">Page 1/1</span>
-        <button id="btn-next"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">Next &rsaquo;</button>
-        <button id="btn-last"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600">Last &raquo;</button>
+  <div class="flex flex-col md:flex-row items-center md:justify-between gap-3 px-1 border-t border-gray-200 pt-4">
+      <div id="total-label" class="text-sm text-gray-600 font-medium w-full text-center md:text-left md:w-auto">Total data: 0</div>
+      <div class="flex flex-wrap items-center justify-center gap-1 w-full md:w-auto">
+        <button id="btn-first" class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600 bg-white transition">&laquo; First</button>
+        <button id="btn-prev"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600 bg-white transition">&lsaquo; Prev</button>
+        <span id="page-info" class="px-3 text-sm text-gray-600 font-medium whitespace-nowrap">Page 1/1</span>
+        <button id="btn-next"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600 bg-white transition">Next &rsaquo;</button>
+        <button id="btn-last"  class="px-3 py-1.5 border rounded hover:bg-gray-50 text-sm text-gray-600 bg-white transition">Last &raquo;</button>
       </div>
   </div>
 </div>
 
 <?php if ($canInput): ?>
-<div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-4 backdrop-blur-sm transition-opacity">
-  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-3xl transform scale-100 transition-transform">
-    <div class="flex items-center justify-between mb-6 border-b pb-4">
-      <h3 id="modal-title" class="text-xl font-bold text-gray-800">Input Rekap Stok</h3>
-      <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600">&times;</button>
+<div id="crud-modal" class="fixed inset-0 bg-black/60 z-[60] hidden items-center justify-center p-3 sm:p-4 backdrop-blur-sm transition-opacity">
+  <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+    
+    <div class="flex items-center justify-between mb-4 sm:mb-6 border-b pb-3 sm:pb-4 shrink-0">
+      <h3 id="modal-title" class="text-lg sm:text-xl font-bold text-gray-800">Input Rekap Stok</h3>
+      <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600 transition">&times;</button>
     </div>
-    <form id="crud-form" novalidate>
+
+    <form id="crud-form" novalidate class="overflow-y-auto pr-1">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
       <input type="hidden" name="action" id="form-action">
       <input type="hidden" name="id" id="form-id">
       
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4">
         <div class="md:col-span-1">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Kebun</label>
-          <select name="kebun_id" id="kebun_id" class="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Nama Kebun</label>
+          <select name="kebun_id" id="kebun_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none" required>
             <option value="">— Pilih Kebun —</option>
             <?php foreach($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['kode'].' — '.$k['nama_kebun']) ?></option><?php endforeach; ?>
           </select>
         </div>
         <div class="md:col-span-2">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Bahan Kimia</label>
-          <select name="bahan_id" id="bahan_id" class="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Nama Bahan Kimia</label>
+          <select name="bahan_id" id="bahan_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none" required>
             <option value="">— Pilih Bahan —</option>
             <?php foreach($bahan as $b): ?>
               <option value="<?= (int)$b['id'] ?>" data-satuan="<?= htmlspecialchars($b['satuan']) ?>"><?= htmlspecialchars($b['nama_bahan'].' ('.$b['satuan'].')') ?></option>
             <?php endforeach; ?>
           </select>
-          <p class="text-xs text-gray-500 mt-1">Satuan: <span id="hint-satuan" class="font-semibold text-gray-800">-</span></p>
+          <p class="text-[11px] sm:text-xs text-gray-500 mt-1">Satuan: <span id="hint-satuan" class="font-semibold text-gray-800">-</span></p>
         </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
-          <select name="bulan" id="bulan" class="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none" required>
-            <?php foreach ($bulanList as $bl): ?><option value="<?= $bl ?>"><?= $bl ?></option><?php endforeach; ?>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
-          <select name="tahun" id="tahun" class="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none" required>
-            <?php for ($y = $tahunNow-1; $y <= $tahunNow+3; $y++): ?>
-              <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
-            <?php endfor; ?>
-          </select>
+        <div class="grid grid-cols-2 gap-3 md:col-span-3">
+          <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
+            <select name="bulan" id="bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none" required>
+              <?php foreach ($bulanList as $bl): ?><option value="<?= $bl ?>"><?= $bl ?></option><?php endforeach; ?>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
+            <select name="tahun" id="tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none" required>
+              <?php for ($y = $tahunNow-1; $y <= $tahunNow+3; $y++): ?>
+                <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
+              <?php endfor; ?>
+            </select>
+          </div>
         </div>
         
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Stok Awal</label><input type="number" step="0.01" name="stok_awal" id="stok_awal" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Masuk</label><input type="number" step="0.01" name="mutasi_masuk" id="mutasi_masuk" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Keluar</label><input type="number" step="0.01" name="mutasi_keluar" id="mutasi_keluar" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Pasokan</label><input type="number" step="0.01" name="pasokan" id="pasokan" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Dipakai</label><input type="number" step="0.01" name="dipakai" id="dipakai" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" min="0" value="0"></div>
+        <div class="col-span-1 border-t border-gray-100 my-1 md:col-span-3"></div>
+
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Stok Awal</label>
+          <input type="number" step="0.01" name="stok_awal" id="stok_awal" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" value="0">
+        </div>
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Masuk</label>
+          <input type="number" step="0.01" name="mutasi_masuk" id="mutasi_masuk" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" value="0">
+        </div>
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Mutasi Keluar</label>
+          <input type="number" step="0.01" name="mutasi_keluar" id="mutasi_keluar" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" value="0">
+        </div>
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Pasokan</label>
+          <input type="number" step="0.01" name="pasokan" id="pasokan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" value="0">
+        </div>
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Dipakai</label>
+          <input type="number" step="0.01" name="dipakai" id="dipakai" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" min="0" value="0">
+        </div>
       </div>
-      <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
-        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 text-sm font-medium">Batal</button>
-        <button type="submit" class="px-5 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 text-sm font-medium shadow-lg shadow-cyan-500/30">Simpan Data</button>
+
+      <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-100">
+        <button type="button" id="btn-cancel" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition">Batal</button>
+        <button type="submit" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 text-sm font-medium shadow-lg shadow-cyan-500/30 transition">Simpan Data</button>
       </div>
     </form>
+
   </div>
 </div>
 <?php endif; ?>
@@ -381,7 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selBulan.value) fd.append('bulan', selBulan.value);
     fd.append('tahun', selTahun.value || '<?= (int)date('Y') ?>');
 
-    tbody.innerHTML = `<tr><td colspan="${COL_SPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin"></i> Memuat data...</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${COL_SPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat data...</td></tr>`;
     fetch('stok_gudang_crud.php',{method:'POST', body:fd})
       .then(r=>r.json())
       .then(j=>{

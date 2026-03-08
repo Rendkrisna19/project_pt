@@ -114,80 +114,95 @@ include_once '../layouts/header.php';
 
   /* Utilities */
   button:disabled { opacity: 0.5; cursor: not-allowed !important; }
-  .btn-icon { background: transparent; border: none; padding: 0.25rem; cursor: pointer; }
+  .btn-icon { background: transparent; border: none; padding: 0.25rem; cursor: pointer; transition: 0.2s;}
+  .btn-icon:hover { transform: scale(1.1); }
   .text-right { text-align: right; }
   .text-center { text-align: center; }
   .text-left { text-align: left; }
 </style>
 
 <div class="space-y-6">
-  <div class="flex items-center justify-between">
+  
+  <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
     <div>
       <h1 class="text-2xl font-bold text-gray-800">LM-76 — Statistik Panen</h1>
       <p class="text-gray-500 text-sm mt-1">Laporan Harian/Bulanan • Grouping per Unit</p>
     </div>
-    <div class="flex gap-2">
+    
+    <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+      <a href="cetak/lm76_export_excel.php?<?= $exportParams ?>" target="_blank" class="flex-1 md:flex-none justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition no-underline">
+        <i class="ti ti-file-spreadsheet text-lg"></i><span>Excel</span>
+      </a>
+      
+      <a href="cetak/lm76_export_pdf.php?<?= $exportParams ?>" target="_blank" class="flex-1 md:flex-none justify-center bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition no-underline">
+        <i class="ti ti-file-type-pdf text-lg"></i><span>PDF</span>
+      </a>
+
       <?php if (!$isStaf): ?>
-      <button id="btn-add" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition">
-        <i class="ti ti-plus"></i><span>Input LM-76</span>
+      <button id="btn-add" class="w-full sm:w-auto justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
+        <i class="ti ti-plus text-lg"></i><span>Input LM-76</span>
       </button>
       <?php endif; ?>
-      
-      <a href="cetak/lm76_export_excel.php?<?= $exportParams ?>" target="_blank" class="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition no-underline">
-        <i class="ti ti-file-spreadsheet"></i><span>Excel</span>
-      </a>
-      <a href="cetak/lm76_export_pdf.php?<?= $exportParams ?>" target="_blank" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition no-underline">
-        <i class="ti ti-file-type-pdf"></i><span>PDF</span>
-      </a>
     </div>
   </div>
 
-  <form method="GET" class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 grid grid-cols-1 md:grid-cols-5 gap-3">
-    <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
-        <select name="kebun_id" id="filter-kebun" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">Semua Kebun</option>
-            <?php foreach ($kebun as $k): ?>
-            <option value="<?= (int)$k['id'] ?>" <?= ((string)$f_kebun === (string)$k['id'])?'selected':'' ?>><?= htmlspecialchars($k['nama_kebun']) ?></option>
-            <?php endforeach; ?>
-        </select>
+  <form method="GET" class="bg-white p-4 md:p-5 rounded-xl shadow-sm border border-gray-100">
+    <div class="flex items-center gap-2 text-gray-700 mb-3">
+        <i class="ti ti-filter text-cyan-600"></i><span class="font-bold text-sm uppercase">Filter Data</span>
     </div>
-    <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit/Defisi</label>
-        <select name="unit_id" id="filter-unit" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">Semua Unit</option>
-            <?php foreach ($units as $u): ?>
-            <option value="<?= (int)$u['id'] ?>" <?= ((string)$f_unit === (string)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
-        <select name="bulan" id="filter-bulan" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">Semua Bulan</option>
-            <?php foreach ($bulanList as $b): ?>
-            <option value="<?= $b ?>" <?= ($f_bulan === $b)?'selected':'' ?>><?= $b ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
-        <select name="tahun" id="filter-tahun" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?>
-            <option value="<?= $y ?>" <?= ((int)$f_tahun === $y)?'selected':'' ?>><?= $y ?></option>
-            <?php endfor; ?>
-        </select>
-    </div>
-    <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">T. Tanam</label>
-        <select name="tt" id="filter-tt" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
-            <option value="">Semua T. Tanam</option>
-            <?php foreach ($ttList as $tt): ?>
-            <option value="<?= htmlspecialchars($tt) ?>" <?= ($f_tt === $tt)?'selected':'' ?>><?= htmlspecialchars($tt) ?></option>
-            <?php endforeach; ?>
-        </select>
+    <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        <div>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
+            <select name="kebun_id" id="filter-kebun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
+                <option value="">Semua Kebun</option>
+                <?php foreach ($kebun as $k): ?>
+                <option value="<?= (int)$k['id'] ?>" <?= ((string)$f_kebun === (string)$k['id'])?'selected':'' ?>><?= htmlspecialchars($k['nama_kebun']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Unit/Defisi</label>
+            <select name="unit_id" id="filter-unit" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
+                <option value="">Semua Unit</option>
+                <?php foreach ($units as $u): ?>
+                <option value="<?= (int)$u['id'] ?>" <?= ((string)$f_unit === (string)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Bulan</label>
+            <select name="bulan" id="filter-bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
+                <option value="">Semua Bulan</option>
+                <?php foreach ($bulanList as $b): ?>
+                <option value="<?= $b ?>" <?= ($f_bulan === $b)?'selected':'' ?>><?= $b ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
+        <div>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">Tahun</label>
+            <select name="tahun" id="filter-tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
+                <?php for ($y=$tahunNow-2;$y<=$tahunNow+2;$y++): ?>
+                <option value="<?= $y ?>" <?= ((int)$f_tahun === $y)?'selected':'' ?>><?= $y ?></option>
+                <?php endfor; ?>
+            </select>
+        </div>
+        <div>
+            <label class="block text-[11px] md:text-xs font-bold text-gray-500 uppercase mb-1">T. Tanam</label>
+            <select name="tt" id="filter-tt" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
+                <option value="">Semua T. Tanam</option>
+                <?php foreach ($ttList as $tt): ?>
+                <option value="<?= htmlspecialchars($tt) ?>" <?= ($f_tt === $tt)?'selected':'' ?>><?= htmlspecialchars($tt) ?></option>
+                <?php endforeach; ?>
+            </select>
+        </div>
     </div>
   </form>
+
+  <div class="flex justify-between items-center px-1 mb-1 md:mb-0">
+      <div class="text-xs text-blue-500 italic md:hidden flex items-center gap-1 font-semibold w-full justify-end">
+          <i class="ti ti-hand-two-fingers"></i> Geser tabel <i class="ti ti-arrow-right"></i>
+      </div>
+  </div>
 
   <div class="sticky-container">
     <table class="table-grid">
@@ -210,7 +225,7 @@ include_once '../layouts/header.php';
         </tr>
       </thead>
       <tbody id="tbody-data" class="bg-white text-gray-800">
-        <tr><td colspan="<?= $isStaf ? 13 : 14 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>
+        <tr><td colspan="<?= $isStaf ? 13 : 14 ?>" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat data...</td></tr>
       </tbody>
       <tfoot>
         <tr>
@@ -231,75 +246,108 @@ include_once '../layouts/header.php';
 </div>
 
 <?php if (!$isStaf): ?>
-<div id="crud-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4 transition-opacity">
-  <div class="bg-white p-6 md:p-8 rounded-2xl shadow-2xl w-full max-w-4xl transform scale-100 transition-transform">
-    <div class="flex justify-between items-center mb-6 border-b pb-4">
-      <h3 id="modal-title" class="text-xl font-bold text-gray-800">Input LM-76</h3>
+<div id="crud-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden items-center justify-center p-3 sm:p-4 transition-opacity">
+  <div class="bg-white p-4 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[95vh] sm:max-h-[90vh]">
+    
+    <div class="flex justify-between items-center mb-4 sm:mb-6 border-b border-gray-100 pb-3 sm:pb-4 shrink-0">
+      <h3 id="modal-title" class="text-lg sm:text-xl font-bold text-gray-800">Input LM-76</h3>
       <button id="btn-close" class="text-2xl text-gray-400 hover:text-gray-600 transition">&times;</button>
     </div>
-    <form id="crud-form" novalidate>
+
+    <form id="crud-form" novalidate class="overflow-y-auto pr-1">
       <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($CSRF) ?>">
       <input type="hidden" name="action" id="form-action">
       <input type="hidden" name="id" id="form-id">
-      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div class="md:col-span-2">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
-          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        
+        <div class="sm:col-span-2">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Kebun</label>
+          <select id="kebun_id" name="kebun_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
             <option value="">-- Pilih Kebun --</option>
             <?php foreach ($kebun as $k): ?>
               <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="md:col-span-2">
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Unit/Defisi</label>
-          <select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
+        <div class="sm:col-span-2">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Unit/Defisi</label>
+          <select id="unit_id" name="unit_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <option value="">-- Pilih Unit --</option>
             <?php foreach ($units as $u): ?>
               <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
+
+        <div class="col-span-1 border-t border-gray-100 my-1 sm:col-span-2 md:col-span-4 hidden md:block"></div>
+
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
-          <select id="bulan" name="bulan" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
+          <select id="bulan" name="bulan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <?php foreach ($bulanList as $b): ?>
               <option value="<?= $b ?>"><?= $b ?></option>
             <?php endforeach; ?>
           </select>
         </div>
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
-          <select id="tahun" name="tahun" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Tahun</label>
+          <select id="tahun" name="tahun" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <?php for ($y=$tahunNow-1;$y<=$tahunNow+3;$y++): ?>
               <option value="<?= $y ?>" <?= $y===$tahunNow?'selected':'' ?>><?= $y ?></option>
             <?php endfor; ?>
           </select>
         </div>
-        <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">T. Tanam</label>
-          <select id="tt" name="tt" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
+        <div class="sm:col-span-2 md:col-span-1">
+          <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">T. Tanam</label>
+          <select id="tt" name="tt" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" required>
             <option value="">-- Pilih --</option>
             <?php foreach ($ttList as $tt): ?>
               <option value="<?= htmlspecialchars($tt) ?>"><?= htmlspecialchars($tt) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Luas (Ha)</label><input type="number" step="0.01"  id="luas_ha" name="luas_ha" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Invt Pokok</label> <input type="number"           id="jumlah_pohon"   name="jumlah_pohon"   class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Anggaran (Kg)</label><input type="number" step="0.001" id="anggaran_kg" name="anggaran_kg" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Realisasi (Kg)</label><input type="number" step="0.001" id="realisasi_kg" name="realisasi_kg" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jumlah Tandan</label><input type="number" id="jumlah_tandan" name="jumlah_tandan" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Jumlah HK</label>    <input type="number" step="0.001" id="jumlah_hk"   name="jumlah_hk"   class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
-        <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Panen (Ha)</label>   <input type="number" step="0.001" id="panen_ha"    name="panen_ha"    class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none"></div>
+
+        <div class="col-span-1 border-t border-gray-100 my-1 sm:col-span-2 md:col-span-4"></div>
+
         <div>
-          <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Frekuensi</label>
-          <input type="number" step="0.001" id="frekuensi" name="frekuensi" class="w-full border rounded px-3 py-2 text-sm bg-gray-100 text-gray-600 font-bold" readonly>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Luas (Ha)</label>
+            <input type="number" step="0.01"  id="luas_ha" name="luas_ha" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Invt Pokok</label> 
+            <input type="number"          id="jumlah_pohon"  name="jumlah_pohon"  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Anggaran (Kg)</label>
+            <input type="number" step="0.001" id="anggaran_kg" name="anggaran_kg" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Realisasi (Kg)</label>
+            <input type="number" step="0.001" id="realisasi_kg" name="realisasi_kg" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Jumlah Tandan</label>
+            <input type="number" id="jumlah_tandan" name="jumlah_tandan" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Jumlah HK</label>    
+            <input type="number" step="0.001" id="jumlah_hk"   name="jumlah_hk"   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        <div>
+            <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Panen (Ha)</label>   
+            <input type="number" step="0.001" id="panen_ha"    name="panen_ha"    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+        </div>
+        
+        <div>
+          <label class="block text-[11px] sm:text-xs font-bold text-cyan-600 uppercase mb-1">Frekuensi</label>
+          <input type="number" step="0.001" id="frekuensi" name="frekuensi" class="w-full border border-cyan-200 rounded-lg px-3 py-2 text-sm bg-cyan-50 text-cyan-800 font-bold outline-none" readonly>
         </div>
       </div>
-      <div class="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
-        <button type="button" id="btn-cancel" class="px-5 py-2 rounded-lg border text-gray-600 hover:bg-gray-50 transition">Batal</button>
-        <button type="submit" class="px-5 py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 transition shadow-lg shadow-cyan-500/30">Simpan Data</button>
+
+      <div class="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6 sm:mt-8 pt-4 border-t border-gray-100 shrink-0">
+        <button type="button" id="btn-cancel" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition">Batal</button>
+        <button type="submit" class="w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg bg-cyan-600 text-white hover:bg-cyan-700 text-sm font-medium shadow-lg shadow-cyan-500/30 transition">Simpan Data</button>
       </div>
     </form>
   </div>
@@ -355,11 +403,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
       actionCell = `
         <td class="text-center">
           <div class="flex items-center justify-center gap-1">
-            <button class="btn-icon text-cyan-600 hover:text-cyan-800" title="Edit" data-json="${encodeURIComponent(JSON.stringify(r))}">
-              <i class="ti ti-pencil"></i>
+            <button class="btn-icon text-cyan-600" title="Edit" data-json="${encodeURIComponent(JSON.stringify(r))}">
+              <i class="ti ti-pencil text-lg"></i>
             </button>
-            <button class="btn-icon text-red-600 hover:text-red-800" title="Hapus" data-id="${r.id}">
-              <i class="ti ti-trash"></i>
+            <button class="btn-icon text-red-600" title="Hapus" data-id="${r.id}">
+              <i class="ti ti-trash text-lg"></i>
             </button>
           </div>
         </td>`;
@@ -378,7 +426,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
         <td class="text-right">${fmt(r.jumlah_tandan)}</td>
         <td class="text-right">${fmt(r.jumlah_hk)}</td>
         <td class="text-right">${fmt(r.panen_ha)}</td>
-        <td class="text-right">${fmt(freqCalc)}</td>
+        <td class="text-right font-semibold text-cyan-700">${fmt(freqCalc)}</td>
         ${actionCell}
       </tr>`;
   }
@@ -468,7 +516,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     fd.append('tahun',fTahun.value);
     fd.append('tt',fTT.value);
 
-    tbody.innerHTML=`<tr><td colspan="${COLSPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl"></i><br>Memuat data...</td></tr>`;
+    tbody.innerHTML=`<tr><td colspan="${COLSPAN}" class="text-center py-10 text-gray-500"><i class="ti ti-loader animate-spin text-xl mb-2 inline-block"></i><br>Memuat data...</td></tr>`;
 
     fetch('lm76_crud.php',{method:'POST',body:fd})
       .then(r=>r.json())
@@ -550,7 +598,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
       const req=['unit_id','bulan','tahun','tt'];
       for(const id of req){
         const el=document.getElementById(id);
-        if(!el || !el.value){ Swal.fire('Validasi',`Field ${id} wajib diisi.`,'warning'); return; }
+        if(!el || !el.value){ Swal.fire('Validasi',`Field ${id.replace('_', ' ').toUpperCase()} wajib diisi.`,'warning'); return; }
       }
       calcFreq();
       const fd=new FormData(form);
