@@ -1,5 +1,6 @@
 <?php
-// admin/pemupukan_organik_crud.php — MODIFIKASI: +rayon_id, +asal_gudang_id, +keterangan_id
+// admin/pemupukan_organik_crud.php — MODIFIKASI FULL: +rayon_id, +asal_gudang_id, +keterangan_id
+// [MODIFIKASI TAMBAHAN]: Validasi Keamanan Relasi Berantai (Kebun -> Unit -> Blok)
 session_start();
 header('Content-Type: application/json');
 
@@ -57,7 +58,15 @@ try{
     return (bool)$st->fetchColumn();
   };
   
-  // BARU: Validasi Master Angkutan
+  // [MODIFIKASI] Validasi apakah Unit tersebut benar-benar ada di dalam Kebun yang dipilih
+  $unitBelongsToKebun = function(?int $unitId, ?int $kebunId) use ($conn) {
+    if (!$unitId || !$kebunId) return false;
+    $st = $conn->prepare("SELECT 1 FROM units WHERE id = :uid AND kebun_id = :kid LIMIT 1");
+    $st->execute([':uid' => $unitId, ':kid' => $kebunId]);
+    return (bool)$st->fetchColumn();
+  };
+  
+  // Validasi Master Angkutan
   $rayonExists = function(?int $id) use ($conn){
     if ($id===null || $id<=0) return false;
     $st=$conn->prepare("SELECT 1 FROM md_rayon WHERE id=:id LIMIT 1");
@@ -87,7 +96,6 @@ try{
       $kebun_id       = i('kebun_id');
       $rayon_id       = i('rayon_id');       // BARU
       $asal_gudang_id = i('asal_gudang_id'); // BARU
-      // $gudang_asal   = s('gudang_asal');  // LAMA
       $unit_tujuan_id = i('unit_tujuan_id'); // boleh NULL
       $tanggal        = s('tanggal');
       $jenis_pupuk    = s('jenis_pupuk');
@@ -95,22 +103,23 @@ try{
       $nomor_do       = s('nomor_do');
       $supir          = s('supir');
       $keterangan_id  = i('keterangan_id');  // BARU (opsional)
-      // $keterangan    = s('keterangan');   // LAMA
 
       if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
       if (!$rayon_id || !$rayonExists($rayon_id)) $errors[]='Rayon wajib dipilih.';
       if (!$asal_gudang_id || !$gudangExists($asal_gudang_id)) $errors[]='Gudang asal wajib diisi.';
-      // if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.'; // LAMA
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($keterangan_id!==null && !$keteranganExists($keterangan_id)) $errors[]='Keterangan terpilih tidak valid.';
       
+      // [MODIFIKASI] Cek relasi Kebun & Unit (Jika Unit Diisi)
+      if ($kebun_id && $unit_tujuan_id && !$unitBelongsToKebun($unit_tujuan_id, $kebun_id)) {
+          $errors[] = 'Unit Tujuan tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      // Asumsi kolom baru (rayon_id, asal_gudang_id, keterangan_id) sudah ada di tabel
-      // Asumsi kolom lama (gudang_asal, keterangan) diganti
       $cols = ['kebun_id','rayon_id','asal_gudang_id','unit_tujuan_id','tanggal','jenis_pupuk','jumlah','nomor_do','supir','keterangan_id','created_at','updated_at'];
       $vals = [':kid',    ':rid',    ':gid',          ':ut',           ':tgl',   ':jp',        ':jml',  ':ndo',    ':sp',   ':ket_id',    'NOW()',    'NOW()'];
       $params = [
@@ -129,7 +138,7 @@ try{
       $sql="INSERT INTO $table (".implode(',',$cols).") VALUES (".implode(',',$vals).")";
       $st=$conn->prepare($sql); $st->execute($params);
 
-    } else { // TAB MENABUR (Tidak berubah)
+    } else { // TAB MENABUR 
       $table    = 'menabur_pupuk_organik';
       $kebun_id = i('kebun_id');
       $unit_id  = i('unit_id');
@@ -152,7 +161,15 @@ try{
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($luas!==null && $luas<0) $errors[]='Luas tidak boleh negatif.';
       if ($invt!==null && $invt<0) $errors[]='Invt. Pokok tidak boleh negatif.';
-      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      
+      // [MODIFIKASI] Cek Relasi Berantai Kebun -> Unit -> Blok
+      if ($kebun_id && $unit_id && !$unitBelongsToKebun($unit_id, $kebun_id)) {
+          $errors[] = 'Unit tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) {
+          $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      }
+
       if ($jenis!=='' && !$pupukExists($jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
@@ -183,31 +200,32 @@ try{
     if ($tab==='angkutan') {
       $table = 'angkutan_pupuk_organik';
       $kebun_id       = i('kebun_id');
-      $rayon_id       = i('rayon_id');       // BARU
-      $asal_gudang_id = i('asal_gudang_id'); // BARU
-      // $gudang_asal   = s('gudang_asal');  // LAMA
+      $rayon_id       = i('rayon_id');       
+      $asal_gudang_id = i('asal_gudang_id'); 
       $unit_tujuan_id = i('unit_tujuan_id');
       $tanggal        = s('tanggal');
       $jenis_pupuk    = s('jenis_pupuk');
       $jumlah         = f('jumlah');
       $nomor_do       = s('nomor_do');
       $supir          = s('supir');
-      $keterangan_id  = i('keterangan_id');  // BARU
-      // $keterangan    = s('keterangan');   // LAMA
+      $keterangan_id  = i('keterangan_id');  
 
       if (!$kebun_id || !$kebunExists($kebun_id)) $errors[]='Kebun wajib dipilih.';
       if (!$rayon_id || !$rayonExists($rayon_id)) $errors[]='Rayon wajib dipilih.';
       if (!$asal_gudang_id || !$gudangExists($asal_gudang_id)) $errors[]='Gudang asal wajib diisi.';
-      // if ($gudang_asal==='') $errors[]='Gudang asal wajib diisi.'; // LAMA
       if ($tanggal==='' || !validDate($tanggal)) $errors[]='Tanggal tidak valid.';
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($keterangan_id!==null && !$keteranganExists($keterangan_id)) $errors[]='Keterangan terpilih tidak valid.';
       
+      // [MODIFIKASI] Cek relasi Kebun & Unit (Jika Unit Diisi)
+      if ($kebun_id && $unit_tujuan_id && !$unitBelongsToKebun($unit_tujuan_id, $kebun_id)) {
+          $errors[] = 'Unit Tujuan tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      // SQL dinamis untuk kolom opsional keterangan
       $sql = "UPDATE $table SET
                 kebun_id = :kid, 
                 rayon_id = :rid,
@@ -237,15 +255,15 @@ try{
 
       $st=$conn->prepare($sql); $st->execute($params);
 
-    } else { // TAB MENABUR (Tidak berubah)
+    } else { // TAB MENABUR
       $table    = 'menabur_pupuk_organik';
       $kebun_id = i('kebun_id');
       $unit_id  = i('unit_id');
       $blok     = s('blok');
       $tanggal  = s('tanggal');
       $jenis    = s('jenis_pupuk');
-      $t_tanam  = i('t_tanam');   // NEW
-      $dosis    = f('dosis');     // opsional
+      $t_tanam  = i('t_tanam');   
+      $dosis    = f('dosis');     
       $jumlah   = f('jumlah');
       $luas     = f('luas');
       $invt     = $_POST['invt_pokok'] ?? null; $invt = ($invt===''||$invt===null)? null : (int)$invt;
@@ -260,11 +278,18 @@ try{
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($luas!==null && $luas<0) $errors[]='Luas tidak boleh negatif.';
       if ($invt!==null && $invt<0) $errors[]='Invt. Pokok tidak boleh negatif.';
-      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      
+      // [MODIFIKASI] Cek Relasi Berantai Kebun -> Unit -> Blok
+      if ($kebun_id && $unit_id && !$unitBelongsToKebun($unit_id, $kebun_id)) {
+          $errors[] = 'Unit tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+      if ($unit_id && $blok && !$blokExists($unit_id,$blok)) {
+          $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      }
+
       if ($jenis!=='' && !$pupukExists($jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
-      // SQL dinamis: t_tanam & dosis opsional; catatan dihapus
       $set = "kebun_id=:kid, unit_id=:uid, blok=:blk, tanggal=:tgl, jenis_pupuk=:jp, jumlah=:jml, luas=:luas, invt_pokok=:invt";
       if ($hasCol($table,'t_tanam')) $set .= ", t_tanam=:tt";
       if ($hasCol($table,'dosis'))   $set .= ", dosis=:ds";

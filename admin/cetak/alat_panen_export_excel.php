@@ -68,10 +68,10 @@ $ss = new Spreadsheet();
 $sheet = $ss->getActiveSheet();
 $sheet->setTitle('Alat Pertanian');
 
-// Judul (tema hijau, tanpa tanggal/ nama)
-$sheet->mergeCells('A1:L1'); // Modifikasi: N -> L
+// Judul (tema cyan, tanpa tanggal/ nama)
+$sheet->mergeCells('A1:L1'); 
 $sheet->setCellValue('A1','PTPN 4 REGIONAL 3');
-$sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('065F46');
+$sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14)->getColor()->setRGB('0E7490'); // Dark Cyan
 $sheet->getStyle('A1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
 // Subjudul filter ringkas
@@ -82,9 +82,9 @@ if ($bulan!=='')$sub[]='Bulan: '.$bulan;
 if ($tahun)    $sub[]='Tahun: '.$tahun;
 // Filter $blok_f dan $tt_f DIHAPUS
 
-$sheet->mergeCells('A2:L2'); // Modifikasi: N -> L
+$sheet->mergeCells('A2:L2'); 
 $sheet->setCellValue('A2', implode(' • ', $sub));
-$sheet->getStyle('A2')->getFont()->setSize(10)->getColor()->setRGB('059669');
+$sheet->getStyle('A2')->getFont()->setSize(10)->getColor()->setRGB('0891B2'); // Medium Cyan
 $sheet->getStyle('A2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
 // Header
@@ -94,9 +94,9 @@ $header = [
   'Stok Awal','Mutasi Masuk','Mutasi Keluar','Dipakai','Stok Akhir','Krani Afdeling','Catatan'
 ];
 $sheet->fromArray($header, null, 'A4');
-$sheet->getStyle('A4:L4')->getFont()->setBold(true); // Modifikasi: N -> L
-$sheet->getStyle('A4:L4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('DCFCE7'); // Modifikasi: N -> L
-$sheet->getStyle('A4:L4')->getFont()->getColor()->setRGB('065F46'); // Modifikasi: N -> L
+$sheet->getStyle('A4:L4')->getFont()->setBold(true); 
+$sheet->getStyle('A4:L4')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('CFFAFE'); // Light Cyan Background
+$sheet->getStyle('A4:L4')->getFont()->getColor()->setRGB('0E7490'); // Dark Cyan Text
 $sheet->getRowDimension(4)->setRowHeight(22);
 
 // Body
@@ -107,23 +107,23 @@ foreach($rows as $row){
   $sheet->setCellValue("C{$r}", $row['nama_kebun']??'-');
   $sheet->setCellValue("D{$r}", $row['nama_unit']??'-');
   // Kolom E (blok_nama) dan F (tt_nama) DIHAPUS
-  $sheet->setCellValue("E{$r}", $row['jenis_alat']??'-'); // Modifikasi: G -> E
-  $sheet->setCellValueExplicit("F{$r}", (float)($row['stok_awal']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);     // Modifikasi: H -> F
-  $sheet->setCellValueExplicit("G{$r}", (float)($row['mutasi_masuk']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);  // Modifikasi: I -> G
-  $sheet->setCellValueExplicit("H{$r}", (float)($row['mutasi_keluar']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC); // Modifikasi: J -> H
-  $sheet->setCellValueExplicit("I{$r}", (float)($row['dipakai']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);        // Modifikasi: K -> I
-  $sheet->setCellValueExplicit("J{$r}", (float)($row['stok_akhir']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);    // Modifikasi: L -> J
-  $sheet->setCellValue("K{$r}", $row['krani_afdeling']??'-'); // Modifikasi: M -> K
-  $sheet->setCellValue("L{$r}", $row['catatan']??'-');         // Modifikasi: N -> L
+  $sheet->setCellValue("E{$r}", $row['jenis_alat']??'-'); 
+  $sheet->setCellValueExplicit("F{$r}", (float)($row['stok_awal']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);     
+  $sheet->setCellValueExplicit("G{$r}", (float)($row['mutasi_masuk']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);  
+  $sheet->setCellValueExplicit("H{$r}", (float)($row['mutasi_keluar']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC); 
+  $sheet->setCellValueExplicit("I{$r}", (float)($row['dipakai']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);        
+  $sheet->setCellValueExplicit("J{$r}", (float)($row['stok_akhir']??0), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_NUMERIC);    
+  $sheet->setCellValue("K{$r}", $row['krani_afdeling']??'-'); 
+  $sheet->setCellValue("L{$r}", $row['catatan']??'-');        
   $r++;
 }
 
 // Format angka
-$sheet->getStyle("F5:J".($r-1))->getNumberFormat()->setFormatCode('#,##0.00'); // Modifikasi: H5:L -> F5:J
+$sheet->getStyle("F5:J".($r-1))->getNumberFormat()->setFormatCode('#,##0.00'); 
 
 // Border & autosize
-$sheet->getStyle("A4:L".($r-1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN); // Modifikasi: N -> L
-foreach(range('A','L') as $col){ $sheet->getColumnDimension($col)->setAutoSize(true); } // Modifikasi: N -> L
+$sheet->getStyle("A4:L".($r-1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN); 
+foreach(range('A','L') as $col){ $sheet->getColumnDimension($col)->setAutoSize(true); } 
 
 // Output
 $filename = 'Alat_Panen_'.date('Ymd_His').'.xlsx';

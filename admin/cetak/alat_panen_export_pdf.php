@@ -37,7 +37,8 @@ if ($bulan)    { $sql .= " AND ap.bulan = :bln";    $params[':bln'] = $bulan; }
 if ($tahun)    { $sql .= " AND ap.tahun = :thn";    $params[':thn'] = $tahun; }
 if ($id_jenis) { $sql .= " AND ap.id_jenis_alat = :ija"; $params[':ija'] = $id_jenis; }
 
-$sql .= " ORDER BY ap.tahun DESC, FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), ap.id DESC";
+// Modifikasi pada baris ini: Menambahkan "u.nama_unit ASC" agar diurutkan berdasarkan unit secara berurutan
+$sql .= " ORDER BY u.nama_unit ASC, ap.tahun DESC, FIELD(ap.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), ap.id DESC";
 
 $st = $pdo->prepare($sql);
 $st->execute($params);

@@ -1,9 +1,8 @@
 <?php
-// pemupukan_crud.php (FINAL CLEAN + AU-58 UPDATE ENABLED)
+// pemupukan_crud.php (FINAL CLEAN + KEBUN VALIDATION)
 // - Staf BISA create, TIDAK bisa update/delete
 // - Perbaikan helper, validasi, dan typo variabel/SQL
-// - Header JSON UTF-8, error handling aman produksi
-// - [NEW] No AU-58 pada MENABUR kini bisa di-update
+// - [MODIFIKASI] Validasi ketat Relasi Kebun -> Unit -> Blok
 
 session_start();
 header('Content-Type: application/json; charset=utf-8');
@@ -105,12 +104,23 @@ try{
     $st->execute([$unitId]);
     return $st->fetchColumn() ?: null;
   };
+  
+  // [MODIFIKASI] Validasi apakah Unit tersebut benar-benar ada di dalam Kebun yang dipilih
+  $unitBelongsToKebun = function(PDO $conn, $unitId, $kebunId) {
+    if(!$unitId || !$kebunId) return false;
+    $st = $conn->prepare("SELECT 1 FROM units WHERE id = :uid AND kebun_id = :kid LIMIT 1");
+    $st->execute([':uid'=>$unitId, ':kid'=>$kebunId]);
+    return (bool)$st->fetchColumn();
+  };
+
+  // [MODIFIKASI] Validasi apakah Blok tersebut benar-benar ada di Unit yang dipilih
   $blokExists = function(PDO $conn, $unitId, $blokKode){
     if(!$unitId || $blokKode==='') return false;
     $st = $conn->prepare("SELECT 1 FROM md_blok WHERE unit_id = :uid AND kode = :kode LIMIT 1");
     $st->execute([':uid'=>$unitId, ':kode'=>$blokKode]);
     return (bool)$st->fetchColumn();
   };
+
   $pupukExists = function(PDO $conn, $nama){
     if($nama==='') return false;
     $st = $conn->prepare("SELECT 1 FROM md_pupuk WHERE nama = ? LIMIT 1");
@@ -169,7 +179,6 @@ try{
 
   // ==== ANGKUTAN: deteksi kolom opsional ====
   $hasNoSPBAng    = $columnExists($conn,'angkutan_pupuk','no_spb');
-  // $hasNomorDOAng  = $columnExists($conn,'angkutan_pupuk','nomor_do');
   $hasSupirAng    = $columnExists($conn,'angkutan_pupuk','supir');
   $hasRayonIdA    = $columnExists($conn,'angkutan_pupuk','rayon_id');
   $hasGudangIdA   = $columnExists($conn,'angkutan_pupuk','gudang_asal_id');
@@ -190,7 +199,6 @@ try{
       $jenis_pupuk     = s('jenis_pupuk');
       $jumlah          = f('jumlah');
       $no_spb          = s('no_spb');
-      // $nomor_do        = s('nomor_do');
       $supir           = s('supir');
       $rayon_id        = i('rayon_id');
       $gudang_asal_id  = i('gudang_asal_id');
@@ -203,6 +211,11 @@ try{
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($conn,$jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      
+      // [MODIFIKASI] Cek relasi Kebun & Unit
+      if ($kebun_id_post && $unit_tujuan_id && !$unitBelongsToKebun($conn, $unit_tujuan_id, $kebun_id_post)) {
+          $errors[] = 'Unit Tujuan tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
 
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
@@ -224,7 +237,6 @@ try{
       if ($hasKetIdA){     $cols[]='keterangan_id';  $vals[]=':ketid';  $params[':ketid']=$keterangan_id; }
       if ($hasGudangTextA){$cols[]='gudang_asal';    $vals[]=':gtxt';   $params[':gtxt']=$gudang_asal_text; }
       if ($hasNoSPBAng){   $cols[]='no_spb';         $vals[]=':spb';    $params[':spb']=$no_spb!==''?$no_spb:null; }
-      // if ($hasNomorDOAng){ $cols[]='nomor_do';       $vals[]=':no';     $params[':no']=$nomor_do!==''?$nomor_do:null; }
       if ($hasSupirAng){   $cols[]='supir';          $vals[]=':sp';     $params[':sp']=$supir!==''?$supir:null; }
 
       $cols[]='created_at'; $vals[]='NOW()';
@@ -259,7 +271,15 @@ try{
       if ($blok==='') $errors[]='Blok wajib diisi.';
       if (!validDate($tanggal)) $errors[]='Tanggal tidak valid (format YYYY-MM-DD).';
       if ($jenis==='') $errors[]='Jenis pupuk wajib diisi.';
-      if ($unit_id && $blok && !$blokExists($conn,$unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      
+      // [MODIFIKASI] Cek Relasi Berantai Kebun -> Unit -> Blok
+      if ($kebun_id_post && $unit_id && !$unitBelongsToKebun($conn, $unit_id, $kebun_id_post)) {
+          $errors[] = 'Unit tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+      if ($unit_id && $blok && !$blokExists($conn,$unit_id,$blok)) {
+          $errors[]='Blok tidak ditemukan pada unit terpilih (cek master blok).';
+      }
+
       if ($jenis!=='' && !$pupukExists($conn,$jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($hasTahun) {
         if ($tahunPost===null && validDate($tanggal)) $tahunPost = (int)date('Y', strtotime($tanggal));
@@ -320,7 +340,6 @@ try{
       $jenis_pupuk     = s('jenis_pupuk');
       $jumlah          = f('jumlah');
       $no_spb          = s('no_spb');
-      // $nomor_do        = s('nomor_do');
       $supir           = s('supir');
       $rayon_id        = i('rayon_id');
       $gudang_asal_id  = i('gudang_asal_id');
@@ -333,6 +352,11 @@ try{
       if ($jenis_pupuk==='') $errors[]='Jenis pupuk wajib diisi.';
       if ($jumlah!==null && $jumlah<0) $errors[]='Jumlah tidak boleh negatif.';
       if ($jenis_pupuk!=='' && !$pupukExists($conn,$jenis_pupuk)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
+      
+      // [MODIFIKASI] Cek relasi
+      if ($kebun_id_post && $unit_tujuan_id && !$unitBelongsToKebun($conn, $unit_tujuan_id, $kebun_id_post)) {
+          $errors[] = 'Unit Tujuan tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
 
       if ($errors){ echo json_encode(['success'=>false,'message'=>'Validasi gagal.','errors'=>$errors]); exit; }
 
@@ -358,7 +382,6 @@ try{
       $set[]='jenis_pupuk=:jp';
       $set[]='jumlah=:jml';
 
-      // if ($hasNomorDOAng){ $set[]='nomor_do=:no'; $params[':no']=$nomor_do!==''?$nomor_do:null; }
       if ($hasSupirAng){   $set[]='supir=:sp';    $params[':sp']=$supir!==''?$supir:null; }
 
       $set[]='updated_at=NOW()';
@@ -391,7 +414,15 @@ try{
       if ($blok==='') $errors[]='Blok wajib diisi.';
       if (!validDate($tanggal)) $errors[]='Tanggal tidak valid (format YYYY-MM-DD).';
       if ($jenis==='') $errors[]='Jenis pupuk wajib diisi.';
-      if ($unit_id && $blok && !$blokExists($conn,$unit_id,$blok)) $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      
+      // [MODIFIKASI] Cek relasi
+      if ($kebun_id_post && $unit_id && !$unitBelongsToKebun($conn, $unit_id, $kebun_id_post)) {
+          $errors[] = 'Unit tidak valid atau tidak berasal dari Kebun yang dipilih.';
+      }
+      if ($unit_id && $blok && !$blokExists($conn,$unit_id,$blok)) {
+          $errors[]='Blok tidak ditemukan pada unit terpilih (cek md_blok).';
+      }
+
       if ($jenis!=='' && !$pupukExists($conn,$jenis)) $errors[]='Jenis pupuk tidak ada di master (md_pupuk).';
       if ($hasTahun) {
         if ($tahunPost===null && validDate($tanggal)) $tahunPost = (int)date('Y', strtotime($tanggal));
@@ -426,7 +457,7 @@ try{
       if ($hasAplIdM){   $set[]='apl_id=:aid';         $params[':aid']=$apl_id; }
       if ($hasKetIdM){   $set[]='keterangan_id=:ketid';$params[':ketid']=$keterangan_id; }
 
-      // [NEW] Aktifkan update kolom No AU-58 sesuai kolom yang tersedia (no_au58 / no_au_58)
+      // Aktifkan update kolom No AU-58 sesuai kolom yang tersedia (no_au58 / no_au_58)
       if ($hasNoAU58Men && $noAU58ColMen){
         $set[] = "$noAU58ColMen = :au";
         $params[':au'] = ($no_au58 !== '') ? $no_au58 : null;

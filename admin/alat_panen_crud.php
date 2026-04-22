@@ -1,6 +1,6 @@
 <?php
 // pages/alat_panen_crud.php
-// MODIFIKASI FULL: Support Relasi & Filtering Jenis Alat Panen + Hak Akses Role
+// MODIFIKASI FULL: Support Relasi (Kebun->Unit) & Filtering Jenis Alat Panen + Hak Akses Role
 
 session_start();
 header('Content-Type: application/json');
@@ -37,7 +37,6 @@ try {
     if(!empty($_POST['bulan'])){ $w[]='a.bulan=:b'; $p[':b']=$_POST['bulan']; }
     if(!empty($_POST['tahun'])){ $w[]='a.tahun=:t'; $p[':t']=(int)$_POST['tahun']; }
 
-    // MODIFIKASI: Filter Jenis Alat Panen
     if(!empty($_POST['id_jenis_alat'])){ 
         $w[]='a.id_jenis_alat=:idj'; 
         $p[':idj']=(int)$_POST['id_jenis_alat']; 
@@ -67,12 +66,10 @@ try {
     
     // Validasi Hak Akses
     if ($act === 'store') {
-        // Create: Admin & Staf Boleh
         if ($role !== 'admin' && $role !== 'staf') {
             echo json_encode(['success'=>false,'message'=>'Anda tidak memiliki izin untuk menambah data.']); exit;
         }
     } elseif ($act === 'update') {
-        // Update: HANYA Admin Boleh
         if ($role !== 'admin') {
             echo json_encode(['success'=>false,'message'=>'Hanya Admin yang boleh mengubah data.']); exit;
         }
@@ -96,9 +93,12 @@ try {
       echo json_encode(['success'=>false,'message'=>'Bulan, Tahun, Kebun, Unit, dan Jenis Alat wajib diisi.']); exit;
     }
 
-    $cekK = $conn->prepare("SELECT 1 FROM md_kebun WHERE id=:id LIMIT 1");
-    $cekK->execute([':id'=>$kebun]);
-    if(!$cekK->fetchColumn()){ echo json_encode(['success'=>false,'message'=>'Kebun tidak ditemukan.']); exit; }
+    // [MODIFIKASI] Validasi bahwa Unit tersebut benar-benar milik Kebun yang dipilih
+    $cekUnit = $conn->prepare("SELECT 1 FROM units WHERE id=:uid AND kebun_id=:kid LIMIT 1");
+    $cekUnit->execute([':uid'=>$unit, ':kid'=>$kebun]);
+    if(!$cekUnit->fetchColumn()){ 
+        echo json_encode(['success'=>false,'message'=>'Unit tidak valid atau bukan milik kebun tersebut.']); exit; 
+    }
 
     $qJ = $conn->prepare("SELECT nama FROM md_jenis_alat_panen WHERE id=:id LIMIT 1");
     $qJ->execute([':id'=>$id_jenis]);

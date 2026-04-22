@@ -1,6 +1,7 @@
 <?php
 // pemakaian_crud.php
 // LIST: Semua Role boleh. STORE: Admin & Staf. UPDATE/DELETE: Hanya Admin.
+// MODIFIKASI FULL: Handle relasi berantai Kebun.
 
 session_start();
 header('Content-Type: application/json');
@@ -39,14 +40,21 @@ function extract_tag_anywhere($ket, $label){
   }
   return [null, trim($ket)];
 }
+
 function normalize_keterangan($ket_raw, $kebun_lbl, $fisik_lbl){
   $ket = (string)$ket_raw;
+  // Bersihkan tag lama jika ada agar tidak double
   $ket = preg_replace('/\[\s*Kebun\s*:\s*[^\]]+\]\s*/iu', '', $ket);
   $ket = preg_replace('/\[\s*Fisik\s*:\s*[^\]]+\]\s*/iu', '', $ket);
-  if ($kebun_lbl!=='') $ket = '[Kebun: '.$kebun_lbl.']'.($ket!==''?' '.$ket:'');
-  if ($fisik_lbl!=='') $ket = '[Fisik: '.$fisik_lbl.']'.($ket!==''?' '.$ket:'');
-  return trim($ket);
+  $ket = trim($ket);
+  
+  $prefix = '';
+  if ($kebun_lbl !== '') $prefix .= '[Kebun: '.$kebun_lbl.'] ';
+  if ($fisik_lbl !== '') $prefix .= '[Fisik: '.$fisik_lbl.'] ';
+  
+  return trim($prefix . $ket);
 }
+
 function extract_kebun_from_ket($ket){ return extract_tag_anywhere($ket, 'Kebun'); }
 function extract_fisik_from_ket($ket){ return extract_tag_anywhere($ket, 'Fisik'); }
 // =======================================================
@@ -91,7 +99,7 @@ try {
     }
     if ($kebun_lblF !== '') {
       $sql .= " AND p.keterangan LIKE :kbntag";
-      $bind[':kbntag'] = "[Kebun: ".$kebun_lblF."]%";
+      $bind[':kbntag'] = "%[Kebun: ".$kebun_lblF."]%";
     }
     if ($nama_bahanF !== '') {
       $sql .= " AND p.nama_bahan = :nbF";
@@ -145,12 +153,11 @@ try {
     $nama_bahan = s('nama_bahan');
     $jenis      = s('jenis_pekerjaan');
     $fisik_lbl  = s('fisik_label');
-    $kebun_lbl  = s('kebun_label');
+    $kebun_lbl  = s('kebun_label'); // Ditangkap dari input hidden di JS
     $diminta    = f('jlh_diminta') ?? 0;
     $fisik      = f('jlh_fisik') ?? 0;
     $ket_raw    = s('keterangan');
 
-    if ($no_dokumen==='')   $errors[]='No dokumen wajib diisi.';
     if ($unit_id<=0)        $errors[]='Unit wajib dipilih.';
     if ($bulan==='' || !in_array($bulan,$bulanList,true)) $errors[]='Bulan tidak valid.';
     if ($tahun==='' || !validYear($tahun)) $errors[]='Tahun tidak valid.';
@@ -215,7 +222,6 @@ try {
     $fisik      = f('jlh_fisik') ?? 0;
     $ket_raw    = s('keterangan');
 
-    if ($no_dokumen==='')   $errors[]='No dokumen wajib diisi.';
     if ($unit_id<=0)        $errors[]='Unit wajib dipilih.';
     if ($bulan==='' || !in_array($bulan,$bulanList,true)) $errors[]='Bulan tidak valid.';
     if ($tahun==='' || !validYear($tahun)) $errors[]='Tahun tidak valid.';

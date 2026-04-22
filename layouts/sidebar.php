@@ -66,7 +66,7 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
         </div>
 
         <div class="px-5 py-6">
-             <a href="profile.php" class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-900/20 to-slate-900/20 border border-cyan-500/10 backdrop-blur-sm hover:bg-white/5 hover:border-cyan-500/30 transition-all cursor-pointer group relative overflow-hidden">
+             <a href="profile" class="flex items-center gap-3 p-3 rounded-xl bg-gradient-to-r from-cyan-900/20 to-slate-900/20 border border-cyan-500/10 backdrop-blur-sm hover:bg-white/5 hover:border-cyan-500/30 transition-all cursor-pointer group relative overflow-hidden">
                 
                 <div class="relative">
                     <?php 
@@ -99,12 +99,12 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
 
         <nav class="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar pb-6">
 
-            <a href="portal.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('portal_aplikasi', $currentPage) ?>">
+            <a href="portal" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('portal_aplikasi', $currentPage) ?>">
                 <i data-lucide="home" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='portal_aplikasi'?'text-white':'' ?>"></i>
                 <span>Home</span>
             </a>
             
-            <a href="index.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-cyan-300 <?= navClass('dashboard', $currentPage) ?>">
+            <a href="index" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-cyan-300 <?= navClass('dashboard', $currentPage) ?>">
                 <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3 group-hover:text-cyan-400 transition-colors"></i>
                 <span>Dashboard</span>
             </a>
@@ -125,15 +125,16 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 <div x-show="open" x-collapse class="space-y-1 relative mt-1">
                     <div class="absolute left-6 top-0 bottom-0 w-px bg-cyan-800/30"></div>
                     <?php 
+                    // MODIFIKASI: Menghapus akhiran .php
                     $subs = [
-                        ['url'=>'pemeliharaan_tm.php',   'lbl'=>'Pemeliharaan TM',   'k'=>'pemeliharaan_tm'],
-                        ['url'=>'pemeliharaan_tu.php',   'lbl'=>'Pemeliharaan TU',   'k'=>'pemeliharaan_tu'],
-                        ['url'=>'pemeliharaan_tk.php',   'lbl'=>'Pemeliharaan TK',   'k'=>'pemeliharaan_tk'],
-                        ['url'=>'pemeliharaan_tbm1.php', 'lbl'=>'Pemeliharaan TBM I','k'=>'pemeliharaan_tbm1'],
-                        ['url'=>'pemeliharaan_tbm2.php', 'lbl'=>'Pemeliharaan TBM II','k'=>'pemeliharaan_tbm2'],
-                        ['url'=>'pemeliharaan_tbm3.php', 'lbl'=>'Pemeliharaan TBM III','k'=>'pemeliharaan_tbm3'],
-                        ['url'=>'pemeliharaan_pn.php',   'lbl'=>'Pemeliharaan PN',   'k'=>'pemeliharaan_pn'],
-                        ['url'=>'pemeliharaan_mn.php',   'lbl'=>'Pemeliharaan MN',   'k'=>'pemeliharaan_mn'],
+                        ['url'=>'pemeliharaan_tm',   'lbl'=>'Pemeliharaan TM',   'k'=>'pemeliharaan_tm'],
+                        ['url'=>'pemeliharaan_tu',   'lbl'=>'Pemeliharaan TU',   'k'=>'pemeliharaan_tu'],
+                        ['url'=>'pemeliharaan_tk',   'lbl'=>'Pemeliharaan TK',   'k'=>'pemeliharaan_tk'],
+                        ['url'=>'pemeliharaan_tbm1', 'lbl'=>'Pemeliharaan TBM I','k'=>'pemeliharaan_tbm1'],
+                        ['url'=>'pemeliharaan_tbm2', 'lbl'=>'Pemeliharaan TBM II','k'=>'pemeliharaan_tbm2'],
+                        ['url'=>'pemeliharaan_tbm3', 'lbl'=>'Pemeliharaan TBM III','k'=>'pemeliharaan_tbm3'],
+                        ['url'=>'pemeliharaan_pn',   'lbl'=>'Pemeliharaan PN',   'k'=>'pemeliharaan_pn'],
+                        ['url'=>'pemeliharaan_mn',   'lbl'=>'Pemeliharaan MN',   'k'=>'pemeliharaan_mn'],
                     ];
                     foreach($subs as $s): ?>
                         <a href="<?= $s['url'] ?>" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == $s['k'] ? 'text-cyan-300 font-bold bg-cyan-900/20 border-r-2 border-cyan-500' : 'text-slate-500 hover:text-cyan-200' ?>">
@@ -143,17 +144,17 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 </div>
             </div>
 
-            <a href="pilih_unit.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-orange-300 <?= navClass('pilih_unit', $currentPage) ?>">
+            <a href="pilih_unit" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-orange-300 <?= navClass('pilih_unit', $currentPage) ?>">
                 <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-3 group-hover:text-orange-400 transition-colors <?= $currentPage=='kertas_kerja'?'text-white':'' ?>"></i>
                 <span>Kertas Kerja</span>
             </a>
 
-            <a href="pemupukan.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-purple-300 <?= navClass('pemupukan', $currentPage) ?>">
+            <a href="pemupukan" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-purple-300 <?= navClass('pemupukan', $currentPage) ?>">
                 <i data-lucide="flask-conical" class="w-5 h-5 mr-3 group-hover:text-purple-400 transition-colors <?= $currentPage=='pemupukan'?'text-white':'' ?>"></i>
                 <span>Pemupukan Kimia</span>
             </a>
 
-            <a href="pemupukan_organik.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-green-300 <?= navClass('pemupukan_organik', $currentPage) ?>">
+            <a href="pemupukan_organik" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-green-300 <?= navClass('pemupukan_organik', $currentPage) ?>">
                 <i data-lucide="leaf" class="w-5 h-5 mr-3 group-hover:text-green-400 transition-colors <?= $currentPage=='pemupukan_organik'?'text-white':'' ?>"></i>
                 <span>Pemupukan Organik</span>
             </a>
@@ -174,18 +175,18 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 </button>
                 <div x-show="open" x-collapse class="space-y-1 relative mt-1">
                     <div class="absolute left-6 top-0 bottom-0 w-px bg-cyan-800/30"></div>
-                    <a href="stok_barang_gudang.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'stok_barang_gudang' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Barang Gudang</a>
-                    <a href="stok_gudang.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'stok_gudang' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Bahan Kimia</a>
-                    <a href="alat_panen.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'alat_panen' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Alat Pertanian</a>
+                    <a href="stok_barang_gudang" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'stok_barang_gudang' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Barang Gudang</a>
+                    <a href="stok_gudang" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'stok_gudang' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Bahan Kimia</a>
+                    <a href="alat_panen" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'alat_panen' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Alat Pertanian</a>
                 </div>
             </div>
 
-            <a href="pemakaian_barang_gudang.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('pemakaian_barang_gudang', $currentPage) ?>">
+            <a href="pemakaian_barang_gudang" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('pemakaian_barang_gudang', $currentPage) ?>">
                 <i data-lucide="fuel" class="w-5 h-5 mr-3 group-hover:text-red-400 transition-colors <?= $currentPage=='pemakaian_barang_gudang'?'text-white':'' ?>"></i>
                 <span>Pemakaian BBM</span>
             </a>
 
-            <a href="pemakaian.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-pink-300 <?= navClass('pemakaian', $currentPage) ?>">
+            <a href="pemakaian" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-pink-300 <?= navClass('pemakaian', $currentPage) ?>">
                 <i data-lucide="clipboard-check" class="w-5 h-5 mr-3 group-hover:text-pink-400 transition-colors <?= $currentPage=='pemakaian'?'text-white':'' ?>"></i>
                 <span>Pemakaian Bahan Kimia </span>
             </a>
@@ -195,12 +196,12 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 <div class="h-px bg-cyan-900/30 flex-1"></div>
             </div>
 
-            <a href="data_karyawan.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('data_karyawan', $currentPage) ?>">
+            <a href="data_karyawan" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('data_karyawan', $currentPage) ?>">
                 <i data-lucide="briefcase" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='data_karyawan'?'text-white':'' ?>"></i>
                 <span>Data Karyawan</span>
             </a>
             
-            <a href="dashboard_hr.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('dashboard_hr', $currentPage) ?>">
+            <a href="dashboard_hr" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-teal-300 <?= navClass('dashboard_hr', $currentPage) ?>">
                 <i data-lucide="users" class="w-5 h-5 mr-3 group-hover:text-teal-400 transition-colors <?= $currentPage=='dashboard_hr'?'text-white':'' ?>"></i>
                 <span>Dashboard HRD</span>
             </a>
@@ -221,13 +222,13 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 </button>
                 <div x-show="open" x-collapse class="space-y-1 relative mt-1">
                     <div class="absolute left-6 top-0 bottom-0 w-px bg-cyan-800/30"></div>
-                    <a href="lm76.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm76' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM76</a>
-                    <a href="lm77.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm77' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM77</a>
-                    <a href="lm_biaya.php" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm_biaya' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM Biaya</a>
+                    <a href="lm76" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm76' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM76</a>
+                    <a href="lm77" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm77' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM77</a>
+                    <a href="lm_biaya" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'lm_biaya' ? 'text-indigo-300 font-bold bg-cyan-900/20 border-r-2 border-indigo-500' : 'text-slate-500 hover:text-indigo-200' ?>">LM Biaya</a>
                 </div>
             </div>
 
-            <a href="laporan_mingguan.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-amber-300 <?= navClass('laporan_mingguan', $currentPage) ?>">
+            <a href="laporan_mingguan" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-amber-300 <?= navClass('laporan_mingguan', $currentPage) ?>">
                 <i data-lucide="archive" class="w-5 h-5 mr-3 group-hover:text-amber-400 transition-colors <?= $currentPage=='laporan_mingguan'?'text-white':'' ?>"></i>
                 <span>Arsip</span>
             </a>
@@ -237,22 +238,22 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                     <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">System</span>
                     <div class="h-px bg-cyan-900/30 flex-1"></div>
                 </div>
-                <a href="master_data.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('master_data', $currentPage) ?>">
+                <a href="master_data" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('master_data', $currentPage) ?>">
                     <i data-lucide="database" class="w-5 h-5 mr-3 group-hover:text-gray-200 transition-colors <?= $currentPage=='master_data'?'text-white':'' ?>"></i>
                     <span>Master Data</span>
                 </a>
-                <a href="users.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('users', $currentPage) ?>">
+                <a href="users" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('users', $currentPage) ?>">
                     <i data-lucide="users" class="w-5 h-5 mr-3 group-hover:text-gray-200 transition-colors <?= $currentPage=='users'?'text-white':'' ?>"></i>
                     <span>Data User</span>
                 </a>
-                <a href="maintenance.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('maintenance', $currentPage) ?>">
+                <a href="maintenance" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('maintenance', $currentPage) ?>">
                     <i data-lucide="shield-check" class="w-5 h-5 mr-3 group-hover:text-red-400 transition-colors <?= $currentPage=='maintenance'?'text-white':'' ?>"></i>
                     <span>Maintenance & Backup</span>
                 </a>
             <?php endif; ?>
 
             <div class="mt-8 mb-4 px-4">
-                <a href="../auth/logout.php" class="flex items-center justify-center w-full px-4 py-3 text-sm font-semibold text-white transition-all bg-gradient-to-r from-red-600 to-red-800 rounded-lg hover:from-red-500 hover:to-red-700 shadow-lg shadow-red-900/40">
+                <a href="../auth/logout" class="flex items-center justify-center w-full px-4 py-3 text-sm font-semibold text-white transition-all bg-gradient-to-r from-red-600 to-red-800 rounded-lg hover:from-red-500 hover:to-red-700 shadow-lg shadow-red-900/40">
                     <i data-lucide="log-out" class="w-5 h-5 mr-2"></i>
                     Keluar Aplikasi
                 </a>

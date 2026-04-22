@@ -1,6 +1,6 @@
 <?php
-// pemakaian.php
-// MODIFIKASI FULL: Grid Table, Auto Filter Date, New Export Buttons + Role Access (Viewer/Staf/Admin)
+// pages/pemakaian.php
+// MODIFIKASI FULL: Chain Dropdown Kebun -> Unit, Custom File Input Design
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
@@ -34,7 +34,8 @@ $bulanNowName = $bulanList[$bulanIndex]; // Bulan saat ini
 $tahunNow = (int)date('Y');              // Tahun saat ini
 
 // Master Data
-$units = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit ASC")->fetchAll(PDO::FETCH_ASSOC);
+// MODIFIKASI: Menambahkan field kebun_id agar JS bisa membaca relasinya
+$units = $conn->query("SELECT id, nama_unit, kebun_id FROM units ORDER BY nama_unit ASC")->fetchAll(PDO::FETCH_ASSOC);
 $kebunList = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
 $bahanList = $conn->query("SELECT b.nama_bahan, s.nama AS satuan FROM md_bahan_kimia b LEFT JOIN md_satuan s ON s.id=b.satuan_id ORDER BY b.nama_bahan")->fetchAll(PDO::FETCH_ASSOC);
 $jenisList = $conn->query("SELECT nama FROM md_jenis_pekerjaan ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
@@ -118,6 +119,53 @@ include_once '../layouts/header.php';
     width: 32px; height: 32px; border-radius: 6px; transition: 0.2s; border: 1px solid transparent;
   }
   .btn-icon:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+  /* CUSTOM FILE UPLOAD STYLING */
+  .file-upload-wrapper {
+      position: relative;
+      display: inline-block;
+      width: 100%;
+  }
+  .file-upload-input {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+      z-index: 2;
+  }
+  .file-upload-design {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px dashed #94a3b8;
+      background-color: #f8fafc;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      transition: all 0.2s ease-in-out;
+  }
+  .file-upload-wrapper:hover .file-upload-design {
+      background-color: #f1f5f9;
+      border-color: #06b6d4;
+  }
+  .file-upload-text {
+      color: #64748b;
+      font-size: 0.875rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+  }
+  .file-upload-btn {
+      background-color: #e2e8f0;
+      color: #475569;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.75rem;
+      border-radius: 0.25rem;
+      pointer-events: none;
+  }
 </style>
 
 <div class="space-y-6">
@@ -265,15 +313,20 @@ include_once '../layouts/header.php';
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">No Dokumen</label>
           <input type="text" id="no_dokumen" name="no_dokumen" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
         </div>
+        
         <div>
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Nama Kebun</label>
-          <select id="kebun_label" name="kebun_label" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+          <select id="kebun_id" name="kebun_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
             <option value="">-- Pilih Kebun --</option>
             <?php foreach ($kebunList as $k): ?>
-              <option value="<?= htmlspecialchars($k['nama_kebun']) ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+              <option value="<?= (int)$k['id'] ?>" data-nama="<?= htmlspecialchars($k['nama_kebun']) ?>">
+                  <?= htmlspecialchars($k['nama_kebun']) ?>
+              </option>
             <?php endforeach; ?>
           </select>
+          <input type="hidden" id="kebun_label" name="kebun_label" value="">
         </div>
+        
         <div>
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Unit/Divisi</label>
           <select id="unit_id" name="unit_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
@@ -283,6 +336,7 @@ include_once '../layouts/header.php';
             <?php endforeach; ?>
           </select>
         </div>
+
         <div class="grid grid-cols-2 gap-2">
             <div>
                 <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Bulan</label>
@@ -344,8 +398,15 @@ include_once '../layouts/header.php';
 
         <div class="md:col-span-2">
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Dokumen Pendukung</label>
-          <input type="file" id="dokumen" name="dokumen" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+          <div class="file-upload-wrapper">
+              <input type="file" id="dokumen" name="dokumen" class="file-upload-input" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onchange="document.getElementById('file-name-display').textContent = this.files[0] ? this.files[0].name : 'Pilih file dokumen...'">
+              <div class="file-upload-design">
+                  <span class="file-upload-text" id="file-name-display">Pilih file dokumen...</span>
+                  <span class="file-upload-btn">Browse</span>
+              </div>
+          </div>
         </div>
+
         <div class="md:col-span-2">
           <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Keterangan</label>
           <input type="text" id="keterangan" name="keterangan" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" placeholder="Catatan tambahan">
@@ -387,6 +448,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let ALL_ROWS = [], CURRENT_PAGE = 1, PER_PAGE = parseInt(perPageEl.value, 10) || 10;
   const fmt = n => Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  // Data Units dari backend untuk Chain Dropdown JS
+  const ALL_UNITS = [
+    <?php foreach($units as $u): ?>
+    { id: <?= $u['id'] ?>, nama: '<?= addslashes($u['nama_unit']) ?>', kebun_id: <?= $u['kebun_id'] ?? 'null' ?> },
+    <?php endforeach; ?>
+  ];
 
   /* === Logic Export === */
   const handleExport = (format) => {
@@ -543,18 +611,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     bahanSelect.addEventListener('change', updateSatuanHint);
 
+    // MODIFIKASI: Update Options Unit berdasarkan Kebun
+    const kebunSel = $('#kebun_id');
+    const unitSel  = $('#unit_id');
+    const kebunLbl = $('#kebun_label');
+
+    function updateUnitDropdown(kebunIdVal, selectedUnit = '') {
+        unitSel.innerHTML = '<option value="">-- Pilih Unit --</option>';
+        const kId = parseInt(kebunIdVal);
+        ALL_UNITS.forEach(u => {
+            if (!kId || u.kebun_id === kId) {
+                const sel = (String(u.id) === String(selectedUnit)) ? 'selected' : '';
+                unitSel.innerHTML += `<option value="${u.id}" ${sel}>${u.nama}</option>`;
+            }
+        });
+    }
+
+    kebunSel?.addEventListener('change', (e) => {
+        // Set hidden label name untuk backend
+        const opt = e.target.options[e.target.selectedIndex];
+        if(opt) kebunLbl.value = opt.getAttribute('data-nama') || '';
+        
+        updateUnitDropdown(e.target.value);
+    });
+
     // Tombol Tambah
     if($('#btn-add')) {
         $('#btn-add').addEventListener('click', () => {
-        form.reset();
-        $('#form-action').value = 'store';
-        $('#form-id').value = '';
-        // Pre-fill modal with current filter
-        if(selUnit.value) $('#unit_id').value = selUnit.value;
-        if(selBulan.value) $('#bulan').value = selBulan.value;
-        if(selTahun.value) $('#tahun').value = selTahun.value;
-        updateSatuanHint();
-        open();
+            form.reset();
+            $('#form-action').value = 'store';
+            $('#form-id').value = '';
+            $('#file-name-display').textContent = 'Pilih file dokumen...';
+
+            if(selBulan.value) $('#bulan').value = selBulan.value;
+            if(selTahun.value) $('#tahun').value = selTahun.value;
+            
+            updateUnitDropdown('', ''); // Reset unit
+            updateSatuanHint();
+            open();
         });
     }
 
@@ -572,12 +666,25 @@ document.addEventListener('DOMContentLoaded', () => {
         form.reset();
         $('#form-action').value = 'update';
         $('#form-id').value = row.id;
+        $('#file-name-display').textContent = row.dokumen_name || 'Ganti file (opsional)...';
+
         ['no_dokumen','bulan','tahun','nama_bahan','jenis_pekerjaan','jlh_diminta','jlh_fisik','keterangan'].forEach(k=>{
           const el=$(`#${k}`); if(el) el.value=row[k] ?? '';
         });
-        $('#unit_id').value = row.unit_id ?? '';
+        
         $('#fisik_label').value= row.fisik_label ?? '';
-        $('#kebun_label').value= row.kebun_label || '';
+
+        // Deteksi kebun dari database berdasarkan unit (Jika tidak ada di keterangan)
+        let foundKebunId = '';
+        if (row.unit_id) {
+            const foundU = ALL_UNITS.find(u => u.id == row.unit_id);
+            if (foundU && foundU.kebun_id) foundKebunId = foundU.kebun_id;
+        }
+
+        kebunSel.value = foundKebunId;
+        kebunLbl.value = row.kebun_label || '';
+        updateUnitDropdown(foundKebunId, row.unit_id);
+
         updateSatuanHint();
         open();
       }
@@ -611,6 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const el = $(`#${id}`);
         if (!el || !el.value) { Swal.fire('Validasi', `Field ${id.replace('_',' ')} wajib diisi.`, 'warning'); return; }
       }
+      
       const fd = new FormData(form);
       fetch('pemakaian_crud.php', { method: 'POST', body: fd })
         .then(r => r.json())
@@ -624,5 +732,3 @@ document.addEventListener('DOMContentLoaded', () => {
   } // End if CAN_INPUT
 });
 </script>
-
-<?php include_once '../layouts/footer.php'; ?>

@@ -30,19 +30,21 @@ include_once '../layouts/header.php';
 <style>
   /* --- WINDOWS 11 FOLDER STYLE --- */
   
-  /* Container Grid - Diatur agar mulai dari kiri (flex-start) */
+  /* MODIFIKASI: Menggunakan CSS Grid agar ukuran folder responsif dan mengisi ruang secara merata */
   .win-folder-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
+    display: grid;
+    /* Grid otomatis mengisi ruang. Min-width folder 110px, max 1fr (membagi rata sisa ruang) */
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 1.5rem;
     padding-top: 1rem;
     padding-bottom: 2rem;
+    justify-items: center; /* Memastikan folder tetap di tengah cell-nya */
   }
 
   /* Item Folder */
   .win-folder {
-    width: 110px;
+    width: 100%; /* Mengisi penuh lebar cell grid */
+    max-width: 140px; /* Batas maksimal agar tidak terlalu melar di layar besar */
     padding: 12px 8px;
     border-radius: 8px;
     display: flex;
@@ -195,7 +197,7 @@ include_once '../layouts/header.php';
     </div>
 
     <div id="grid-kategori" class="win-folder-container">
-        <div class="w-full text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+        <div class="col-span-full w-full text-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
             <i class="ti ti-loader animate-spin text-2xl mb-2 block"></i> Memuat data...
         </div>
     </div>
@@ -319,7 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderGrid(kategoriList) {
         if (!kategoriList || kategoriList.length === 0) {
             gridContainer.innerHTML = `
-                <div class="w-full flex flex-col items-center justify-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
+                <div class="col-span-full w-full flex flex-col items-center justify-center py-16 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
                     <i class="ti ti-folder-off text-4xl mb-3 opacity-50"></i>
                     <p class="text-sm font-medium">Tidak ada folder yang ditemukan.</p>
                 </div>`;
@@ -343,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function refreshKategoriList() {
-        gridContainer.innerHTML = `<div class="w-full text-center py-16 text-gray-500"><i class="ti ti-loader animate-spin text-2xl mb-2 inline-block"></i><br>Memuat...</div>`;
+        gridContainer.innerHTML = `<div class="col-span-full w-full text-center py-16 text-gray-500"><i class="ti ti-loader animate-spin text-2xl mb-2 inline-block"></i><br>Memuat...</div>`;
         
         const fd = new FormData();
         fd.append('action', 'list');
@@ -356,11 +358,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ALL_KATEGORI = j.data;
                     applySearchFilter(); 
                 } else {
-                    gridContainer.innerHTML = `<div class="w-full text-center py-10 text-red-500 font-bold">${j.message || 'Gagal memuat data'}</div>`;
+                    gridContainer.innerHTML = `<div class="col-span-full w-full text-center py-10 text-red-500 font-bold">${j.message || 'Gagal memuat data'}</div>`;
                 }
             })
             .catch(err => {
-                gridContainer.innerHTML = `<div class="w-full text-center py-10 text-red-500">Error Koneksi Server</div>`;
+                gridContainer.innerHTML = `<div class="col-span-full w-full text-center py-10 text-red-500">Error Koneksi Server</div>`;
             });
     }
     

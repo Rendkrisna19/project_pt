@@ -1,6 +1,6 @@
 <?php
 // pages/alat_panen.php
-// MODIFIKASI: Filter Jenis Alat Panen & Hak Akses (Viewer/Staf/Admin)
+// MODIFIKASI FULL: Filter Jenis Alat Panen, Hak Akses, & Chain Dropdown (Kebun -> Unit)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -23,7 +23,8 @@ $db = new Database();
 $conn = $db->getConnection();
 
 // Ambil Data Master untuk Filter & Dropdown
-$units = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
+// MODIFIKASI: Ambil kebun_id pada tabel units untuk relasi Javascript
+$units = $conn->query("SELECT id, nama_unit, kebun_id FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 $kebun = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // Ambil Master Jenis Alat Panen
@@ -286,10 +287,7 @@ include_once '../layouts/header.php';
         <div>
           <label class="block text-[11px] sm:text-xs font-bold text-gray-600 uppercase mb-1">Unit/Devisi</label>
           <select id="unit_id" name="unit_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#059fd3] outline-none" required>
-            <option value="">-- Pilih Unit --</option>
-            <?php foreach ($units as $u): ?>
-              <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
-            <?php endforeach; ?>
+            <option value="">-- Pilih Kebun Dulu --</option>
           </select>
         </div>
         
@@ -362,6 +360,32 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const perSel = $('#per-page'), btnPrev = $('#btn-prev'), btnNext = $('#btn-next'), pageInfo = $('#page-info');
   let DATA_CACHE = [], CUR_PAGE = 1;
 
+  // DATA UNITS dari backend yang sudah memiliki kebun_id
+  const ALL_UNITS = [
+    <?php foreach($units as $u): ?>
+    { id: <?= $u['id'] ?>, kebun_id: <?= $u['kebun_id'] ?? 'null' ?>, nama_unit: '<?= addslashes($u['nama_unit']) ?>' },
+    <?php endforeach; ?>
+  ];
+
+  // FUNGSI UPDATE DROPDOWN UNIT
+  function updateUnitDropdown(kebunIdStr, unitSelectEl, selectedUnitId = '') {
+      if (!unitSelectEl) return;
+      unitSelectEl.innerHTML = '<option value="">-- Pilih Unit / Afdeling --</option>';
+      
+      const kebunId = parseInt(kebunIdStr);
+      ALL_UNITS.forEach(u => {
+          if (!kebunId || u.kebun_id === kebunId) {
+              const selected = (String(u.id) === String(selectedUnitId)) ? 'selected' : '';
+              unitSelectEl.innerHTML += `<option value="${u.id}" ${selected}>${u.nama_unit}</option>`;
+          }
+      });
+  }
+
+  // EVENT LISTENER UNTUK FILTER CHAIN
+  $('#f-kebun')?.addEventListener('change', (e) => {
+      updateUnitDropdown(e.target.value, $('#f-unit'));
+  });
+
   const BULAN_INDEX = { "Januari":1,"Februari":2,"Maret":3,"April":4,"Mei":5,"Juni":6,"Juli":7,"Agustus":8,"September":9,"Oktober":10,"November":11,"Desember":12 };
   function toTime(v){ if(!v) return 0; const d = new Date(v); return isNaN(d.getTime()) ? 0 : d.getTime(); }
   
@@ -388,7 +412,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         const payload=encodeURIComponent(JSON.stringify(x));
         const namaAlat = x.display_jenis_alat || x.jenis_alat || '-';
 
-        // Hanya buat kolom aksi jika CAN_ACTION (Admin) true
         let actionCell = '';
         if (CAN_ACTION) {
             actionCell = `
@@ -462,7 +485,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   refresh();
   
-  // Listeners (Menambahkan listener untuk #f-jenis-alat)
+  // Listeners
   $('#btn-refresh').addEventListener('click', refresh);
   ['f-kebun','f-unit','f-bulan','f-tahun','f-jenis-alat'].forEach(id=>{
       const el = document.getElementById(id);
@@ -485,14 +508,23 @@ document.addEventListener('DOMContentLoaded', ()=>{
     };
     ['stok_awal','mutasi_masuk','mutasi_keluar','dipakai'].forEach(id=>document.getElementById(id).addEventListener('input', calc));
     
-    // Tombol Input mungkin tidak ada jika user adalah Viewer, jadi cek dulu
+    // EVENT LISTENER CHAIN DROPDOWN DI FORM
+    $('#kebun_id')?.addEventListener('change', (e) => {
+        updateUnitDropdown(e.target.value, $('#unit_id'));
+    });
+
     if(btnAdd) {
         btnAdd.addEventListener('click',()=>{
           form.reset();
           $('#form-action').value='store'; $('#form-id').value='';
+          
           const b = $('#f-bulan').value, t = $('#f-tahun').value;
           if(b) $('#bulan').value = b;
           if(t) $('#tahun').value = t;
+
+          // Reset Chain Dropdown
+          updateUnitDropdown('', $('#unit_id'));
+          
           calc(); openModal();
         });
     }
@@ -500,20 +532,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
     $('#btn-close').addEventListener('click',closeModal);
     $('#btn-cancel').addEventListener('click',closeModal);
 
-    // Event Delegation for Table Buttons
     document.body.addEventListener('click',e=>{
       const btn = e.target.closest('button');
       if (!btn) return;
       
-      // Handle Edit (Hanya jika CAN_ACTION alias Admin)
       if(CAN_ACTION && btn.classList.contains('btn-icon') && btn.dataset.json){
         const d=JSON.parse(decodeURIComponent(btn.dataset.json));
         form.reset();
         $('#form-action').value='update'; $('#form-id').value=d.id;
         
-        ['bulan','tahun','kebun_id','unit_id','stok_awal','mutasi_masuk','mutasi_keluar','dipakai','stok_akhir','krani_afdeling','catatan'].forEach(k=>{
+        ['bulan','tahun','kebun_id','stok_awal','mutasi_masuk','mutasi_keluar','dipakai','stok_akhir','krani_afdeling','catatan'].forEach(k=>{
           if($('#'+k)) $('#'+k).value = d[k] ?? '';
         });
+
+        // UPDATE UNIT DROPDOWN BASED ON KEBUN LALU SET VALUE
+        updateUnitDropdown(d.kebun_id, $('#unit_id'), d.unit_id);
 
         if(d.id_jenis_alat) {
             if($('#id_jenis_alat')) $('#id_jenis_alat').value = d.id_jenis_alat;
@@ -524,7 +557,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
         calc(); openModal();
       }
       
-      // Handle Delete (Hanya jika CAN_ACTION alias Admin)
       if(CAN_ACTION && btn.classList.contains('btn-icon') && btn.dataset.id && !btn.dataset.json){
         Swal.fire({title:'Hapus data?', text:'Tidak dapat dikembalikan', icon:'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Hapus'})
         .then(res=>{
@@ -559,7 +591,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   } // End if CAN_INPUT
 
-  // Exports (Updated with id_jenis_alat)
+  // Exports
   const getQs = () => new URLSearchParams({
       csrf_token:'<?= htmlspecialchars($CSRF) ?>',
       kebun_id:$('#f-kebun').value, 

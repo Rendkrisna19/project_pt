@@ -1,6 +1,7 @@
 <?php
 // pages/master_data.php
-// MODIFIKASI FULL: Fix No Polisi JS Config & Rendering
+// MODIFIKASI FULL: Tambah Relasi Kebun di Unit & Blok + Desain Input Outline + FONT POPPINS + LIVE SEARCH
+// [MODIFIKASI TAMBAHAN]: Chain Dropdown (Kebun -> Unit) & Fitur Bulk Input (Grouping Add) Blok Dynamic Rows
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) {
@@ -15,7 +16,11 @@ $db = new Database();
 $conn = $db->getConnection();
 
 // Ambil data master untuk dropdown
-$units  = $conn->query("SELECT id, nama_unit FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
+$kebun_list = $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
+
+// MODIFIKASI QUERY: Ambil kebun_id untuk relasi dropdown
+$units  = $conn->query("SELECT id, nama_unit, kebun_id FROM units ORDER BY nama_unit")->fetchAll(PDO::FETCH_ASSOC);
+
 $satuan = $conn->query("SELECT id, nama FROM md_satuan ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
 $pupuk  = $conn->query("SELECT id, nama FROM md_pupuk ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -24,14 +29,13 @@ include_once '../layouts/header.php';
 ?>
 
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-    body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+    /* FONT POPPINS */
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+    body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; }
     
-    /* Custom Scrollbar for Tabs */
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-    /* Tab Styling */
     .tab-btn {
         padding: 0.5rem 1rem;           
         font-size: 0.875rem;            
@@ -44,7 +48,7 @@ include_once '../layouts/header.php';
     }
 
     .tab-btn.active {
-        background-color: #0891b2;      /* cyan-600 */
+        background-color: #0891b2;      
         color: #ffffff;                 
         box-shadow: 0 4px 6px -1px rgba(8, 145, 178, 0.2);
         border-color: #0891b2;          
@@ -62,7 +66,6 @@ include_once '../layouts/header.php';
         background-color: #f1f5f9;      
     }
 
-    /* Table Styling */
     .table-head-th {
         padding: 0.75rem 1rem;          
         text-align: left;               
@@ -101,7 +104,7 @@ include_once '../layouts/header.php';
     <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
         <div id="tabs" class="flex gap-2 overflow-x-auto scrollbar-hide p-2 snap-x">
             <button data-entity="kebun" class="tab-btn active snap-start">Nama Kebun</button>
-            <button data-entity="unit" class="tab-btn snap-start">Unit/Devisi</button>
+            <button data-entity="unit" class="tab-btn snap-start">Unit/Afdeling</button>
             <button data-entity="rayon" class="tab-btn snap-start">Rayon</button>
             <button data-entity ="blok" class="tab-btn snap-start">Blok</button>
             <button data-entity="tahun_tanam" class="tab-btn snap-start">Tahun Tanam</button>
@@ -113,7 +116,7 @@ include_once '../layouts/header.php';
             <button data-entity="barang_gudang" class="tab-btn snap-start">Barang Gudang</button>
             <button data-entity="alat_panen" class="tab-btn snap-start">Alat Panen</button>
             <button data-entity="apl" class="tab-btn snap-start">APL</button>
-<button data-entity="jenis_pekerjaan_kertas_kerja" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pek. Kertas Kerja</button>
+            <button data-entity="jenis_pekerjaan_kertas_kerja" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pek. Kertas Kerja</button>
             <button data-entity="bibit_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Bibit MN</button>
             <button data-entity="bibit_pn" class="tab-btn snap-start">Bibit PN</button>
 
@@ -141,10 +144,19 @@ include_once '../layouts/header.php';
 
     <div id="blok-filter-bar" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 hidden fade-in">
         <h3 class="text-sm font-bold text-slate-700 mb-3 uppercase tracking-wide">Filter Data Blok</h3>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
+            <div class="md:col-span-1">
+                <label class="block text-xs font-semibold text-slate-500 mb-1.5">Kebun</label>
+                <select id="blok-filter-kebun" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 block p-2.5">
+                    <option value="">— Semua Kebun —</option>
+                    <?php foreach ($kebun_list as $k): ?>
+                        <option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="md:col-span-2">
-                <label class="block text-xs font-semibold text-slate-500 mb-1.5">Unit</label>
-                <select id="blok-filter-unit" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-2.5">
+                <label class="block text-xs font-semibold text-slate-500 mb-1.5">Unit / Afdeling</label>
+                <select id="blok-filter-unit" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 block p-2.5">
                     <option value="">— Semua Unit —</option>
                     <?php foreach ($units as $u): ?>
                         <option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option>
@@ -153,13 +165,13 @@ include_once '../layouts/header.php';
             </div>
             <div class="md:col-span-2">
                 <label class="block text-xs font-semibold text-slate-500 mb-1.5">Kode Blok (Cari)</label>
-                <input id="blok-filter-kode" type="text" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-2.5" placeholder="Contoh: A12">
+                <input id="blok-filter-kode" type="text" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 block p-2.5" placeholder="Contoh: A12">
             </div>
-            <div>
+            <div class="md:col-span-1">
                 <label class="block text-xs font-semibold text-slate-500 mb-1.5">Tahun Tanam</label>
-                <input id="blok-filter-tahun" type="number" min="1900" max="2100" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-2.5" placeholder="YYYY">
+                <input id="blok-filter-tahun" type="number" min="1900" max="2100" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 block p-2.5" placeholder="YYYY">
             </div>
-            <div class="md:col-span-5 flex justify-end gap-2 mt-2">
+            <div class="md:col-span-6 flex justify-end gap-2 mt-2">
                 <button id="blok-filter-reset" class="px-4 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:text-slate-800 transition-colors">Reset</button>
                 <button id="blok-filter-apply" class="px-4 py-2 text-sm font-medium text-white bg-slate-800 rounded-lg hover:bg-slate-900 transition-colors shadow-lg shadow-slate-800/20">Terapkan Filter</button>
             </div>
@@ -167,6 +179,16 @@ include_once '../layouts/header.php';
     </div>
 
     <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+        
+        <div class="p-4 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-center gap-4">
+            <h2 class="text-lg font-bold text-slate-800" id="table-title">Nama Kebun</h2>
+            
+            <div class="relative w-full md:w-80">
+                <input type="text" id="global-search" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-xl outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 block pl-10 p-2.5 transition-all" placeholder="Pencarian cepat...">
+                <svg class="w-4 h-4 absolute left-3.5 top-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+        </div>
+
         <div class="overflow-x-auto">
             <div class="max-h-[65vh] overflow-y-auto">
                 <table class="w-full text-left border-collapse">
@@ -185,7 +207,7 @@ include_once '../layouts/header.php';
             <div class="flex items-center gap-4">
                 <div class="flex items-center gap-2">
                     <span class="text-xs font-semibold text-slate-500 uppercase">Baris:</span>
-                    <select id="per-page" class="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-1.5">
+                    <select id="per-page" class="bg-white border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-cyan-500 focus:border-cyan-500 block p-1.5 outline-none">
                         <option>10</option>
                         <option selected>15</option>
                         <option>25</option>
@@ -203,7 +225,7 @@ include_once '../layouts/header.php';
     <div class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"></div>
     <div class="fixed inset-0 z-10 overflow-y-auto">
         <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-2xl border border-slate-100">
+            <div class="relative transform overflow-hidden rounded-2xl bg-white text-left shadow-2xl transition-all sm:my-8 sm:w-full sm:max-w-3xl border border-slate-100">
                 <div class="bg-white px-6 py-5 border-b border-slate-100 flex justify-between items-center">
                     <h3 class="text-lg font-bold leading-6 text-slate-800" id="modal-title">Tambah Data</h3>
                     <button id="btn-close" class="text-slate-400 hover:text-slate-600 transition-colors">
@@ -215,8 +237,10 @@ include_once '../layouts/header.php';
                     <input type="hidden" name="action" id="form-action">
                     <input type="hidden" name="entity" id="form-entity">
                     <input type="hidden" name="id" id="form-id">
+                    
                     <div id="form-fields" class="grid grid-cols-1 md:grid-cols-2 gap-5"></div>
-                    <div class="mt-8 flex items-center justify-end gap-3">
+                    
+                    <div class="mt-8 flex items-center justify-end gap-3 pt-5 border-t border-slate-100">
                         <button type="button" id="btn-cancel" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm ring-1 ring-inset ring-slate-300 hover:bg-slate-50 transition-all">Batal</button>
                         <button type="submit" class="rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-cyan-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-600 transition-all">Simpan Data</button>
                     </div>
@@ -236,9 +260,15 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentEntity = 'kebun';
   let page = 1, perPage = 15, total = 0, totalPages = 1;
   let clientCache = { entity: null, rows: [] };
-  const blokFilter = { unit_id: '', kode: '', tahun: '' };
+  let searchQuery = ''; 
+  let searchTimeout;
+  const blokFilter = { kebun_id: '', unit_id: '', kode: '', tahun: '' };
 
-  const OPTIONS_UNITS  = [<?php foreach ($units as $u){ echo "{value:{$u['id']},label:'".htmlspecialchars($u['nama_unit'],ENT_QUOTES)."'},"; } ?>];
+  const OPTIONS_KEBUN  = [<?php foreach ($kebun_list as $k){ echo "{value:{$k['id']},label:'".htmlspecialchars($k['nama_kebun'],ENT_QUOTES)."'},"; } ?>];
+  
+  // Array units dengan relasi kebun_id untuk JS
+  const OPTIONS_UNITS  = [<?php foreach ($units as $u){ echo "{value:{$u['id']},label:'".htmlspecialchars($u['nama_unit'],ENT_QUOTES)."', kebun_id: ".($u['kebun_id'] ?? 'null')."},"; } ?>];
+  
   const OPTIONS_SATUAN = [<?php foreach ($satuan as $s){ echo "{value:{$s['id']},label:'".htmlspecialchars($s['nama'],ENT_QUOTES)."'},"; } ?>];
   const OPTIONS_PUPUK  = [<?php foreach ($pupuk as $p){ echo "{value:{$p['id']},label:'".htmlspecialchars($p['nama'],ENT_QUOTES)."'},"; } ?>];
 
@@ -258,17 +288,22 @@ document.addEventListener('DOMContentLoaded', () => {
       {name:'nama_kebun', label:'Nama Kebun', type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
     ]},
-    unit: { title:'Unit/Devisi', table:['Nama Unit','Keterangan','Aksi'], fields:[
+    unit: { title:'Unit / Afdeling', table:['Kebun', 'Nama Unit', 'Keterangan', 'Aksi'], fields:[
+      {name:'kebun_id',   label:'Pilih Kebun', type:'select', options:OPTIONS_KEBUN, required:true},
       {name:'nama_unit',  label:'Nama Unit', type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
     ]},
     rayon:       { title:'Rayon',        table:['Nama Rayon','Aksi'],        fields:[{name:'nama', label:'Nama Rayon', type:'text', required:true}]},
-    blok: { title:'Blok', table:['Unit','Kode Blok','Tahun Tanam','Luas (Ha)','Aksi'], fields:[
-      {name:'unit_id', label:'Unit', type:'select', options:OPTIONS_UNITS, required:true},
-      {name:'kode',    label:'Kode Blok', type:'text', required:true},
+    
+    // Konfigurasi Blok dikembalikan ke text biasa HANYA untuk mode UPDATE (Edit)
+    blok: { title:'Blok', table:['Kebun', 'Unit / Afdeling', 'Kode Blok', 'Tahun Tanam', 'Luas (Ha)', 'Aksi'], fields:[
+      {name:'kebun_id',    label:'Pilih Kebun', type:'select', options:OPTIONS_KEBUN, required:true},
+      {name:'unit_id',     label:'Unit / Afdeling', type:'select', options:OPTIONS_UNITS, required:true},
+      {name:'kode',        label:'Kode Blok', type:'text', required:true},
       {name:'tahun_tanam', label:'Tahun Tanam', type:'number', min:1900, max:2100},
-      {name:'luas_ha', label:'Luas (Ha)', type:'number', step:'0.01', min:0}
+      {name:'luas_ha',     label:'Luas (Ha)', type:'number', step:'0.01', min:0}
     ]},
+
     tahun_tanam: { title:'Tahun Tanam', table:['Tahun','Keterangan','Aksi'], fields:[
       {name:'tahun',      label:'Tahun', type:'number', required:true, min:1900, max:2100},
       {name:'keterangan', label:'Keterangan', type:'text'}
@@ -294,7 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ]
     },
 
-    // --- MATERIAL & BARANG ---
     bahan_kimia: { title:'Bahan Kimia', table:['Kode','Nama Bahan','Satuan','Keterangan','Aksi'], fields:[
       {name:'kode',       label:'Kode Bahan', type:'text', required:true},
       {name:'nama_bahan', label:'Nama Bahan', type:'text', required:true},
@@ -305,7 +339,6 @@ document.addEventListener('DOMContentLoaded', () => {
       {name:'nama',      label:'Nama Pupuk', type:'text', required:true},
       {name:'satuan_id', label:'Satuan',     type:'select', options:OPTIONS_SATUAN}
     ]},
-    
     jenis_kendaraan: { title:'Jenis Kendaraan', table:['Nama Jenis','Keterangan','Aksi'], fields:[
       {name:'nama',       label:'Nama Jenis Kendaraan', type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
@@ -320,14 +353,12 @@ document.addEventListener('DOMContentLoaded', () => {
       {name:'satuan',     label:'Satuan',      type:'text'}, 
       {name:'keterangan', label:'Keterangan',  type:'text'}
     ]},
-
     alat_panen:{ title:'Jenis Alat Panen', table:['Nama','Keterangan','Aksi'], fields:[
       {name:'nama', label:'Nama', type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
     ]},
     apl:         { title:'APL',          table:['Nama APL','Aksi'],          fields:[{name:'nama', label:'Nama APL', type:'text', required:true}]},
 
-    // --- BIBIT ---
     bibit_tm: { title: 'Bibit TM', table: ['Kode', 'Nama Bibit TM', 'Aktif', 'Aksi'], fields: [
         { name:'kode',      label:'Kode (opsional)', type:'text' },
         { name:'nama',      label:'Nama Bibit TM',   type:'text', required:true },
@@ -339,13 +370,11 @@ document.addEventListener('DOMContentLoaded', () => {
         { name:'is_active', label:'Aktif?',          type:'checkbox' }
     ]},
 
-    // --- PEKERJAAN ---
     jenis_pekerjaan: { title:'Jenis Pekerjaan', table:['Nama','Keterangan','Aksi'], fields:[
       {name:'nama',       label:'Nama',       type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
     ]},
     
-    // --- PEMELIHARAAN ---
     pem_tm:  ENTITY_PEM('Pemeliharaan TM'),
     pem_tu:  ENTITY_PEM('Pemeliharaan TU'),
     pem_tk:  ENTITY_PEM('Pemeliharaan TK'),
@@ -355,7 +384,6 @@ document.addEventListener('DOMContentLoaded', () => {
     pem_pn:  ENTITY_PEM('Pemeliharaan PN'),
     pem_mn:  ENTITY_PEM('Pemeliharaan MN'),
 
-    // --- LAINNYA ---
     satuan: { title:'Satuan', table:['Nama','Aksi'], fields:[{name:'nama', label:'Nama Satuan (Kg/Liter/..)',  type:'text', required:true}]},
     fisik:  { title:'Fisik',  table:['Nama','Aksi'], fields:[{name:'nama', label:'Nama Fisik (Ha/Pkk/Unit/..)', type:'text', required:true}]},
     tenaga: { title:'Tenaga', table:['Kode','Nama','Aksi'], fields:[
@@ -366,7 +394,6 @@ document.addEventListener('DOMContentLoaded', () => {
       {name:'kode', label:'Kode (TS/TP)', type:'text', required:true},
       {name:'nama', label:'Nama', type:'text', required:true}
     ]},
-    // [ADDED: NO POLISI CONFIG]
     no_polisi: { 
         title: 'No Polisi Kendaraan', 
         table: ['No Polisi', 'Keterangan', 'Aksi'], 
@@ -385,6 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const close = () => { modal.classList.add('hidden');    modal.classList.remove('flex'); };
 
   function renderHead(entity) {
+    document.getElementById('table-title').textContent = ENTITIES[entity].title; // Update Title Text
     thead.innerHTML = '';
     ENTITIES[entity].table.forEach((h, i) => {
       const th = document.createElement('th');
@@ -402,7 +430,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const label = `<label class="block text-sm font-semibold text-slate-700 mb-2">${f.label}${f.required?' <span class="text-red-500">*</span>':''}</label>`;
     let control = '';
-    const baseClass = "w-full rounded-lg border-slate-300 shadow-sm focus:border-cyan-500 focus:ring-cyan-500 text-sm py-2.5 px-3";
+    
+    const baseClass = "w-full rounded-lg border border-slate-300 bg-white outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 focus:border-cyan-500 text-sm py-2.5 px-3 transition-all";
 
     if (f.type === 'select') {
       const opts = (f.options || []).map(o => `<option value="${o.value}">${o.label}</option>`).join('');
@@ -411,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
       control = `<textarea id="${f.name}" name="${f.name}" rows="3" class="${baseClass}" ${f.required?'required':''}></textarea>`;
     } else if (f.type === 'checkbox') {
       control = `<label class="inline-flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" id="${f.name}" name="${f.name}" class="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500">
+        <input type="checkbox" id="${f.name}" name="${f.name}" class="h-5 w-5 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500">
         <span class="text-sm text-slate-700 font-medium">Status Aktif</span>
       </label>`;
     } else {
@@ -428,14 +457,126 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('form-id').value      = data.id || '';
     const holder = document.getElementById('form-fields');
     holder.innerHTML = '';
-    ENTITIES[entity].fields.forEach(f => {
-      const el = inputEl(f); holder.appendChild(el);
-      const val = (data && data[f.name] != null) ? data[f.name] : null;
-      const inputElement = holder.querySelector(`#${f.name}`);
-      if (!inputElement) return;
-      if (f.type === 'checkbox') inputElement.checked = String(val ?? '1') === '1';
-      else inputElement.value = (val ?? '');
-    });
+
+    // ===============================================================
+    // CUSTOM UI: KHUSUS UNTUK TAMBAH DATA BLOK (BULK INSERT ROWS)
+    // ===============================================================
+    if (entity === 'blok' && !data.id) {
+        holder.innerHTML = `
+            <div class="col-span-full bg-slate-50 p-4 rounded-xl border border-slate-200 mb-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Pilih Kebun <span class="text-red-500">*</span></label>
+                        <select id="kebun_id" name="kebun_id" class="w-full rounded-lg border border-slate-300 bg-white outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 text-sm py-2.5 px-3" required>
+                            <option value="">— Pilih Kebun —</option>
+                            ${OPTIONS_KEBUN.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-slate-700 mb-2">Unit / Afdeling <span class="text-red-500">*</span></label>
+                        <select id="unit_id" name="unit_id" class="w-full rounded-lg border border-slate-300 bg-white outline outline-1 outline-slate-200 focus:outline-2 focus:outline-cyan-500 focus:ring-cyan-500 text-sm py-2.5 px-3" required>
+                            <option value="">— Pilih Kebun Dulu —</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-span-full">
+                <h4 class="text-sm font-bold text-slate-800 mb-3 border-b pb-2">Detail Blok</h4>
+                <div id="blok-rows-container" class="space-y-3"></div>
+                
+                <button type="button" id="btn-add-row" class="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-slate-800 text-white text-sm font-medium rounded-lg hover:bg-slate-700 transition shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Tambah Baris Blok
+                </button>
+            </div>
+        `;
+
+        // Event Listener Chain Dropdown
+        const kebunSelect = holder.querySelector('#kebun_id');
+        const unitSelect = holder.querySelector('#unit_id');
+        
+        kebunSelect.addEventListener('change', e => {
+            const kId = e.target.value;
+            unitSelect.innerHTML = '<option value="">— Pilih Unit / Afdeling —</option>';
+            OPTIONS_UNITS.forEach(u => {
+                if (!kId || !u.kebun_id || String(u.kebun_id) === String(kId)) {
+                    unitSelect.innerHTML += `<option value="${u.value}">${u.label}</option>`;
+                }
+            });
+        });
+
+        // Dynamic Rows Logic
+        const container = holder.querySelector('#blok-rows-container');
+        let rowCount = 0;
+
+        const addRow = () => {
+            rowCount++;
+            const rowDiv = document.createElement('div');
+            rowDiv.className = "flex flex-col md:flex-row gap-3 items-end bg-white p-4 rounded-xl border border-slate-200 shadow-sm relative group";
+            rowDiv.innerHTML = `
+                <div class="flex-1 w-full">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Kode Blok <span class="text-red-500">*</span></label>
+                    <input type="text" name="kode[]" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-cyan-500 focus:ring-cyan-500 outline-none" required placeholder="Cth: A${rowCount}">
+                </div>
+                <div class="flex-1 w-full">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Tahun Tanam</label>
+                    <input type="number" name="tahun_tanam[]" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-cyan-500 focus:ring-cyan-500 outline-none" placeholder="YYYY" min="1900" max="2100">
+                </div>
+                <div class="flex-1 w-full">
+                    <label class="block text-xs font-semibold text-slate-500 mb-1">Luas (Ha)</label>
+                    <input type="number" name="luas_ha[]" step="0.01" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-cyan-500 focus:ring-cyan-500 outline-none" placeholder="0.00">
+                </div>
+                <button type="button" class="btn-remove-row p-2.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors shrink-0" title="Hapus Baris">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                </button>
+            `;
+            
+            rowDiv.querySelector('.btn-remove-row').addEventListener('click', () => {
+                if(container.children.length > 1) rowDiv.remove();
+                else Swal.fire('Perhatian', 'Minimal harus ada 1 baris blok.', 'warning');
+            });
+            
+            container.appendChild(rowDiv);
+        };
+
+        // Initialize First Row
+        addRow();
+        holder.querySelector('#btn-add-row').addEventListener('click', addRow);
+
+    } else {
+        // ===============================================================
+        // STANDARD RENDER (Untuk Edit Blok, ATAU Create/Edit Master Lain)
+        // ===============================================================
+        ENTITIES[entity].fields.forEach(f => {
+            const el = inputEl(f); holder.appendChild(el);
+            const val = (data && data[f.name] != null) ? data[f.name] : null;
+            const inputElement = holder.querySelector(`#${f.name}`);
+            if (!inputElement) return;
+            if (f.type === 'checkbox') inputElement.checked = String(val ?? '1') === '1';
+            else inputElement.value = (val ?? '');
+        });
+
+        // Event Listener Chain Dropdown untuk Edit Blok atau Entitas Unit
+        if (entity === 'blok' || entity === 'unit') {
+            const kebunSelect = holder.querySelector('#kebun_id');
+            const unitSelect = holder.querySelector('#unit_id');
+
+            if (kebunSelect && unitSelect) {
+                const updateUnitOptions = (kId, selectedUnitId = '') => {
+                    unitSelect.innerHTML = '<option value="">— Pilih Unit / Afdeling —</option>';
+                    OPTIONS_UNITS.forEach(u => {
+                        if (!kId || !u.kebun_id || String(u.kebun_id) === String(kId)) {
+                            const sel = String(u.value) === String(selectedUnitId) ? 'selected' : '';
+                            unitSelect.innerHTML += `<option value="${u.value}" ${sel}>${u.label}</option>`;
+                        }
+                    });
+                };
+                kebunSelect.addEventListener('change', e => updateUnitOptions(e.target.value));
+                updateUnitOptions(data.kebun_id || kebunSelect.value, data.unit_id || '');
+            }
+        }
+    }
     open();
   }
 
@@ -467,14 +608,14 @@ document.addEventListener('DOMContentLoaded', () => {
           : '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">Nonaktif</span>';
         return td(cell(r.kode)) + td(cell(r.nama)) + td(badge);
       
-      // New Entities
       case 'jenis_kendaraan': return td(cell(r.nama)) + td(cell(r.keterangan));
       case 'jenis_bahan_bakar_pelumas': return td(cell(r.nama)) + td(cell(r.satuan)) + td(cell(r.keterangan));
       case 'barang_gudang': return td(cell(r.nama)) + td(cell(r.satuan)) + td(cell(r.keterangan));
 
-      case 'unit': return td(cell(r.nama_unit)) + td(cell(r.keterangan));
+      case 'unit': return td(cell(r.nama_kebun)) + td(cell(r.nama_unit)) + td(cell(r.keterangan));
+      case 'blok': return td(cell(r.nama_kebun)) + td(cell(r.nama_unit)) + td(cell(r.kode)) + td(cell(r.tahun_tanam)) + td(cell(r.luas_ha));
+      
       case 'rayon': return td(cell(r.nama));
-      case 'blok': return td(cell(r.nama_unit)) + td(cell(r.kode)) + td(cell(r.tahun_tanam)) + td(cell(r.luas_ha));
       case 'tahun_tanam': return td(cell(r.tahun)) + td(cell(r.keterangan));
       case 'pupuk': return td(cell(r.nama)) + td(cell(r.nama_satuan||''));
       case 'alat_panen': return td(cell(r.nama)) + td(cell(r.keterangan));
@@ -485,7 +626,6 @@ document.addEventListener('DOMContentLoaded', () => {
           ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aktif</span>' 
           : '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">Nonaktif</span>';
         
-        // Tampilan Kategori dengan warna berbeda
         let katColor = 'bg-gray-100 text-gray-800';
         if(r.kategori === 'FISIK') katColor = 'bg-blue-100 text-blue-800';
         if(r.kategori === 'LUAS') katColor = 'bg-green-100 text-green-800';
@@ -495,12 +635,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         return td(cell(r.urutan)) + td(cell(r.nama)) + td(cell(r.satuan)) + td(katBadge) + td(badgeJP);
       
-      // Lainnya
       case 'satuan': case 'fisik': case 'jabatan': case 'asal_gudang': return td(cell(r.nama));
       case 'tenaga': case 'mobil': return td(cell(r.kode)) + td(cell(r.nama));
       case 'keterangan': return td(cell(r.keterangan));
-      
-      // [ADDED: NO POLISI RENDER]
       case 'no_polisi': return td(cell(r.no_polisi)) + td(cell(r.keterangan));
       
       case 'pem_tm': case 'pem_tu': case 'pem_tk': case 'pem_tbm1': case 'pem_tbm2': 
@@ -522,7 +659,6 @@ document.addEventListener('DOMContentLoaded', () => {
       </tr>`).join('');
   }
 
-  // --- LOGIC FETCH & PAGINATION ---
   function updatePageInfo(){
     const start = total ? ((page - 1) * perPage) + 1 : 0;
     const end   = Math.min(page * perPage, total);
@@ -552,6 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function applyBlokFilterClient(rows){
     let out = rows;
+    if (blokFilter.kebun_id) out = out.filter(r => String(r.kebun_id||'') === String(blokFilter.kebun_id));
     if (blokFilter.unit_id) out = out.filter(r => String(r.unit_id||'') === String(blokFilter.unit_id));
     if (blokFilter.kode){
       const kw = blokFilter.kode.toLowerCase();
@@ -568,11 +705,14 @@ document.addEventListener('DOMContentLoaded', () => {
     fd.append('entity',entity);
     fd.append('page', String(page));
     fd.append('per_page', String(perPage));
+    
+    if (searchQuery) fd.append('q', searchQuery);
+
     if (entity === 'blok'){
-      fd.append('unit_id', blokFilter.unit_id || '');
-      fd.append('kode',    blokFilter.kode    || '');
-      fd.append('tahun',   blokFilter.tahun   || '');
-      fd.append('filters', JSON.stringify(blokFilter));
+      fd.append('kebun_id', blokFilter.kebun_id || '');
+      fd.append('unit_id',  blokFilter.unit_id || '');
+      fd.append('kode',     blokFilter.kode    || '');
+      fd.append('tahun',    blokFilter.tahun   || '');
     }
 
     return fetch('master_data_crud.php', { method:'POST', body:fd })
@@ -608,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tbody.innerHTML = `<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-slate-400">Memuat data...</td></tr>`;
     $('#page-info').textContent = 'Memuat...'; $('#pager').innerHTML = '';
 
-    if (clientCache.entity === entity && clientCache.rows.length){
+    if (clientCache.entity === entity && clientCache.rows.length && !searchQuery){
       let list = clientCache.rows;
       if (entity === 'blok') list = applyBlokFilterClient(list);
       total = list.length; totalPages = Math.max(1, Math.ceil(total / perPage));
@@ -618,49 +758,81 @@ document.addEventListener('DOMContentLoaded', () => {
       updatePageInfo(); renderPager();
       return;
     }
+
     loadServer(entity).catch(err => {
       console.error('Load error:', err);
       tbody.innerHTML = `<tr><td colspan="${ENTITIES[entity].table.length}" class="py-10 text-center text-rose-500 bg-rose-50 rounded-lg">Gagal memuat data. ${err.message||''}</td></tr>`;
     });
   }
 
-  // Event Listeners
+  // --- LIVE SEARCH EVENT ---
+  document.getElementById('global-search').addEventListener('input', (e) => {
+    searchQuery = e.target.value.trim();
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+        page = 1;
+        clientCache = { entity: null, rows: [] }; 
+        renderHeadAndLoad(currentEntity);
+    }, 400); 
+  });
+
+  // ===== FILTER CHAIN DROPDOWN =====
+  const filterKebun = document.getElementById('blok-filter-kebun');
+  const filterUnit = document.getElementById('blok-filter-unit');
+  
+  if (filterKebun && filterUnit) {
+      filterKebun.addEventListener('change', (e) => {
+          const kId = e.target.value;
+          filterUnit.innerHTML = '<option value="">— Semua Unit —</option>';
+          OPTIONS_UNITS.forEach(u => {
+              if (!kId || !u.kebun_id || String(u.kebun_id) === String(kId)) {
+                  filterUnit.innerHTML += `<option value="${u.value}">${u.label}</option>`;
+              }
+          });
+      });
+  }
+
   document.querySelectorAll('#tabs button').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentEntity = btn.dataset.entity; page = 1;
-      // Reset filter visual only
+      
       if (currentEntity === 'blok'){
+        document.getElementById('blok-filter-kebun').value = blokFilter.kebun_id || '';
+        if(filterKebun) filterKebun.dispatchEvent(new Event('change'));
         document.getElementById('blok-filter-unit').value  = blokFilter.unit_id || '';
         document.getElementById('blok-filter-kode').value  = blokFilter.kode    || '';
         document.getElementById('blok-filter-tahun').value = blokFilter.tahun   || '';
       }
+
+      searchQuery = '';
+      document.getElementById('global-search').value = '';
+
       renderHeadAndLoad(currentEntity);
     });
   });
 
-  document.getElementById('per-page').addEventListener('change', e => {
-    perPage = parseInt(e.target.value) || 15; page = 1; renderHeadAndLoad(currentEntity);
-  });
+  document.getElementById('per-page').addEventListener('change', e => { perPage = parseInt(e.target.value) || 15; page = 1; renderHeadAndLoad(currentEntity); });
   document.getElementById('btn-add').addEventListener('click', () => renderForm(currentEntity));
   document.getElementById('btn-close').onclick = close;
   document.getElementById('btn-cancel').onclick = close;
 
-  // Filter Event
   document.getElementById('blok-filter-apply').addEventListener('click', (e)=>{ e.preventDefault();
-    blokFilter.unit_id = document.getElementById('blok-filter-unit').value.trim();
-    blokFilter.kode    = document.getElementById('blok-filter-kode').value.trim();
-    blokFilter.tahun   = document.getElementById('blok-filter-tahun').value.trim();
+    blokFilter.kebun_id = document.getElementById('blok-filter-kebun').value.trim();
+    blokFilter.unit_id  = document.getElementById('blok-filter-unit').value.trim();
+    blokFilter.kode     = document.getElementById('blok-filter-kode').value.trim();
+    blokFilter.tahun    = document.getElementById('blok-filter-tahun').value.trim();
     page=1; clientCache={entity:null,rows:[]}; renderHeadAndLoad('blok');
   });
   document.getElementById('blok-filter-reset').addEventListener('click', (e)=>{ e.preventDefault();
-    blokFilter.unit_id=''; blokFilter.kode=''; blokFilter.tahun='';
+    blokFilter.kebun_id=''; blokFilter.unit_id=''; blokFilter.kode=''; blokFilter.tahun='';
+    document.getElementById('blok-filter-kebun').value='';
+    if(filterKebun) filterKebun.dispatchEvent(new Event('change'));
     document.getElementById('blok-filter-unit').value=''; document.getElementById('blok-filter-kode').value=''; document.getElementById('blok-filter-tahun').value='';
     page=1; clientCache={entity:null,rows:[]}; renderHeadAndLoad('blok');
   });
 
-  // Edit/Delete Delegation
   document.body.addEventListener('click', e => {
     const editBtn = e.target.closest('.btn-edit');
     const delBtn  = e.target.closest('.btn-del');
@@ -686,14 +858,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Submit Form
   document.getElementById('crud-form').addEventListener('submit', e => {
     e.preventDefault();
     const fd = new FormData(e.target);
     const entity = fd.get('entity');
     
-    // Checkbox handling
-    ENTITIES[entity].fields.forEach(f=>{
+    ENTITIES[entity]?.fields?.forEach(f=>{
       if (f.type === 'checkbox') fd.set(f.name, e.target.querySelector(`[name="${f.name}"]`).checked ? '1' : '0');
     });
 
@@ -702,11 +872,9 @@ document.addEventListener('DOMContentLoaded', () => {
       .then(j=>{
         if (j.success){ Swal.fire('Berhasil', 'Data disimpan', 'success'); close(); clientCache={entity:null,rows:[]}; page=1; renderHeadAndLoad(entity); }
         else Swal.fire('Gagal', j.message||'Error', 'error');
-      })
-      .catch(err=>Swal.fire('Error', err.message, 'error'));
+      }).catch(err=>Swal.fire('Error', err.message, 'error'));
   });
 
-  // Initial
   renderHeadAndLoad(currentEntity);
 });
 </script>

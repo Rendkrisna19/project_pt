@@ -44,6 +44,20 @@ try {
       header('Content-Type: application/json; charset=utf-8');
       $type = qstr($_GET['type'] ?? '');
       $unit_id = (isset($_GET['unit_id']) && $_GET['unit_id']!=='') ? (int)$_GET['unit_id'] : null;
+      $kebun_id = (isset($_GET['kebun_id']) && $_GET['kebun_id']!=='') ? (int)$_GET['kebun_id'] : null;
+
+      // [MOD] Endpoint baru untuk mengambil Unit berdasarkan Kebun
+      if ($type === 'unit') {
+          $data = [];
+          if ($kebun_id) {
+              try {
+                  $st = $conn->prepare("SELECT id, nama_unit FROM units WHERE kebun_id=:k ORDER BY nama_unit");
+                  $st->execute([':k'=>$kebun_id]);
+                  $data = $st->fetchAll(PDO::FETCH_ASSOC);
+              } catch(Throwable $e){ error_log($e->getMessage()); }
+          }
+          echo json_encode(['success'=>true,'data'=>$data]); exit;
+      }
 
       if ($type === 'blok') {
         $data = [];
@@ -88,6 +102,15 @@ try {
   // --- Fetch Masters ---
   $units  = $conn->query("SELECT id, nama_unit FROM units ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
   $kebuns = $conn->query("SELECT id, kode, nama_kebun FROM md_kebun ORDER BY nama_kebun")->fetchAll(PDO::FETCH_ASSOC);
+  
+  // [MOD] Menyiapkan Filter Dinamis Unit Khusus untuk Pencarian
+  $unitFilterQuery = "SELECT id, nama_unit FROM units";
+  if ($f_kebun_id !== '') {
+      $unitFilterQuery .= " WHERE kebun_id = " . (int)$f_kebun_id;
+  }
+  $unitFilterQuery .= " ORDER BY nama_unit ASC";
+  try { $units_filter = $conn->query($unitFilterQuery)->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $units_filter = []; }
+
   try { $pupuks = $conn->query("SELECT nama FROM md_pupuk WHERE nama IS NOT NULL AND nama<>'' ORDER BY nama")->fetchAll(PDO::FETCH_COLUMN); } catch (Throwable $e) { $pupuks = []; }
   try { $tahunTanamList = $conn->query("SELECT id, tahun, COALESCE(keterangan,'') AS ket FROM md_tahun_tanam ORDER BY tahun DESC")->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) { $tahunTanamList = []; }
   try { $rayons = $conn->query("SELECT id, nama FROM md_rayon ORDER BY nama")->fetchAll(PDO::FETCH_ASSOC); } catch (Throwable $e) { $rayons = []; }
@@ -366,15 +389,6 @@ if(!isset($_GET['fetch_table'])) {
         <input type="date" id="f_tanggal" class="i-input filter-input" value="<?= htmlspecialchars($f_tanggal) ?>">
     </div>
     <div>
-        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit</label>
-        <select id="f_unit_id" class="i-select filter-input">
-            <option value="">Semua Unit</option>
-            <?php foreach($units as $u): ?>
-                <option value="<?= $u['id'] ?>" <?= (int)$f_unit_id===$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
-            <?php endforeach; ?>
-        </select>
-    </div>
-    <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Kebun</label>
         <select id="f_kebun_id" class="i-select filter-input">
             <option value="">Semua Kebun</option>
@@ -383,6 +397,16 @@ if(!isset($_GET['fetch_table'])) {
             <?php endforeach; ?>
         </select>
     </div>
+    <div>
+        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit</label>
+        <select id="f_unit_id" class="i-select filter-input">
+            <option value="">Semua Unit</option>
+            <?php foreach($units_filter as $u): ?>
+                <option value="<?= $u['id'] ?>" <?= (int)$f_unit_id===$u['id'] ? 'selected' : '' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
+            <?php endforeach; ?>
+        </select>
+    </div>
+    
     <div>
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Jenis Pupuk</label>
         <select id="f_jenis" class="i-select filter-input">
@@ -555,7 +579,7 @@ if(!isset($_GET['fetch_table'])) {
                 <select id="rayon_id_angkutan" name="rayon_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit Tujuan *</label>
-                <select name="unit_tujuan_id" id="unit_tujuan_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+                <select name="unit_tujuan_id" id="unit_tujuan_id" class="i-select" required><option value="">— Pilih Kebun Dulu —</option></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Gudang Asal *</label>
                 <select name="gudang_asal_id" id="gudang_asal_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select>
@@ -574,11 +598,11 @@ if(!isset($_GET['fetch_table'])) {
 
       <div id="group-menabur" class="<?= $tab==='menabur'?'':'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
-                <select name="unit_id" id="unit_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
-            </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Kebun</label>
                 <select id="kebun_id_menabur" name="kebun_id" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebuns as $k): ?><option value="<?= (int)$k['id'] ?>" data-kode="<?= $k['kode'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
+                <select name="unit_id" id="unit_id" class="i-select" required><option value="">— Pilih Kebun Dulu —</option></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Blok *</label>
                 <select name="blok" id="blok" class="i-select" required><option value="">— Pilih Unit Dulu —</option></select>
@@ -628,12 +652,55 @@ document.addEventListener('DOMContentLoaded', () => {
     const $ = s => document.querySelector(s);
     const $$ = s => document.querySelectorAll(s);
 
+    // --- GLOBAL AJAX UTILS UNTUK CHAIN DROPDOWN ---
+    async function loadJSON(url) { try{ const r=await fetch(url); return await r.json();}catch(e){return null;} }
+    
+    function fillSelect(el, list, ph=' Pilih ', valProp='value', textProp='text'){
+        if(!el)return; el.innerHTML='';
+        const d=document.createElement('option'); d.value=''; d.textContent=ph; el.appendChild(d);
+        (list||[]).forEach(v=>{
+            const op=document.createElement('option');
+            if (typeof v === 'object' && v !== null) {
+                op.value = v[valProp]; op.textContent = v[textProp];
+            } else {
+                op.value = v; op.textContent = v;
+            }
+            el.appendChild(op);
+        });
+    }
+
+    async function refreshUnit(kebunId, selectEl, selectedVal = '', placeholder='— Pilih Unit —') {
+        if(!selectEl) return;
+        if(!kebunId) { selectEl.innerHTML=`<option value=""> Pilih Kebun Dulu </option>`; return; }
+        const j = await loadJSON(`?ajax=options&type=unit&kebun_id=${kebunId}`);
+        const list = (j?.success && Array.isArray(j.data)) ? j.data : [];
+        fillSelect(selectEl, list, placeholder, 'id', 'nama_unit');
+        if (selectedVal) selectEl.value = selectedVal;
+    }
+
+    async function refreshBlok(unitId, selectEl, selectedVal = ''){
+        if(!selectEl) return;
+        if(!unitId){ selectEl.innerHTML='<option value=""> Pilih Unit Dulu </option>'; return; }
+        const j = await loadJSON(`?ajax=options&type=blok&unit_id=${unitId}`);
+        const list = (j?.success && Array.isArray(j.data)) ? j.data : [];
+        fillSelect(selectEl, list, ' Pilih Blok ');
+        if (selectedVal) selectEl.value = selectedVal;
+    }
+
     // --- LIVE FILTER LOGIC (NO RELOAD) ---
     const filterInputs = $$('.filter-input');
-    filterInputs.forEach(el => el.addEventListener('change', () => fetchData(1)));
+    filterInputs.forEach(el => {
+        if (el.id === 'f_kebun_id') {
+            el.addEventListener('change', async (e) => {
+                await refreshUnit(e.target.value, $('#f_unit_id'), '', 'Semua Unit');
+                fetchData(1);
+            });
+        } else {
+            el.addEventListener('change', () => fetchData(1));
+        }
+    });
 
     async function fetchData(page = 1) {
-        // Ambil nilai filter
         const tab = $('#f_tab').value;
         const tahun = $('#f_tahun').value;
         const bulan = $('#f_bulan').value;
@@ -643,13 +710,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const perPage = $('#f_per_page').value;
         const aplElement = $('#f_apl_id');
         const apl = aplElement ? aplElement.value : ''; 
-        
         const ket = $('#f_keterangan_id').value;
         const tanggal = $('#f_tanggal').value;
 
-        // Bangun URL
         const params = new URLSearchParams({
-            fetch_table: 1, // Trigger partial load
+            fetch_table: 1, 
             tab: tab,
             tahun: tahun,
             bulan: bulan,
@@ -663,61 +728,49 @@ document.addEventListener('DOMContentLoaded', () => {
             tanggal: tanggal,
         });
 
-        // Update URL Browser (History)
         const newUrl = `${window.location.pathname}?${params.toString()}`.replace('fetch_table=1&', '');
         window.history.pushState({}, '', newUrl);
 
-        // Update Link Export
         $('#btn-excel').href = `cetak/pemupukan_excel.php?${params.toString()}`;
         $('#btn-pdf').href = `cetak/pemupukan_pdf.php?${params.toString()}`;
 
-        // Fetch HTML
         try {
             const res = await fetch(`?${params.toString()}`);
             if (!res.ok) throw new Error('Network response error');
             const html = await res.text();
-            
-            // Ganti konten tabel
             $('#table-wrapper').innerHTML = html;
         } catch (err) {
             console.error('Fetch error:', err);
         }
     }
 
-    // Global function agar bisa dipanggil tombol Pagination
     window.changePage = (p) => fetchData(p);
 
 
     // --- UTILS & MODAL LOGIC (CRUD) ---
-    // Hanya aktif jika user punya izin input
     if (CAN_INPUT) {
-        async function loadJSON(url) { try{ const r=await fetch(url); return await r.json();}catch(e){return null;} }
-        function fillSelect(el, list, ph='— Pilih —'){
-            if(!el)return; el.innerHTML='';
-            const d=document.createElement('option'); d.value=''; d.textContent=ph; el.appendChild(d);
-            (list||[]).forEach(v=>{
-                const op=document.createElement('option'); op.value=v; op.textContent=v; el.appendChild(op);
-            });
-        }
         
-        // Refresh Blok Logic
-        async function refreshBlok(){
-            const uid = $('#unit_id')?.value || '';
-            const sel = $('#blok');
-            if(!sel) return;
-            if(!uid){ sel.innerHTML='<option value="">— Pilih Unit Dulu —</option>'; return; }
-            const j = await loadJSON(`?ajax=options&type=blok&unit_id=${uid}`);
-            const list = (j?.success && Array.isArray(j.data)) ? j.data : [];
-            fillSelect(sel, list, '— Pilih Blok —');
-        }
-        $('#unit_id')?.addEventListener('change', refreshBlok);
-
         function syncKebunKode(idSel, idHid){
             const sel = document.getElementById(idSel);
             const hid = document.getElementById(idHid);
             if(sel && hid) hid.value = sel.options[sel.selectedIndex]?.dataset?.kode || '';
         }
-        $('#kebun_id_angkutan')?.addEventListener('change', ()=>syncKebunKode('kebun_id_angkutan','kebun_kode_angkutan'));
+
+        // --- CHAIN EVENT LISTENER UNTUK FORM TAMBAH/EDIT ---
+        $('#kebun_id_angkutan')?.addEventListener('change', async (e)=>{
+            syncKebunKode('kebun_id_angkutan','kebun_kode_angkutan');
+            await refreshUnit(e.target.value, $('#unit_tujuan_id'), '', '— Pilih Unit —');
+        });
+
+        $('#kebun_id_menabur')?.addEventListener('change', async (e)=>{
+            await refreshUnit(e.target.value, $('#unit_id'), '', '— Pilih Unit —');
+            if($('#blok')) $('#blok').innerHTML = '<option value="">— Pilih Unit Dulu —</option>';
+        });
+
+        $('#unit_id')?.addEventListener('change', async (e)=>{
+            await refreshBlok(e.target.value, $('#blok'));
+        });
+
 
         const modal = $('#crud-modal'), form = $('#crud-form'), title = $('#modal-title');
         const open = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); }
@@ -749,7 +802,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 $('#form-action').value='store'; $('#form-id').value=''; $('#form-tab').value=tab;
                 title.textContent = 'Tambah Data';
                 toggleGroup(tab);
-                if(tab==='menabur'){ refreshBlok(); if(ttSel)ttSel.dispatchEvent(new Event('change')); }
+                
+                // Set default form kosong pada rantai
+                if(tab==='menabur'){ 
+                    $('#kebun_id_menabur').value = '';
+                    $('#unit_id').innerHTML = '<option value="">— Pilih Kebun Dulu —</option>';
+                    $('#blok').innerHTML = '<option value="">— Pilih Unit Dulu —</option>';
+                    if(ttSel)ttSel.dispatchEvent(new Event('change')); 
+                } else if(tab==='angkutan') {
+                    $('#kebun_id_angkutan').value = '';
+                    $('#unit_tujuan_id').innerHTML = '<option value="">— Pilih Kebun Dulu —</option>';
+                }
+
                 open();
             });
         }
@@ -772,9 +836,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 toggleGroup(tab);
 
                 if(tab==='angkutan'){
-                    $('#kebun_id_angkutan').value = row.kebun_id||''; syncKebunKode('kebun_id_angkutan','kebun_kode_angkutan');
+                    $('#kebun_id_angkutan').value = row.kebun_id||''; 
+                    syncKebunKode('kebun_id_angkutan','kebun_kode_angkutan');
+                    // Tunggu load list unit dari kebun yang terpilih, lalu set nilai Unit Tujuan
+                    await refreshUnit(row.kebun_id, $('#unit_tujuan_id'), row.unit_tujuan_id||'', '— Pilih Unit —');
+
                     $('#rayon_id_angkutan').value = row.rayon_id||'';
-                    $('#unit_tujuan_id').value = row.unit_tujuan_id||'';
                     $('#gudang_asal_id').value = row.gudang_asal_id||'';
                     $('#tanggal_angkutan').value = row.tanggal||'';
                     $('#jenis_pupuk_angkutan').value = row.jenis_pupuk||'';
@@ -782,10 +849,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     $('#no_spb_angkutan').value = row.no_spb||'';
                     $('#keterangan_id_angkutan').value = row.keterangan_id||'';
                 } else {
-                    $('#unit_id').value = row.unit_id||'';
-                    await refreshBlok();
-                    $('#blok').value = row.blok||'';
                     $('#kebun_id_menabur').value = row.kebun_id||'';
+                    // Load unit sesuai kebun, kemudian load blok sesuai unit secara asinkron (berurutan)
+                    await refreshUnit(row.kebun_id, $('#unit_id'), row.unit_id||'', '— Pilih Unit —');
+                    await refreshBlok(row.unit_id, $('#blok'), row.blok||'');
+
                     $('#rayon_id_menabur').value = row.rayon_id||'';
                     $('#apl_id').value = row.apl_id||'';
                     $('#tanggal_menabur').value = row.tanggal||'';

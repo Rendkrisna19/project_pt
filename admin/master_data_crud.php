@@ -1,6 +1,7 @@
 <?php
 // master_data_crud.php
-// MODIFIED: Removed (Mingguan, SAP, Kode Akt, Anggaran) + Added (Kendaraan, BBM/Pelumas)
+// MODIFIKASI FULL: Penyesuaian Live Search, Filter Relasi, dan BULK INSERT BLOK
+
 declare(strict_types=1);
 session_start();
 header('Content-Type: application/json; charset=utf-8');
@@ -60,7 +61,6 @@ $action = $_POST['action'] ?? '';
 
 /* ===== MAP ENTITY ===== */
 $MAP = [
-    // --- UMUM ---
     'kebun' => [
         'table' => 'md_kebun',
         'alias' => 'k',
@@ -73,11 +73,12 @@ $MAP = [
     'unit' => [
         'table' => 'units',
         'alias' => 'u',
-        'cols' => ['nama_unit', 'keterangan'],
-        'required' => ['nama_unit'],
-        'order' => 'u.nama_unit ASC',
-        'searchable' => ['u.nama_unit', 'u.keterangan'],
-        'unique_cols' => ['nama_unit']
+        'cols' => ['kebun_id', 'nama_unit', 'keterangan'],
+        'required' => ['kebun_id', 'nama_unit'],
+        'select' => 'u.*, k.nama_kebun',
+        'joins' => 'LEFT JOIN md_kebun k ON u.kebun_id = k.id',
+        'order' => 'k.nama_kebun ASC, u.nama_unit ASC',
+        'searchable' => ['u.nama_unit', 'u.keterangan', 'k.nama_kebun'],
     ],
     'rayon' => [
         'table' => 'md_rayon',
@@ -91,13 +92,12 @@ $MAP = [
     'blok' => [
         'table' => 'md_blok',
         'alias' => 'b',
-        'cols' => ['unit_id', 'kode', 'tahun_tanam', 'luas_ha'],
-        'required' => ['unit_id', 'kode'],
-        'select' => 'b.*, u.nama_unit',
-        'joins' => 'LEFT JOIN units u ON b.unit_id=u.id',
-        'order' => 'u.nama_unit ASC, b.kode ASC',
-        'searchable' => ['b.kode', 'u.nama_unit', 'b.tahun_tanam'],
-        'unique_cols' => ['kode']
+        'cols' => ['kebun_id', 'unit_id', 'kode', 'tahun_tanam', 'luas_ha'],
+        'required' => ['kebun_id', 'unit_id', 'kode'],
+        'select' => 'b.*, u.nama_unit, k.nama_kebun',
+        'joins' => 'LEFT JOIN units u ON b.unit_id=u.id LEFT JOIN md_kebun k ON b.kebun_id = k.id',
+        'order' => 'k.nama_kebun ASC, u.nama_unit ASC, b.kode ASC',
+        'searchable' => ['b.kode', 'u.nama_unit', 'k.nama_kebun', 'b.tahun_tanam'],
     ],
     'tahun_tanam' => [
         'table' => 'md_tahun_tanam',
@@ -133,7 +133,6 @@ $MAP = [
         'unique_cols' => ['nama']
     ],
     
-    // [NEW] Jenis Kendaraan
     'jenis_kendaraan' => [
         'table' => 'md_jenis_kendaraan',
         'alias' => 'jk',
@@ -143,7 +142,6 @@ $MAP = [
         'searchable' => ['jk.nama', 'jk.keterangan'],
         'unique_cols' => ['nama']
     ],
-    // [NEW] Jenis BBM & Pelumas
     'jenis_bahan_bakar_pelumas' => [
         'table' => 'md_jenis_bahan_bakar_pelumas',
         'alias' => 'bbm',
@@ -175,7 +173,7 @@ $MAP = [
 
     // --- BIBIT ---
     'bibit_tm' => [
-        'table' => 'md_jenis_bibitmn', // Pastikan nama tabel sesuai DB Anda
+        'table' => 'md_jenis_bibitmn',
         'alias' => 'btm',
         'cols' => ['kode', 'nama', 'is_active'],
         'required' => ['nama'],
@@ -203,7 +201,6 @@ $MAP = [
         'searchable' => ['t.nama', 't.keterangan'],
         'unique_cols' => ['nama']
     ],
-    // (Master Pemeliharaan: menggunakan struktur tabel yang sama)
     'pem_tm' =>   ['table'=>'md_pemeliharaan_tm',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
     'pem_tu' =>   ['table'=>'md_pemeliharaan_tu',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
     'pem_tk' =>   ['table'=>'md_pemeliharaan_tk',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
@@ -285,7 +282,6 @@ $MAP = [
         'searchable' => ['bg.nama', 'bg.satuan'],
         'unique_cols' => ['nama']
     ],
-    // [NEW] Master No Polisi
     'no_polisi' => [
         'table' => 'md_no_polisi',
         'alias' => 'np',
@@ -302,11 +298,10 @@ $MAP = [
         'required' => ['nama', 'kategori'],
         'order' => 'jpkk.urutan ASC, jpkk.nama ASC',
         'searchable' => ['jpkk.nama', 'jpkk.kategori', 'jpkk.satuan'],
-        'unique_cols' => ['nama'] // Mencegah nama pekerjaan ganda
+        'unique_cols' => ['nama'] 
     ],
 ];
 
-// Helper untuk normalisasi config pemeliharaan yang formatnya ringkas
 foreach($MAP as $k => $v) {
     if (!isset($v['alias']) && strpos($k, 'pem_') === 0) {
         $MAP[$k]['alias'] = 't';
@@ -345,7 +340,6 @@ if ($action === 'list') {
     if ($q !== '' && $searchable) {
         $likes = [];
         foreach ($searchable as $col) {
-            // Handle alias manual jika config ringkas
             if(strpos($col, '.') === false) $col = "$alias.$col";
             $likes[] = "$col LIKE :q";
         }
@@ -356,17 +350,20 @@ if ($action === 'list') {
     }
 
     if ($entity === 'blok') {
-        $unit_id = int_or_null($_POST['unit_id'] ?? '');
-        $kode    = null_if_empty($_POST['kode'] ?? '');
-        $tahun   = int_or_null($_POST['tahun'] ?? '');
+        $kebun_id = int_or_null($_POST['kebun_id'] ?? '');
+        $unit_id  = int_or_null($_POST['unit_id'] ?? '');
+        $kode     = null_if_empty($_POST['kode'] ?? '');
+        $tahun    = int_or_null($_POST['tahun'] ?? '');
 
-        if ($unit_id !== null) { $where .= " AND b.unit_id = :unit_id"; $params[':unit_id'] = $unit_id; }
-        if ($kode !== null)    { $where .= " AND b.kode LIKE :kode";   $params[':kode'] = "%$kode%"; }
-        if ($tahun !== null)   { $where .= " AND b.tahun_tanam = :th"; $params[':th'] = $tahun; }
+        if ($kebun_id !== null) { $where .= " AND b.kebun_id = :kebun_id"; $params[':kebun_id'] = $kebun_id; }
+        if ($unit_id !== null)  { $where .= " AND b.unit_id = :unit_id"; $params[':unit_id'] = $unit_id; }
+        if ($kode !== null)     { $where .= " AND b.kode LIKE :kode";    $params[':kode'] = "%$kode%"; }
+        if ($tahun !== null)    { $where .= " AND b.tahun_tanam = :th";   $params[':th'] = $tahun; }
     }
 
     $from = " FROM $table $alias ";
     if ($joins) $from .= " $joins ";
+    
     $sqlCount = "SELECT COUNT(*) AS c " . $from . $where;
     $stC = $conn->prepare($sqlCount);
     foreach ($params as $k => $v) $stC->bindValue($k, $v);
@@ -391,12 +388,76 @@ if ($action === 'list') {
     exit;
 }
 
-if (in_array($entity, ['bibit_tm', 'bibit_pn', 'jenis_pekerjaan_kertas_kerja'])) {
-        $data['is_active'] = (isset($_POST['is_active']) && $_POST['is_active'] !== '0') ? 1 : 0;
-    }
-
 /* ========= STORE / UPDATE ========= */
 if ($action === 'store' || $action === 'update') {
+    
+    // ==============================================================
+    // [MODIFIKASI KHUSUS]: PENANGANAN BULK INSERT UNTUK BLOK
+    // ==============================================================
+    if ($action === 'store' && $entity === 'blok' && isset($_POST['kode']) && is_array($_POST['kode'])) {
+        
+        $kebun_id = int_or_null($_POST['kebun_id'] ?? null);
+        $unit_id  = int_or_null($_POST['unit_id'] ?? null);
+        
+        $kodes    = $_POST['kode'];
+        $tahuns   = $_POST['tahun_tanam'] ?? [];
+        $luas_has = $_POST['luas_ha'] ?? [];
+
+        if (!$kebun_id || !$unit_id) {
+            echo json_encode(['success' => false, 'message' => 'Kebun dan Unit/Afdeling wajib dipilih.']);
+            exit;
+        }
+
+        $conn->beginTransaction();
+        try {
+            $stInsert = $conn->prepare("INSERT INTO md_blok (kebun_id, unit_id, kode, tahun_tanam, luas_ha) VALUES (:kid, :uid, :kod, :thn, :lh)");
+            $stCheck  = $conn->prepare("SELECT id FROM md_blok WHERE kode = :kod AND unit_id = :uid LIMIT 1");
+            
+            $insertedCount = 0;
+            
+            foreach ($kodes as $idx => $kodeVal) {
+                $k = trim($kodeVal);
+                if ($k === '') continue; // Skip jika kosong
+
+                // Cek duplikat di unit yang sama
+                $stCheck->execute([':kod' => $k, ':uid' => $unit_id]);
+                if ($stCheck->fetch()) {
+                    throw new Exception("Gagal. Kode Blok '{$k}' sudah ada di Unit ini.");
+                }
+
+                $t = int_or_null($tahuns[$idx] ?? null);
+                $l = float_or_null($luas_has[$idx] ?? null);
+
+                $stInsert->execute([
+                    ':kid' => $kebun_id,
+                    ':uid' => $unit_id,
+                    ':kod' => $k,
+                    ':thn' => $t,
+                    ':lh'  => $l
+                ]);
+                $insertedCount++;
+            }
+            
+            if ($insertedCount === 0) {
+                throw new Exception("Tidak ada data blok yang valid untuk disimpan.");
+            }
+            
+            $conn->commit();
+            echo json_encode(['success' => true, 'message' => "{$insertedCount} Data blok berhasil disimpan."]);
+            exit;
+
+        } catch (Exception $e) {
+            $conn->rollBack();
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+            exit;
+        }
+    }
+    // ==============================================================
+    // AKHIR DARI PENANGANAN BULK INSERT
+    // ==============================================================
+
+
+    // PENANGANAN NORMAL (Update Blok / Store-Update Entity Lain)
     $data = [];
     foreach (($cfg['cols'] ?? []) as $c) {
         $data[$c] = $_POST[$c] ?? null;
@@ -409,7 +470,11 @@ if ($action === 'store' || $action === 'update') {
     if ($entity === 'tahun_tanam') {
         $data['tahun'] = int_or_null($data['tahun'] ?? null);
     }
+    if ($entity === 'unit') {
+        $data['kebun_id'] = int_or_null($data['kebun_id'] ?? null);
+    }
     if ($entity === 'blok') {
+        $data['kebun_id']    = int_or_null($data['kebun_id'] ?? null);
         $data['unit_id']     = int_or_null($data['unit_id'] ?? null);
         $data['tahun_tanam'] = int_or_null($data['tahun_tanam'] ?? null);
         $data['luas_ha']     = float_or_null($data['luas_ha'] ?? null);
@@ -417,8 +482,7 @@ if ($action === 'store' || $action === 'update') {
     if ($entity === 'pupuk' || $entity === 'bahan_kimia') {
         $data['satuan_id'] = int_or_null($data['satuan_id'] ?? null);
     }
-    // Normalisasi checkbox is_active
-    if ($entity === 'bibit_tm' || $entity === 'bibit_pn') {
+    if (in_array($entity, ['bibit_tm', 'bibit_pn', 'jenis_pekerjaan_kertas_kerja'])) {
         $data['is_active'] = (isset($_POST['is_active']) && $_POST['is_active'] !== '0') ? 1 : 0;
     }
 
@@ -438,13 +502,27 @@ if ($action === 'store' || $action === 'update') {
     if (!empty($uniqueCols)) {
         foreach ($uniqueCols as $col) {
             if (array_key_exists($col, $data) && $data[$col] !== null) {
-                $sqlC = "SELECT id FROM {$table} WHERE {$col} = :val " . ($currentId > 0 ? ' AND id <> :id' : '') . " LIMIT 1";
+                // Modifikasi spesifik untuk blok: Kode blok boleh kembar jika beda Unit.
+                $sqlC = "SELECT id FROM {$table} WHERE {$col} = :val ";
+                
+                if ($entity === 'blok' && $col === 'kode') {
+                     $sqlC .= " AND unit_id = :unit_val ";
+                }
+
+                $sqlC .= ($currentId > 0 ? ' AND id <> :id' : '') . " LIMIT 1";
+
                 $stC = $conn->prepare($sqlC);
                 $stC->bindValue(':val', $data[$col]);
+                
+                if ($entity === 'blok' && $col === 'kode') {
+                     $stC->bindValue(':unit_val', $data['unit_id']);
+                }
+
                 if ($currentId > 0) $stC->bindValue(':id', $currentId, PDO::PARAM_INT);
+                
                 $stC->execute();
                 if ($stC->fetch()) {
-                    echo json_encode(['success' => false, 'message' => ucfirst(str_replace('_', ' ', $col)) . " '{$data[$col]}' sudah digunakan."]);
+                    echo json_encode(['success' => false, 'message' => ucfirst(str_replace('_', ' ', $col)) . " '{$data[$col]}' sudah digunakan di data lain."]);
                     exit;
                 }
             }
@@ -502,5 +580,4 @@ if ($action === 'delete') {
     }
 }
 
-/* ========= FALLBACK ========= */
 echo json_encode(['success' => false, 'message' => 'Aksi tidak dikenali']);

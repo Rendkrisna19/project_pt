@@ -1,6 +1,7 @@
 <?php
 // admin/pemupukan_organik.php
 // MODIFIKASI FULL: Staf Bisa Input (Tambah), Tapi Tidak Bisa Edit/Hapus, FIX Outline & Bug JS
+// [MODIFIKASI TAMBAHAN]: Chain Dropdown Filter & Form (Kebun -> Unit -> Blok)
 
 session_start();
 if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { header("Location: ../auth/login.php"); exit; }
@@ -27,6 +28,18 @@ if (($_GET['ajax'] ?? '') === 'options') {
   header('Content-Type: application/json; charset=utf-8');
   $type = trim((string)($_GET['type'] ?? ''));
   try {
+    // [MODIFIKASI] Endpoint baru untuk mengambil Unit berdasarkan Kebun
+    if ($type === 'unit') {
+        $kebunId = (int)($_GET['kebun_id'] ?? 0);
+        $rows = [];
+        if ($kebunId > 0) {
+            $st = $pdo->prepare("SELECT id, nama_unit FROM units WHERE kebun_id=:k ORDER BY nama_unit");
+            $st->execute([':k'=>$kebunId]);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+        }
+        echo json_encode(['success'=>true,'data'=>$rows]); exit;
+    }
+
     if ($type === 'blok') {
       $unitId = (int)($_GET['unit_id'] ?? 0);
       $rows = [];
@@ -76,6 +89,14 @@ $f_jenis_pupuk    = trim((string)($_GET['jenis_pupuk'] ?? ''));
 $f_rayon_id       = ($_GET['rayon_id'] ?? '') === '' ? '' : (int)$_GET['rayon_id'];
 $f_asal_gudang_id = ($_GET['asal_gudang_id'] ?? '') === '' ? '' : (int)$_GET['asal_gudang_id'];
 $f_keterangan_id  = ($_GET['keterangan_id'] ?? '') === '' ? '' : (int)$_GET['keterangan_id'];
+
+// [MODIFIKASI] Menyiapkan Filter Dinamis Unit Khusus untuk Pencarian
+$unitFilterQuery = "SELECT id, nama_unit FROM units";
+if ($f_kebun_id !== '') {
+    $unitFilterQuery .= " WHERE kebun_id = " . (int)$f_kebun_id;
+}
+$unitFilterQuery .= " ORDER BY nama_unit ASC";
+try { $units_filter = $pdo->query($unitFilterQuery)->fetchAll(PDO::FETCH_ASSOC); } catch(Throwable $e) { $units_filter = []; }
 
 /* ====== Pagination ====== */
 $page     = max(1, (int)($_GET['page'] ?? 1));
@@ -347,7 +368,7 @@ include_once '../layouts/header.php';
         <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Unit / Defisi</label>
         <select name="unit_id" class="w-full border rounded px-3 py-2 text-sm focus:ring-2 focus:ring-cyan-500 outline-none" onchange="this.form.submit()">
             <option value="">Semua Unit</option>
-            <?php foreach ($units as $u): ?>
+            <?php foreach ($units_filter as $u): ?>
                 <option value="<?= (int)$u['id'] ?>" <?= ($f_unit_id!=='' && (int)$f_unit_id===(int)$u['id'])?'selected':'' ?>><?= htmlspecialchars($u['nama_unit']) ?></option>
             <?php endforeach; ?>
         </select>
@@ -548,7 +569,7 @@ include_once '../layouts/header.php';
                 <select id="rayon_id_angkutan" class="i-select"><option value="">— Pilih —</option><?php foreach ($rayons as $r): ?><option value="<?= (int)$r['id'] ?>"><?= htmlspecialchars($r['nama']) ?></option><?php endforeach; ?></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit Tujuan *</label>
-                <select id="unit_tujuan_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
+                <select id="unit_tujuan_id" class="i-select" required><option value="">— Pilih Kebun Dulu —</option></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 uppercase mb-1">Gudang Asal *</label>
                 <select id="asal_gudang_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($gudangs as $g): ?><option value="<?= (int)$g['id'] ?>"><?= htmlspecialchars($g['nama']) ?></option><?php endforeach; ?></select>
@@ -567,11 +588,11 @@ include_once '../layouts/header.php';
 
       <div id="group-menabur" class="<?= $tab==='menabur' ? '' : 'hidden' ?>">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
-                <select id="unit_id" class="i-select" required><option value="">— Pilih —</option><?php foreach ($units as $u): ?><option value="<?= (int)$u['id'] ?>"><?= htmlspecialchars($u['nama_unit']) ?></option><?php endforeach; ?></select>
-            </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Kebun</label>
                 <select id="kebun_id_menabur" class="i-select"><option value="">— Pilih —</option><?php foreach ($kebun as $k): ?><option value="<?= (int)$k['id'] ?>"><?= htmlspecialchars($k['nama_kebun']) ?></option><?php endforeach; ?></select>
+            </div>
+            <div><label class="block text-xs font-bold text-gray-600 mb-1">Unit *</label>
+                <select id="unit_id" class="i-select" required><option value="">— Pilih Kebun Dulu —</option></select>
             </div>
             <div><label class="block text-xs font-bold text-gray-600 mb-1">Blok *</label>
                 <select id="blok" class="i-select" required><option value="">— Pilih Unit Dulu —</option></select>
@@ -619,12 +640,15 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const $ = s => document.querySelector(s);
     async function fetchJSON(url){ const r = await fetch(url); return r.json(); }
-    function fillSelect(el, arr, placeholder='— Pilih —'){
+    
+    // [MODIFIKASI] Helper fillSelect disesuaikan agar bisa membaca Object maupun String
+    function fillSelect(el, arr, placeholder='— Pilih —', valProp='id', textProp='nama_unit'){
+        if(!el) return;
         el.innerHTML='';
         const d=document.createElement('option'); d.value=''; d.textContent=placeholder; el.appendChild(d);
         (arr||[]).forEach(v=>{
-            const val = (typeof v === 'object') ? (v.value || v.id || v) : v;
-            const lbl = (typeof v === 'object') ? (v.label || v.nama_kebun || v) : v;
+            const val = (typeof v === 'object' && v !== null) ? (v[valProp] || v.value || v.id) : v;
+            const lbl = (typeof v === 'object' && v !== null) ? (v[textProp] || v.nama_unit || v.nama_kebun || v.text) : v;
             const op=document.createElement('option'); op.value=val; op.textContent=lbl; el.appendChild(op);
         });
     }
@@ -639,20 +663,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }catch{}
     })();
 
-    async function refreshBlok(){
-        const uid = $('#unit_id')?.value || '';
-        const sel = $('#blok');
-        if (!uid){ if(sel) sel.innerHTML='<option value="">— Pilih Unit dulu —</option>'; return; }
-        try{
-        const j = await fetchJSON(`?ajax=options&type=blok&unit_id=${encodeURIComponent(uid)}`);
-        const list = (j.success && Array.isArray(j.data)) ? j.data : [];
-        if (sel) fillSelect(sel, list, '— Pilih Blok —');
-        }catch{ if (sel) sel.innerHTML='<option value="">— Pilih Blok —</option>'; }
+    // [MODIFIKASI] Fungsi helper untuk reload Unit berdasarkan Kebun
+    async function refreshUnit(kebunId, selectEl, selectedVal = '', placeholder='— Pilih Unit —') {
+        if(!selectEl) return;
+        if(!kebunId) { selectEl.innerHTML=`<option value="">— Pilih Kebun Dulu —</option>`; return; }
+        try {
+            const j = await fetchJSON(`?ajax=options&type=unit&kebun_id=${encodeURIComponent(kebunId)}`);
+            const list = (j?.success && Array.isArray(j.data)) ? j.data : [];
+            fillSelect(selectEl, list, placeholder, 'id', 'nama_unit');
+            if (selectedVal) selectEl.value = selectedVal;
+        } catch {
+            selectEl.innerHTML=`<option value="">${placeholder}</option>`;
+        }
     }
-    $('#unit_id')?.addEventListener('change', refreshBlok);
+
+    // [MODIFIKASI] Fungsi helper untuk reload Blok berdasarkan Unit
+    async function refreshBlok(unitId, selectEl, selectedVal = ''){
+        if(!selectEl) return;
+        if(!unitId){ selectEl.innerHTML='<option value="">— Pilih Unit Dulu —</option>'; return; }
+        try{
+            const j = await fetchJSON(`?ajax=options&type=blok&unit_id=${encodeURIComponent(unitId)}`);
+            const list = (j.success && Array.isArray(j.data)) ? j.data : [];
+            fillSelect(selectEl, list, '— Pilih Blok —'); // string array
+            if (selectedVal) selectEl.value = selectedVal;
+        }catch{ selectEl.innerHTML='<option value="">— Pilih Blok —</option>'; }
+    }
 
     /* ===== MODAL LOGIC (HANYA JIKA CAN_INPUT) ===== */
     if (CAN_INPUT) {
+
+        // [MODIFIKASI] CHAIN EVENT LISTENER UNTUK FORM TAMBAH/EDIT 
+        $('#kebun_id_angkutan')?.addEventListener('change', async (e)=>{
+            await refreshUnit(e.target.value, $('#unit_tujuan_id'), '', '— Pilih Unit —');
+        });
+
+        $('#kebun_id_menabur')?.addEventListener('change', async (e)=>{
+            await refreshUnit(e.target.value, $('#unit_id'), '', '— Pilih Unit —');
+            if($('#blok')) $('#blok').innerHTML = '<option value="">— Pilih Unit Dulu —</option>';
+        });
+
+        $('#unit_id')?.addEventListener('change', async (e)=>{
+            await refreshBlok(e.target.value, $('#blok'));
+        });
+
+
         const modal = $('#crud-modal'), form = $('#crud-form'), title = $('#modal-title');
         const open  = ()=>{ modal.classList.remove('hidden'); modal.classList.add('flex'); };
         const close = ()=>{ modal.classList.add('hidden');   modal.classList.remove('flex'); };
@@ -664,7 +718,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tab = $('#form-tab').value = '<?= htmlspecialchars($tab) ?>';
                 document.getElementById('group-angkutan').classList.toggle('hidden', tab!=='angkutan');
                 document.getElementById('group-menabur').classList.toggle('hidden',   tab!=='menabur');
-                if (tab==='menabur') refreshBlok();
+                
+                // [MODIFIKASI] Kosongkan dropdown berantai
+                if (tab === 'angkutan') {
+                    $('#kebun_id_angkutan').value = '';
+                    $('#unit_tujuan_id').innerHTML = '<option value="">— Pilih Kebun Dulu —</option>';
+                } else if (tab === 'menabur') {
+                    $('#kebun_id_menabur').value = '';
+                    $('#unit_id').innerHTML = '<option value="">— Pilih Kebun Dulu —</option>';
+                    $('#blok').innerHTML = '<option value="">— Pilih Unit Dulu —</option>';
+                }
+
                 open();
             });
         }
@@ -685,8 +749,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (tab==='angkutan'){
                     $('#kebun_id_angkutan').value      = row.kebun_id ?? '';
+                    // [MODIFIKASI] Load Unit berdasarkan Kebun
+                    await refreshUnit(row.kebun_id, $('#unit_tujuan_id'), row.unit_tujuan_id ?? '', '— Pilih Unit —');
+
                     $('#rayon_id_angkutan').value      = row.rayon_id ?? ''; 
-                    $('#unit_tujuan_id').value         = row.unit_tujuan_id ?? '';
                     $('#asal_gudang_id').value         = row.asal_gudang_id ?? '';
                     $('#tanggal_angkutan').value       = row.tanggal ?? '';
                     $('#jenis_pupuk_angkutan').value   = row.jenis_pupuk ?? '';
@@ -695,9 +761,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     $('#keterangan_id_angkutan').value = row.keterangan_id ?? ''; 
                 } else {
                     $('#kebun_id_menabur').value       = row.kebun_id ?? '';
-                    $('#unit_id').value                = row.unit_id ?? '';
-                    await refreshBlok();
-                    $('#blok').value                   = row.blok ?? '';
+                    
+                    // [MODIFIKASI] Load Unit dan Blok secara berurutan
+                    await refreshUnit(row.kebun_id, $('#unit_id'), row.unit_id ?? '', '— Pilih Unit —');
+                    await refreshBlok(row.unit_id, $('#blok'), row.blok ?? '');
+
                     $('#tanggal_menabur').value        = row.tanggal ?? '';
                     $('#t_tanam').value                = row.t_tanam ?? '';
                     $('#tahun').value                  = row.tahun ?? '';
