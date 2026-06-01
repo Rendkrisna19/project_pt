@@ -26,6 +26,7 @@ include_once '../layouts/header.php';
     :root { --cyan-main: #0891b2; }
     body { background-color: #f1f5f9; }
     #map { height: calc(100vh - 140px); border-radius: 15px; border: 3px solid white; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 10; }
+    .leaflet-container { background-color: #ffffff !important; }
     
     .card-glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(8, 145, 178, 0.1); }
     .input-custom { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 8px 12px; font-size: 0.85rem; outline: none; }
@@ -59,9 +60,16 @@ include_once '../layouts/header.php';
             </div>
         </div>
 
-        <div class="flex gap-2">
-            <button onclick="exportMapToPDF()" class="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border border-emerald-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
-                <i class="ti ti-file-export"></i> Export PDF (Peta & Realisasi)
+        <div class="flex gap-2 items-center">
+            <select id="filter_jenis_pekerjaan" class="input-custom min-w-[200px] border-cyan-300 font-bold text-slate-700" onchange="loadSavedPoints()">
+                <option value="">— Semua Pekerjaan —</option>
+            </select>
+
+            <button onclick="exportMap('pdf')" class="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white border border-emerald-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
+                <i class="ti ti-file-export"></i> Export PDF
+            </button>
+            <button onclick="exportMap('excel')" class="bg-gradient-to-r from-green-500 to-green-600 text-white border border-green-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
+                <i class="ti ti-file-spreadsheet"></i> Export Excel
             </button>
             <button onclick="detectMyLocation()" class="bg-white text-cyan-600 border border-cyan-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-cyan-50 transition flex items-center gap-2">
                 <i class="ti ti-gps"></i> Temukan Saya (GPS)
@@ -97,6 +105,7 @@ include_once '../layouts/header.php';
                     
                     <input type="hidden" name="kebun_id" value="<?= $kebun_id ?>">
                     <input type="hidden" name="unit_id" value="<?= $unit_id ?>">
+                    <input type="hidden" name="jenis_pekerjaan_id" id="input_jp_id">
                     <input type="hidden" name="geojson" id="input_geojson">
 
                     <div>
@@ -269,7 +278,8 @@ include_once '../layouts/header.php';
                 crs: L.CRS.Simple,
                 minZoom: -3,
                 maxZoom: 2,
-                zoomControl: true
+                zoomControl: true,
+                preferCanvas: true
             });
             let imgUrl = `../uploads/pemetaan/base_map/${petaKerjaFoto}`;
             let img = new Image();
@@ -282,7 +292,7 @@ include_once '../layouts/header.php';
             }
         } else {
             // MODE: SATELIT GPS DEFAULT
-            map = L.map('map').setView([3.5952, 98.6722], 13); 
+            map = L.map('map', { preferCanvas: true }).setView([3.5952, 98.6722], 13); 
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri',
                 maxZoom: 19
@@ -362,7 +372,7 @@ include_once '../layouts/header.php';
         }
     }
 
-    // --- 3. AMBIL MASTER DATA BLOK ---
+    // --- 3. AMBIL MASTER DATA BLOK & PEKERJAAN ---
     async function loadBloks() {
         try {
             const unitId = "<?= $unit_id ?>";
@@ -379,7 +389,17 @@ include_once '../layouts/header.php';
             } else {
                 sel.innerHTML = '<option value="">— Tidak ada blok ditemukan —</option>';
             }
-        } catch(e) { console.error("Kesalahan Fetch Blok:", e); }
+
+            // Load Jenis Pekerjaan
+            const resJp = await fetch(`be/pemetaan_api.php?action=get_jenis_pekerjaan`);
+            const jsonJp = await resJp.json();
+            const selJp = document.getElementById('filter_jenis_pekerjaan');
+            if(jsonJp.success && jsonJp.data.length > 0) {
+                jsonJp.data.forEach(jp => { 
+                    selJp.innerHTML += `<option value="${jp.id}">${jp.nama}</option>`; 
+                });
+            }
+        } catch(e) { console.error("Kesalahan Fetch Data Master:", e); }
     }
 
     // --- 4. DETEKSI LOKASI GPS ---
@@ -408,9 +428,16 @@ include_once '../layouts/header.php';
     async function loadSavedPoints() {
         const kebun_id = "<?= $kebun_id ?>";
         const unit_id = "<?= $unit_id ?>";
+        const jp_id = document.getElementById('filter_jenis_pekerjaan').value;
+
+        // Update hidden input untuk submit
+        document.getElementById('input_jp_id').value = jp_id;
+
+        // Reset peta
+        if (drawnItems) drawnItems.clearLayers();
 
         try {
-            const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}`);
+            const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}`);
             const res = await response.json();
 
             if(res.success) {
@@ -503,6 +530,11 @@ include_once '../layouts/header.php';
             return;
         }
 
+        if(document.getElementById('filter_jenis_pekerjaan').value === '') {
+            Swal.fire('Peringatan!', 'Pilih "Jenis Pekerjaan" pada dropdown di atas tabel terlebih dahulu sebelum menyimpan data pemetaan.', 'warning');
+            return;
+        }
+
         let btn = document.getElementById('btn-submit');
         btn.innerHTML = '<i class="ti ti-loader animate-spin"></i> Menyimpan...';
         btn.disabled = true;
@@ -586,26 +618,52 @@ include_once '../layouts/header.php';
         loadSavedPoints();
     });
 
-    // --- 9. FUNGSI EXPORT KE PDF DENGAN HTML2CANVAS ---
-    async function exportMapToPDF() {
+    // --- 9. FUNGSI EXPORT KE PDF & EXCEL DENGAN HTML2CANVAS ---
+    async function exportMap(format) {
         const mapDiv = document.getElementById('map');
-        
-        // Sembunyikan kontrol Leaflet agar tidak ikut tercetak
-        const controls = document.querySelectorAll('.leaflet-control-container');
-        controls.forEach(c => c.style.display = 'none');
         
         Swal.fire({
             title: 'Menyiapkan Dokumen...',
-            html: 'Sedang mengambil *screenshot* peta dan data realisasi.',
+            html: 'Sedang memfokuskan peta dan mengambil *screenshot*.',
             allowOutsideClick: false,
             didOpen: () => { Swal.showLoading(); }
         });
+
+        // Paskan map agar gambar maksimal sebelum screenshot
+        let allBounds = [];
+        if (drawnItems && drawnItems.getLayers().length > 0) {
+            allBounds.push(drawnItems.getBounds());
+        }
+        map.eachLayer(layer => {
+            if (layer instanceof L.ImageOverlay) {
+                let b = layer.getBounds();
+                if (b.isValid()) allBounds.push(b);
+            }
+        });
+
+        if (allBounds.length > 0) {
+            let finalBounds = allBounds[0];
+            for (let i = 1; i < allBounds.length; i++) {
+                finalBounds.extend(allBounds[i]);
+            }
+            map.fitBounds(finalBounds, { padding: [10, 10], animate: false });
+            // Tunggu sebentar agar peta selesai merender zoom yang baru
+            await new Promise(resolve => setTimeout(resolve, 800));
+        }
+
+        // Sembunyikan kontrol Leaflet agar tidak ikut tercetak
+        const controls = document.querySelectorAll('.leaflet-control-container');
+        controls.forEach(c => c.style.display = 'none');
+
+        // PENTING: Reset scroll ke atas untuk menghindari bug offset di html2canvas
+        window.scrollTo(0, 0);
 
         try {
             const canvas = await html2canvas(mapDiv, {
                 useCORS: true,
                 allowTaint: true,
-                scale: 2 // Resolusi tinggi
+                scale: 2, // Resolusi tinggi
+                scrollY: -window.scrollY
             });
             
             const base64image = canvas.toDataURL("image/png");
@@ -616,7 +674,7 @@ include_once '../layouts/header.php';
             // Buat form tersembunyi untuk mengirim base64 ke PHP
             const form = document.createElement('form');
             form.method = 'POST';
-            form.action = 'cetak/pemetaan_pdf.php';
+            form.action = format === 'excel' ? 'cetak/pemetaan_excel.php' : 'cetak/pemetaan_pdf.php';
             form.target = '_blank';
 
             const inputImg = document.createElement('input');
@@ -634,9 +692,15 @@ include_once '../layouts/header.php';
             inputKebun.name = 'kebun_id';
             inputKebun.value = "<?= $kebun_id ?>";
 
+            const inputJp = document.createElement('input');
+            inputJp.type = 'hidden';
+            inputJp.name = 'jenis_pekerjaan_id';
+            inputJp.value = document.getElementById('filter_jenis_pekerjaan').value;
+
             form.appendChild(inputImg);
             form.appendChild(inputUnit);
             form.appendChild(inputKebun);
+            form.appendChild(inputJp);
             document.body.appendChild(form);
             
             Swal.close();

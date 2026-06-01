@@ -17,6 +17,7 @@ try {
 
     $unit_id  = isset($_POST['unit_id']) ? (int)$_POST['unit_id'] : 0;
     $kebun_id = isset($_POST['kebun_id']) ? (int)$_POST['kebun_id'] : 0;
+    $jp_id    = isset($_POST['jenis_pekerjaan_id']) ? (int)$_POST['jenis_pekerjaan_id'] : 0;
     $map_image = isset($_POST['map_image']) ? $_POST['map_image'] : '';
 
     if (empty($unit_id) || empty($kebun_id) || empty($map_image)) {
@@ -34,14 +35,31 @@ try {
     $nama_unit  = $info ? $info['nama_unit'] : 'UNIT';
     $nama_kebun = $info ? $info['nama_kebun'] : 'KEBUN';
 
+    // Ambil Nama Pekerjaan
+    $nama_pekerjaan = "SEMUA PEKERJAAN";
+    if ($jp_id > 0) {
+        $stmtJp = $conn->prepare("SELECT nama FROM md_jenis_pekerjaan WHERE id = ?");
+        $stmtJp->execute([$jp_id]);
+        $jpInfo = $stmtJp->fetch(PDO::FETCH_ASSOC);
+        if ($jpInfo) {
+            $nama_pekerjaan = $jpInfo['nama'];
+        }
+    }
+
     // Ambil Data Realisasi Pemetaan Hari Ini
     $sql = "SELECT p.*, b.kode as nama_blok 
             FROM tr_pemetaan p
             LEFT JOIN md_blok b ON p.blok_id = b.id
-            WHERE p.kebun_id = ? AND p.unit_id = ? 
-            ORDER BY p.tanggal_realisasi DESC, p.id DESC LIMIT 50";
+            WHERE p.kebun_id = ? AND p.unit_id = ? ";
+    $params = [$kebun_id, $unit_id];
+    if ($jp_id > 0) {
+        $sql .= " AND p.jenis_pekerjaan_id = ? ";
+        $params[] = $jp_id;
+    }
+    $sql .= " ORDER BY p.tanggal_realisasi DESC, p.id DESC LIMIT 50";
+    
     $stmt = $conn->prepare($sql);
-    $stmt->execute([$kebun_id, $unit_id]);
+    $stmt->execute($params);
     $data_realisasi = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Bulan Pekerjaan
@@ -135,7 +153,7 @@ ob_start();
             </td>
             <td class="bg-blue" style="width:30%;">
                 BULAN : <?= strtoupper($bulan_tahun) ?><br>
-                PEKERJAAN : GIS & PEMETAAN
+                PEKERJAAN : <?= strtoupper($nama_pekerjaan) ?>
             </td>
         </tr>
     </table>

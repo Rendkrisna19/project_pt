@@ -2,7 +2,11 @@
 require_once 'config/database.php';
 $db = new Database();
 $pdo = $db->getConnection();
-$stmt = $pdo->query("SHOW CREATE TABLE users");
-$row = $stmt->fetch(PDO::FETCH_ASSOC);
-echo $row['Create Table'];
+$query = "ALTER TABLE tr_pemetaan ADD COLUMN jenis_pekerjaan_id INT UNSIGNED NULL AFTER blok_id";
+try {
+    $pdo->exec($query);
+    echo "Column jenis_pekerjaan_id added.";
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage();
+}
 ?>

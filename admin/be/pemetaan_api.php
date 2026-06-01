@@ -39,6 +39,15 @@ try {
         exit;
     }
 
+    // --- GET JENIS PEKERJAAN ---
+    if ($action === 'get_jenis_pekerjaan') {
+        $sql = "SELECT id, nama FROM md_jenis_pekerjaan ORDER BY nama ASC";
+        $pekerjaan = $conn->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+        ob_clean();
+        echo json_encode(['success' => true, 'data' => $pekerjaan]);
+        exit;
+    }
+
     // --- 2. GET BLOK BERDASARKAN UNIT ---
     if ($action === 'get_bloks') {
         $unit_id = (int)$_GET['unit_id'];
@@ -66,6 +75,7 @@ try {
         $kebun_id   = (int)$_POST['kebun_id'];
         $unit_id    = (int)$_POST['unit_id'];
         $blok_id    = (int)$_POST['blok_id'];
+        $jp_id      = !empty($_POST['jenis_pekerjaan_id']) ? (int)$_POST['jenis_pekerjaan_id'] : null;
         $jenis_aset = trim($_POST['jenis_aset']);
         $geojson    = trim($_POST['geojson']); 
         
@@ -104,14 +114,14 @@ try {
             }
         }
 
-        // Query Insert (SEKARANG SUDAH ADA KOLOM KETERANGAN & REALISASI)
+        // Query Insert (SEKARANG SUDAH ADA KOLOM KETERANGAN & REALISASI & JENIS PEKERJAAN)
         $sql = "INSERT INTO tr_pemetaan (
-                    kebun_id, unit_id, blok_id, jenis_aset, geojson, latitude, longitude, warna, foto, keterangan,
+                    kebun_id, unit_id, blok_id, jenis_pekerjaan_id, jenis_aset, geojson, latitude, longitude, warna, foto, keterangan,
                     tanggal_realisasi, fisik_hari_ini, fisik_sd, hk_hari_ini, hk_sd, bahan_kimia_hari_ini, bahan_kimia_sd, campuran_hari_ini, campuran_sd
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt = $conn->prepare($sql);
         $stmt->execute([
-            $kebun_id, $unit_id, $blok_id, $jenis_aset, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
+            $kebun_id, $unit_id, $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
             $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
         ]);
 
@@ -127,18 +137,34 @@ try {
         }
         $kebun_id = (int)$_GET['kebun_id'];
         $unit_id  = (int)$_GET['unit_id'];
+        $jp_id    = isset($_GET['jenis_pekerjaan_id']) ? (int)$_GET['jenis_pekerjaan_id'] : 0;
 
         $sql = "SELECT p.*, b.kode as nama_blok 
                 FROM tr_pemetaan p
                 LEFT JOIN md_blok b ON p.blok_id = b.id
                 WHERE p.kebun_id = ? AND p.unit_id = ?";
+        
+        $params = [$kebun_id, $unit_id];
+        
+        if ($jp_id > 0) {
+            $sql .= " AND p.jenis_pekerjaan_id = ?";
+            $params[] = $jp_id;
+        }
+
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$kebun_id, $unit_id]);
+        $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        $sqlStats = "SELECT jenis_aset as label, COUNT(*) as value FROM tr_pemetaan WHERE unit_id = ? GROUP BY jenis_aset";
+        $sqlStats = "SELECT jenis_aset as label, COUNT(*) as value FROM tr_pemetaan WHERE unit_id = ?";
+        $paramsStats = [$unit_id];
+        if ($jp_id > 0) {
+            $sqlStats .= " AND jenis_pekerjaan_id = ?";
+            $paramsStats[] = $jp_id;
+        }
+        $sqlStats .= " GROUP BY jenis_aset";
+        
         $st = $conn->prepare($sqlStats);
-        $st->execute([$unit_id]);
+        $st->execute($paramsStats);
         $stats = $st->fetchAll(PDO::FETCH_ASSOC);
 
         // Ambil info Peta Dasar
