@@ -31,7 +31,7 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .bg-sea-pattern {
-            background-color: #0c4a6e;
+            background-color: #08334cff;
             background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 50 C 25 75, 75 75, 100 50 C 75 25, 25 25, 0 50 Z M0 75 C 25 100, 75 100, 100 75 C 75 50, 25 50, 0 75 Z M0 25 C 25 50, 75 50, 100 25 C 75 0, 25 0, 0 25 Z' fill='none' stroke='%2322d3ee' stroke-width='1.5' opacity='0.15'/%3E%3C/svg%3E"), linear-gradient(to right, #0c4a6e, #08334d);
             background-repeat: repeat;
             background-size: 80px 80px, cover;
@@ -226,7 +226,7 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
                     fetchNotif(); 
                     fetchChatNotif();
                     setInterval(fetchNotif, 15000); 
-                    setInterval(fetchChatNotif, 10000); 
+                    setInterval(fetchChatNotif, 2000); // Dipercepat menjadi 2 detik agar lebih realtime
                 });
 
                 let lastCount = 0;

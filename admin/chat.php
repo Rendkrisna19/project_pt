@@ -913,8 +913,8 @@ include_once '../layouts/header.php';
     // Initial fetch
     fetchMessages();
 
-    // Polling every 3 seconds
-    setInterval(fetchMessages, 3000);
+    // Polling every 1.5 seconds untuk sensasi realtime
+    setInterval(fetchMessages, 1500);
 
 </script>
 
