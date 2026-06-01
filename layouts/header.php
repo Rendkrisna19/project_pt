@@ -31,8 +31,8 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .bg-sea-pattern {
-            background-color: #0ea5e9;
-            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 50 C 25 75, 75 75, 100 50 C 75 25, 25 25, 0 50 Z M0 75 C 25 100, 75 100, 100 75 C 75 50, 25 50, 0 75 Z M0 25 C 25 50, 75 50, 100 25 C 75 0, 25 0, 0 25 Z' fill='none' stroke='%23bae6fd' stroke-width='2' opacity='0.5'/%3E%3C/svg%3E"), linear-gradient(to bottom, #0ea5e9, #0284c7);
+            background-color: #0c4a6e;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 50 C 25 75, 75 75, 100 50 C 75 25, 25 25, 0 50 Z M0 75 C 25 100, 75 100, 100 75 C 75 50, 25 50, 0 75 Z M0 25 C 25 50, 75 50, 100 25 C 75 0, 25 0, 0 25 Z' fill='none' stroke='%2322d3ee' stroke-width='1.5' opacity='0.15'/%3E%3C/svg%3E"), linear-gradient(to right, #0c4a6e, #08334d);
             background-repeat: repeat;
             background-size: 80px 80px, cover;
         }
@@ -47,14 +47,14 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
     </style>
 </head>
 
-<body class="text-gray-800 antialiased" x-data="{ sidebarOpen: false, notifOpen: false, showModal: false }">
+<body class="text-gray-800 antialiased" x-data="{ sidebarOpen: false, notifOpen: false, chatNotifOpen: false, showModal: false }">
 
     <?php include_once __DIR__ . '/sidebar.php'; ?>
 
     <div class="flex flex-col min-h-screen transition-all duration-300 md:ml-72">
 
-        <header class="sticky top-0 z-50 bg-sea-pattern shadow-md h-16 flex items-center justify-between px-4 md:px-8 text-white relative overflow-visible">            
-            <div class="absolute inset-0 bg-cyan-900/10 pointer-events-none overflow-hidden"></div>
+        <header class="sticky top-0 z-50 bg-sea-pattern shadow-md h-16 flex items-center justify-between px-4 md:px-8 text-white relative overflow-visible border-b border-cyan-500/20">            
+            <div class="absolute inset-0 bg-[#021019]/20 pointer-events-none overflow-hidden"></div>
 
             <div class="flex items-center gap-4 z-10">
                 <button @click="sidebarOpen = true" class="md:hidden p-2 rounded-lg text-white hover:bg-white/20 focus:outline-none transition-colors">
@@ -77,6 +77,47 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
                     <span class="text-xs font-bold text-white"><?= date('d F Y') ?></span>
                 </div>
 
+                <!-- Chat Shortcut Icon -->
+                <a href="../admin/chat.php" class="p-2 rounded-full hover:bg-white/20 text-white transition-colors focus:outline-none" title="Buka Forum Diskusi">
+                    <i data-lucide="messages-square" class="w-6 h-6"></i>
+                </a>
+
+                <!-- Chat Notification Icon -->
+                <div class="relative" @click.away="chatNotifOpen = false">
+                    <button @click="chatNotifOpen = !chatNotifOpen; resetChatBadge()" class="relative p-2 rounded-full hover:bg-white/20 text-white transition-colors focus:outline-none">
+                        <i data-lucide="message-square" class="w-6 h-6" id="chat-icon"></i>
+                        <span id="chat-badge" class="absolute top-1 right-1 flex h-3 w-3 hidden">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white"></span>
+                        </span>
+                    </button>
+
+                    <div x-show="chatNotifOpen" 
+                         x-transition:enter="transition ease-out duration-200"
+                         x-transition:enter-start="opacity-0 translate-y-2"
+                         x-transition:enter-end="opacity-100 translate-y-0"
+                         x-transition:leave="transition ease-in duration-150"
+                         x-transition:leave-start="opacity-100 translate-y-0"
+                         x-transition:leave-end="opacity-0 translate-y-2"
+                         class="absolute right-0 mt-3 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden z-[60] text-gray-800 origin-top-right" style="display: none;">
+                        
+                        <div class="bg-emerald-600 px-4 py-3 text-white flex justify-between items-center">
+                            <h3 class="font-bold text-sm">Pesan Baru</h3>
+                        </div>
+
+                        <div id="chat-notif-list" class="max-h-64 overflow-y-auto custom-scrollbar divide-y divide-gray-100">
+                            <div class="p-4 text-center text-gray-400 text-xs italic">Memuat pesan...</div>
+                        </div>
+
+                        <div class="bg-gray-50 p-3 text-center border-t border-gray-100">
+                            <a href="../admin/chat.php" class="text-xs font-semibold text-emerald-600 hover:text-emerald-800 hover:underline transition-all">
+                                Buka Group Chat
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bell Notification Icon -->
                 <div class="relative" @click.away="notifOpen = false">
                     <button @click="notifOpen = !notifOpen; resetBadge()" class="relative p-2 rounded-full hover:bg-white/20 text-white transition-colors focus:outline-none">
                         <i data-lucide="bell" class="w-6 h-6" id="bell-icon"></i>
@@ -182,11 +223,106 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
             <script>
                 document.addEventListener('DOMContentLoaded', () => {
                     lucide.createIcons();
-                    fetchNotif(); // Load dropdown awal
-                    setInterval(fetchNotif, 15000); // Polling dropdown
+                    fetchNotif(); 
+                    fetchChatNotif();
+                    setInterval(fetchNotif, 15000); 
+                    setInterval(fetchChatNotif, 10000); 
                 });
 
                 let lastCount = 0;
+                let lastChatCount = 0;
+
+                function fetchChatNotif() {
+                    $.ajax({
+                        url: '../api/get_chat_notif.php', 
+                        method: 'GET',
+                        dataType: 'json',
+                        success: function(response) {
+                            if(response.success) {
+                                let html = '';
+                                if(response.data.length > 0) {
+                                    response.data.forEach(chat => {
+                                        let timeAgo = timeSince(new Date(chat.created_at));
+                                        let msgText = chat.message ? chat.message : (chat.file_type ? 'Mengirim ' + chat.file_type : 'Pesan baru');
+                                        html += `
+                                        <div class="flex items-start gap-3 p-3 hover:bg-emerald-50 transition-colors group cursor-pointer" onclick="window.location.href='../admin/chat.php'">
+                                            <div class="flex-shrink-0">
+                                                <div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs uppercase border border-emerald-200">
+                                                    ${chat.sender.substring(0,2)}
+                                                </div>
+                                            </div>
+                                            <div class="flex-1 min-w-0">
+                                                <p class="text-sm font-medium text-gray-900 truncate group-hover:text-emerald-700">
+                                                    ${chat.sender}
+                                                </p>
+                                                <p class="text-xs text-gray-500 truncate">${msgText}</p>
+                                                <span class="text-[10px] text-emerald-500 mt-1 inline-block">
+                                                    ${timeAgo}
+                                                </span>
+                                            </div>
+                                        </div>`;
+                                    });
+                                } else {
+                                    html = '<div class="p-8 text-center text-gray-400 text-xs flex flex-col items-center gap-2"><i data-lucide="message-square" class="w-5 h-5 opacity-50"></i>Belum ada pesan baru.</div>';
+                                }
+                                $('#chat-notif-list').html(html);
+                                lucide.createIcons();
+
+                                if(response.data.length > 0 && response.data[0].id > lastChatCount) {
+                                    $('#chat-badge').removeClass('hidden');
+                                    $('#chat-icon').addClass('bell-ring');
+                                    
+                                    // Tampilkan toast jika ini bukan load pertama kali
+                                    if (lastChatCount !== 0) {
+                                        const newChat = response.data[0];
+                                        showChatToast(newChat.sender, newChat.message ? newChat.message : 'Mengirim lampiran');
+                                    }
+                                    
+                                    lastChatCount = response.data[0].id;
+                                }
+                            }
+                        }
+                    });
+                }
+
+                function showChatToast(sender, message) {
+                    // Mainkan suara notifikasi
+                    const audio = new Audio('../assets/voice/notifikasi.mp3');
+                    audio.play().catch(e => console.log('Audio autoplay blocked by browser'));
+
+                    const toastId = 'chat-toast-' + Date.now();
+                    const toastHtml = `
+                        <div id="${toastId}" class="fixed bottom-4 right-4 bg-cyan-600 text-white p-3 rounded-lg shadow-xl z-[100] flex items-center gap-3 transform translate-y-10 opacity-0 transition-all duration-300 cursor-pointer hover:bg-cyan-700" onclick="window.location.href='../admin/chat.php'">
+                            <div class="bg-cyan-500/50 p-2 rounded-full">
+                                <i data-lucide="message-circle" class="w-5 h-5 text-white"></i>
+                            </div>
+                            <div class="pr-4">
+                                <div class="text-sm font-bold leading-tight mb-0.5">${sender}</div>
+                                <div class="text-xs text-cyan-100">${message.substring(0,35)}${message.length > 35 ? '...' : ''}</div>
+                            </div>
+                        </div>
+                    `;
+                    $('body').append(toastHtml);
+                    lucide.createIcons();
+                    
+                    const $toast = $('#' + toastId);
+                    
+                    // Animate in
+                    setTimeout(() => {
+                        $toast.removeClass('translate-y-10 opacity-0');
+                    }, 50);
+                    
+                    // Animate out & remove
+                    setTimeout(() => {
+                        $toast.addClass('translate-y-10 opacity-0');
+                        setTimeout(() => $toast.remove(), 300);
+                    }, 4000);
+                }
+
+                function resetChatBadge() {
+                    $('#chat-badge').addClass('hidden');
+                    $('#chat-icon').removeClass('bell-ring');
+                }
 
                 // --- 1. Fetch untuk Dropdown (Limit 5) ---
                 function fetchNotif() {

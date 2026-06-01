@@ -244,15 +244,6 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 <span>Arsip</span>
             </a>
             
-            <div class="px-4 mt-6 mb-2 flex items-center gap-2">
-                <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">Komunikasi</span>
-                <div class="h-px bg-cyan-900/30 flex-1"></div>
-            </div>
-
-            <a href="chat" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-blue-300 <?= navClass('chat', $currentPage) ?>">
-                <i data-lucide="message-square" class="w-5 h-5 mr-3 group-hover:text-blue-400 transition-colors <?= $currentPage=='chat'?'text-white':'' ?>"></i>
-                <span>Group Chat</span>
-            </a>
 
             <?php if ($userRole === 'admin'): ?>
                 <div class="px-4 mt-6 mb-2 flex items-center gap-2">

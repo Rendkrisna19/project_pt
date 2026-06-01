@@ -1,4 +1,6 @@
 <?php
+date_default_timezone_set('Asia/Jakarta');
+
 // Konfigurasi untuk koneksi ke database
 define('DB_HOST', 'localhost'); // Sesuaikan dengan host database Anda
 define('DB_USER', 'root');      // Sesuaikan dengan username database Anda
@@ -20,6 +22,8 @@ class Database {
 
         try {
             $this->dbh = new PDO($dsn, DB_USER, DB_PASS, $options);
+            // Paksa zona waktu MySQL ke Asia/Jakarta (WIB)
+            $this->dbh->exec("SET time_zone = '+07:00'");
         } catch (PDOException $e) {
             die($e->getMessage());
         }
