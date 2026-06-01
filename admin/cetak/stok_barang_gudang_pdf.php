@@ -3,7 +3,7 @@
 // MODIFIKASI FULL: Support Bulan/Tahun, Tema Cyan/Teal
 
 session_start();
-if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { exit('Unauthorized'); }
+if (!isset($_SESSION['loggedin']) || $_SESSION['loggedin'] !== true) { exit ('Unauthorized'); }
 
 require_once '../../config/database.php';
 require_once '../../vendor/autoload.php'; // Pastikan path vendor benar

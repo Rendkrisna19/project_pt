@@ -160,6 +160,16 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
             </a>
 
             <div class="px-4 mt-6 mb-2 flex items-center gap-2">
+                <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">Pemetaan & GIS</span>
+                <div class="h-px bg-cyan-900/30 flex-1"></div>
+            </div>
+
+            <a href="pemetaan_pilih_unit.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-emerald-300 <?= navClass('pemetaan', $currentPage) ?>">
+                <i data-lucide="map" class="w-5 h-5 mr-3 group-hover:text-emerald-400 transition-colors <?= $currentPage=='pemetaan'?'text-white':'' ?>"></i>
+                <span>Pemetaan Kebun</span>
+            </a>
+
+            <div class="px-4 mt-6 mb-2 flex items-center gap-2">
                 <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">Logistik</span>
                 <div class="h-px bg-cyan-900/30 flex-1"></div>
             </div>
@@ -180,6 +190,7 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                     <a href="alat_panen" class="block pl-10 pr-3 py-2 text-xs rounded-r-md transition-all <?= $currentPage == 'alat_panen' ? 'text-yellow-300 font-bold bg-cyan-900/20 border-r-2 border-yellow-500' : 'text-slate-500 hover:text-yellow-200' ?>">Alat Pertanian</a>
                 </div>
             </div>
+            
 
             <a href="pemakaian_barang_gudang" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-red-300 <?= navClass('pemakaian_barang_gudang', $currentPage) ?>">
                 <i data-lucide="fuel" class="w-5 h-5 mr-3 group-hover:text-red-400 transition-colors <?= $currentPage=='pemakaian_barang_gudang'?'text-white':'' ?>"></i>

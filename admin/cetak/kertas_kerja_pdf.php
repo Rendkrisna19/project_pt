@@ -13,27 +13,34 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
-    // --- 1. Filter Parameter ---
-    $unit_id  = $_GET['unit_id'] ?? '';
-    $kebun_id = $_GET['kebun_id'] ?? '';
-    $tahun    = $_GET['tahun'] ?? date('Y');
-    $bulan    = $_GET['bulan'] ?? date('n');
+    // --- 1. Filter Parameter (Casting ke INT untuk keamanan Filter Kebun) ---
+    $unit_id  = isset($_GET['unit_id']) ? (int)$_GET['unit_id'] : 0;
+    $kebun_id = isset($_GET['kebun_id']) ? (int)$_GET['kebun_id'] : 0;
+    $tahun    = isset($_GET['tahun']) ? (int)$_GET['tahun'] : date('Y');
+    $bulan    = isset($_GET['bulan']) ? (int)$_GET['bulan'] : date('n');
 
-    if (empty($unit_id) || empty($kebun_id)) exit("Parameter tidak lengkap.");
+    if (empty($unit_id) || empty($kebun_id)) exit("Parameter Kebun atau Unit tidak lengkap.");
 
-    // --- 2. Ambil Info Header ---
-    $stmtUnit = $conn->prepare("SELECT nama_unit FROM units WHERE id = ?");
-    $stmtUnit->execute([$unit_id]);
-    $nama_unit = $stmtUnit->fetchColumn() ?: '-';
-
-    $stmtKebun = $conn->prepare("SELECT nama_kebun FROM md_kebun WHERE id = ?");
-    $stmtKebun->execute([$kebun_id]);
-    $nama_kebun = $stmtKebun->fetchColumn() ?: '-';
+    // --- 2. Ambil Info Header secara relasional agar kebun_id tidak tertukar ---
+    $stmtInfo = $conn->prepare("SELECT u.nama_unit, k.nama_kebun, u.kebun_id as real_kebun_id 
+                                FROM units u 
+                                LEFT JOIN md_kebun k ON u.kebun_id = k.id 
+                                WHERE u.id = ?");
+    $stmtInfo->execute([$unit_id]);
+    $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+    
+    if ($info) {
+        $nama_unit  = $info['nama_unit'];
+        $nama_kebun = $info['nama_kebun'];
+    } else {
+        $nama_unit  = '-';
+        $nama_kebun = '-';
+    }
 
     $nama_bulan_arr = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     $str_bulan = $nama_bulan_arr[(int)$bulan] ?? $bulan;
 
-    // --- 3. LOGIKA DATA (Optimized Fetch) ---
+    // --- 3. LOGIKA DATA (Filter Ketat Per Kebun & Perbaikan Format Tanggal) ---
     // 3.1 Master
     $master = $conn->query("SELECT * FROM md_jenis_pekerjaan_kertas_kerja WHERE is_active=1 ORDER BY urutan ASC")->fetchAll(PDO::FETCH_ASSOC);
 
@@ -50,8 +57,8 @@ try {
     $planGroup = [];
     foreach($plans as $p) $planGroup[$p['jenis_pekerjaan_id']][] = $p;
 
-    // 3.3 Harian
-    $tglStart = "$tahun-$bulan-01";
+    // 3.3 Harian (MENGGUNAKAN SPRINTF AGAR JAN-FEB TERBACA)
+    $tglStart = sprintf('%04d-%02d-01', $tahun, $bulan);
     $tglEnd   = date("Y-m-t", strtotime($tglStart));
     $daysInMonth = (int)date('t', strtotime($tglStart));
 
@@ -66,9 +73,9 @@ try {
     $dailyMap = [];
     foreach($dailies as $d) $dailyMap[$d['kertas_kerja_plano_id']][$d['hari']] = $d['val'];
 
-    // Helper
+    // Helper (Format tanggal isSunday diperbaiki agar cocok dengan segala format digit bulan)
     function nf($v) { return ($v == 0 || $v == '') ? '-' : number_format((float)$v, 2, ',', '.'); }
-    function isSunday($y, $m, $d) { return date('N', strtotime("$y-$m-$d")) == 7; }
+    function isSunday($y, $m, $d) { return date('N', strtotime(sprintf('%04d-%02d-%02d', $y, $m, $d))) == 7; }
 
 } catch (Exception $e) { exit('DB Error: '.$e->getMessage()); }
 

@@ -27,61 +27,57 @@ try {
     $db = new Database();
     $pdo = $db->getConnection();
 
-    // 1. Tangkap Filter
-    $unit_id = $_GET['unit_id'] ?? '';
-    $kebun_id = $_GET['kebun_id'] ?? ''; // Jika ada
-    $tahun = $_GET['tahun'] ?? date('Y');
-    $bulan = $_GET['bulan'] ?? date('n');
+    // 1. Tangkap Filter (Casting ke INT untuk keamanan)
+    $unit_id  = isset($_GET['unit_id']) ? (int)$_GET['unit_id'] : 0;
+    $kebun_id = isset($_GET['kebun_id']) ? (int)$_GET['kebun_id'] : 0;
+    $tahun    = isset($_GET['tahun']) ? (int)$_GET['tahun'] : date('Y');
+    $bulan    = isset($_GET['bulan']) ? (int)$_GET['bulan'] : date('n');
 
-    if (empty($unit_id)) die("Unit ID wajib diisi.");
+    if (empty($unit_id) || empty($kebun_id)) die("Unit ID dan Kebun ID wajib diisi.");
 
-    // 2. Ambil Info Header (Unit) - Tanpa Join Kebun yang bikin error
-    $stmtUnit = $pdo->prepare("SELECT nama_unit FROM units WHERE id = ?");
-    $stmtUnit->execute([$unit_id]);
-    $rowUnit = $stmtUnit->fetch(PDO::FETCH_ASSOC);
-    $nama_unit = $rowUnit['nama_unit'] ?? '-';
-
-    // Ambil Nama Kebun (Fallback)
-    $nama_kebun = '-';
-    if (!empty($kebun_id)) {
-        $stmtK = $pdo->prepare("SELECT nama_kebun FROM md_kebun WHERE id = ?");
-        $stmtK->execute([$kebun_id]);
-        $rowK = $stmtK->fetch(PDO::FETCH_ASSOC);
-        $nama_kebun = $rowK['nama_kebun'] ?? '-';
-    }
+    // 2. Ambil Info Header (Unit & Kebun) secara relasional
+    $stmtInfo = $pdo->prepare("SELECT u.nama_unit, k.nama_kebun 
+                               FROM units u 
+                               LEFT JOIN md_kebun k ON u.kebun_id = k.id 
+                               WHERE u.id = ?");
+    $stmtInfo->execute([$unit_id]);
+    $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+    
+    $nama_unit  = $info ? $info['nama_unit'] : '-';
+    $nama_kebun = $info ? $info['nama_kebun'] : '-';
 
     $nama_bulan = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
     $periode = strtoupper($nama_bulan[$bulan] . ' ' . $tahun);
 
-    // 3. Ambil Data (Sama logic dengan CRUD List)
+    // 3. Ambil Data (Sama logic dengan CRUD List & PDF)
     
     // A. Master Pekerjaan
     $master = $pdo->query("SELECT * FROM md_jenis_pekerjaan_kertas_kerja WHERE is_active=1 ORDER BY urutan ASC")->fetchAll(PDO::FETCH_ASSOC);
 
-    // B. Rencana (Plano)
+    // B. Rencana (Plano) - Filter by Kebun & Unit
     $sqlPlan = "SELECT p.*, m.nama as nama_job, m.kategori, m.satuan as satuan_def
                 FROM tr_kertas_kerja_plano p
                 JOIN md_jenis_pekerjaan_kertas_kerja m ON m.id = p.jenis_pekerjaan_id
-                WHERE p.unit_id = :u AND p.bulan = :b AND p.tahun = :t
+                WHERE p.kebun_id = :k AND p.unit_id = :u AND p.bulan = :b AND p.tahun = :t
                 ORDER BY p.blok_rencana ASC";
     $st = $pdo->prepare($sqlPlan);
-    $st->execute([':u'=>$unit_id, ':b'=>$bulan, ':t'=>$tahun]);
+    $st->execute([':k'=>$kebun_id, ':u'=>$unit_id, ':b'=>$bulan, ':t'=>$tahun]);
     $plans = $st->fetchAll(PDO::FETCH_ASSOC);
 
     $planGroup = [];
     foreach($plans as $p) $planGroup[$p['jenis_pekerjaan_id']][] = $p;
 
-    // C. Realisasi Harian
-    $tglStart = "$tahun-$bulan-01";
+    // C. Realisasi Harian (Gunakan SPRINTF agar bulan 1 dan 2 terbaca dengan benar)
+    $tglStart = sprintf('%04d-%02d-01', $tahun, $bulan);
     $tglEnd   = date("Y-m-t", strtotime($tglStart));
     $daysInMonth = (int)date('t', strtotime($tglStart));
 
     $sqlDaily = "SELECT kertas_kerja_plano_id, DAY(tanggal) as hari, SUM(fisik) as val 
                  FROM tr_kertas_kerja_harian 
-                 WHERE unit_id=:u AND tanggal BETWEEN :s AND :e
+                 WHERE kebun_id=:k AND unit_id=:u AND tanggal BETWEEN :s AND :e
                  GROUP BY kertas_kerja_plano_id, tanggal";
     $st2 = $pdo->prepare($sqlDaily);
-    $st2->execute([':u'=>$unit_id, ':s'=>$tglStart, ':e'=>$tglEnd]);
+    $st2->execute([':k'=>$kebun_id, ':u'=>$unit_id, ':s'=>$tglStart, ':e'=>$tglEnd]);
     $dailies = $st2->fetchAll(PDO::FETCH_ASSOC);
 
     $dailyMap = [];
@@ -107,7 +103,7 @@ try {
     // --- HEADERS ---
     // Title
     $sheet->setCellValue('A1', 'KERTAS KERJA REALISASI HARIAN');
-    $sheet->setCellValue('A2', "UNIT: $nama_unit | PERIODE: $periode");
+    $sheet->setCellValue('A2', "KEBUN: $nama_kebun | UNIT: $nama_unit | PERIODE: $periode");
     $sheet->mergeCells("A1:{$lastCol}1");
     $sheet->mergeCells("A2:{$lastCol}2");
     
@@ -145,8 +141,8 @@ try {
         $colLet = Coordinate::stringFromColumnIndex($colIdx);
         $sheet->setCellValue("{$colLet}{$row2}", $i);
         
-        // Color Sunday Header
-        $date = "$tahun-$bulan-$i";
+        // Color Sunday Header (Diperbaiki pakai sprintf format)
+        $date = sprintf('%04d-%02d-%02d', $tahun, $bulan, $i);
         if(date('w', strtotime($date)) == 0) {
             $sheet->getStyle("{$colLet}{$row2}")->applyFromArray([
                 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFFFCDD2']], // Merah muda
@@ -249,7 +245,7 @@ try {
                         }
 
                         // Style Sunday Column Body
-                        $date = "$tahun-$bulan-$d";
+                        $date = sprintf('%04d-%02d-%02d', $tahun, $bulan, $d);
                         if(date('w', strtotime($date)) == 0) {
                             $sheet->getStyle("{$colLet}{$currRow}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFFF1F2');
                         }
@@ -352,7 +348,5 @@ try {
     http_response_code(500);
     header('Content-Type: text/plain');
     echo "Gagal Export Excel: " . $e->getMessage();
-    // Debug Trace (Hapus di production)
-    // echo "\n" . $e->getTraceAsString();
     exit;
 }

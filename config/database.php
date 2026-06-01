@@ -3,7 +3,7 @@
 define('DB_HOST', 'localhost'); // Sesuaikan dengan host database Anda
 define('DB_USER', 'root');      // Sesuaikan dengan username database Anda
 define('DB_PASS', '');          // Sesuaikan dengan password database Anda
-define('DB_NAME', 'db_ptpn');   // Sesuaikan dengan nama database Anda
+define('DB_NAME', 'db_ptpn_tes');   // Sesuaikan dengan nama database Anda
 
 class Database {
     private $dbh; // Database Handler
