@@ -90,6 +90,7 @@ include_once '../layouts/header.php';
                 <form id="form-upload-peta">
                     <input type="hidden" name="action" value="upload_peta_dasar">
                     <input type="hidden" name="unit_id" value="<?= $unit_id ?>">
+                    <input type="hidden" name="jenis_pekerjaan_id" id="upload_jp_id" value="">
                     <input type="file" name="peta_dasar" accept=".jpg,.jpeg,.png,.webp" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-fuchsia-50 file:text-fuchsia-700 hover:file:bg-fuchsia-100 cursor-pointer mb-2" required>
                     <button type="submit" id="btn-upload-peta" class="w-full bg-fuchsia-500 text-white font-bold py-2 rounded-lg hover:bg-fuchsia-600 text-sm shadow-md transition">Upload & Pasang Peta</button>
                 </form>
@@ -102,6 +103,7 @@ include_once '../layouts/header.php';
 
                 <form id="form-pemetaan" class="space-y-4">
                     <input type="hidden" name="action" value="save_map_data">
+                    <input type="hidden" name="id" id="input_edit_id" value="">
                     
                     <input type="hidden" name="kebun_id" value="<?= $kebun_id ?>">
                     <input type="hidden" name="unit_id" value="<?= $unit_id ?>">
@@ -130,12 +132,20 @@ include_once '../layouts/header.php';
 
                     <div>
                         <label class="block text-[10px] font-black text-slate-400 uppercase mb-2 ml-1">Warna Poligon/Garis</label>
-                        <div class="flex gap-3 px-1">
+                        <div class="flex flex-wrap gap-2 px-1 items-center">
                             <input type="radio" name="warna" value="#0891b2" class="color-radio" style="background-color: #0891b2;" checked title="Cyan">
                             <input type="radio" name="warna" value="#e11d48" class="color-radio" style="background-color: #e11d48;" title="Merah">
                             <input type="radio" name="warna" value="#10b981" class="color-radio" style="background-color: #10b981;" title="Hijau">
                             <input type="radio" name="warna" value="#f59e0b" class="color-radio" style="background-color: #f59e0b;" title="Kuning">
                             <input type="radio" name="warna" value="#6366f1" class="color-radio" style="background-color: #6366f1;" title="Ungu">
+                            <input type="radio" name="warna" value="#ec4899" class="color-radio" style="background-color: #ec4899;" title="Pink">
+                            <input type="radio" name="warna" value="#3b82f6" class="color-radio" style="background-color: #3b82f6;" title="Biru">
+                            <input type="radio" name="warna" value="#14b8a6" class="color-radio" style="background-color: #14b8a6;" title="Teal">
+                            <div class="flex items-center gap-1 border border-slate-200 p-0.5 rounded-lg ml-1">
+                                <input type="radio" name="warna" value="#000000" id="radio_custom_color" class="color-radio hidden">
+                                <label for="radio_custom_color" class="cursor-pointer text-[9px] font-bold text-slate-500 ml-1">Custom:</label>
+                                <input type="color" id="input_custom_color" class="w-5 h-5 p-0 border-0 rounded cursor-pointer" value="#000000" title="Pilih Warna Bebas">
+                            </div>
                         </div>
                     </div>
 
@@ -252,8 +262,45 @@ include_once '../layouts/header.php';
 
         </div>
 
-        <div class="lg:col-span-3">
+        <div class="lg:col-span-3 space-y-4">
             <div id="map"></div>
+
+            <!-- Tabel Realisasi Pekerjaan -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200" id="card_table_realisasi">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="text-sm font-black text-slate-700 uppercase tracking-wider">
+                        <i class="ti ti-table text-cyan-600 mr-1"></i> Data Realisasi Lahan
+                    </h4>
+                </div>
+                <div class="overflow-x-auto rounded-lg border border-slate-200">
+                    <table class="w-full text-left border-collapse text-[11px] whitespace-nowrap">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                                <th rowspan="2" class="px-3 py-2 border-r border-slate-200 align-middle text-center">TANGGAL</th>
+                                <th rowspan="2" class="px-3 py-2 border-r border-slate-200 align-middle text-center">BLOK</th>
+                                <th colspan="2" class="px-3 py-1.5 border-r border-b border-slate-200 text-center bg-cyan-50/50">Fisik (Ha, Pkk)</th>
+                                <th colspan="2" class="px-3 py-1.5 border-r border-b border-slate-200 text-center bg-teal-50/50">HK</th>
+                                <th colspan="2" class="px-3 py-1.5 border-r border-b border-slate-200 text-center bg-amber-50/50">Bahan Kimia</th>
+                                <th colspan="2" class="px-3 py-1.5 border-r border-b border-slate-200 text-center bg-rose-50/50">Campuran</th>
+                                <th rowspan="2" class="px-3 py-2 border-slate-200 align-middle text-center">AKSI</th>
+                            </tr>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-500 font-bold text-center">
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-cyan-50/50">H. INI</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-cyan-50/50">S/D</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-teal-50/50">H. INI</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-teal-50/50">S/D</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-amber-50/50">H. INI</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-amber-50/50">S/D</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-rose-50/50">H. INI</th>
+                                <th class="px-2 py-1.5 border-r border-slate-200 bg-rose-50/50">S/D</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-realisasi-body" class="divide-y divide-slate-100 text-slate-700">
+                            <!-- Data dimuat lewat AJAX -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
     </div>
@@ -359,6 +406,15 @@ include_once '../layouts/header.php';
         radio.addEventListener('change', applyColorToDrawings);
     });
 
+    document.getElementById('input_custom_color').addEventListener('input', function(e) {
+        let color = e.target.value;
+        let radioCustom = document.getElementById('radio_custom_color');
+        radioCustom.value = color;
+        radioCustom.checked = true;
+        // trigger event change to apply color
+        applyColorToDrawings();
+    });
+
     function applyColorToDrawings() {
         if(!drawnItems) return;
         let selectedColor = document.querySelector('input[name="warna"]:checked').value;
@@ -432,9 +488,14 @@ include_once '../layouts/header.php';
 
         // Update hidden input untuk submit
         document.getElementById('input_jp_id').value = jp_id;
+        document.getElementById('upload_jp_id').value = jp_id;
 
         // Reset peta
         if (drawnItems) drawnItems.clearLayers();
+
+        if(jp_id === "") {
+            document.getElementById('card_upload_peta').classList.add('hidden');
+        }
 
         try {
             const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}`);
@@ -445,16 +506,57 @@ include_once '../layouts/header.php';
                 initMap(res.peta_kerja_foto);
                 applyColorToDrawings();
                 
-                // Tampilkan atau sembunyikan form upload base map
-                if(!res.peta_kerja_foto) {
+                // Tampilkan form upload base map JIKA JP Dipilih (bisa upload berkali-kali)
+                if(jp_id !== "") {
                     document.getElementById('card_upload_peta').classList.remove('hidden');
+                    let btnText = res.peta_kerja_foto ? 'Ganti Peta Dasar (Timpa)' : 'Upload & Pasang Peta';
+                    document.getElementById('btn-upload-peta').innerText = btnText;
                 } else {
                     document.getElementById('card_upload_peta').classList.add('hidden');
                 }
 
+                let tbody = document.getElementById('table-realisasi-body');
+                if(tbody) tbody.innerHTML = '';
+                
                 let bounds = [];
 
+                if (res.data.length === 0 && tbody) {
+                    tbody.innerHTML = `<tr><td colspan="11" class="px-3 py-4 text-center text-slate-500 italic">Belum ada data realisasi.</td></tr>`;
+                }
+
                 res.data.forEach(titik => {
+                    if(tbody) {
+                        let tr = document.createElement('tr');
+                        tr.className = "hover:bg-slate-50 transition";
+                        const fmt = (num) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+                        const tgl = titik.tanggal_realisasi ? titik.tanggal_realisasi.split('-').reverse().join('-') : '-';
+                        
+                        // Menghindari issue kutip di JSON.stringify
+                        let safeJson = JSON.stringify(titik).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+
+                        tr.innerHTML = `
+                            <td class="px-3 py-2 border-r border-slate-200 text-center">${tgl}</td>
+                            <td class="px-3 py-2 border-r border-slate-200 text-center font-bold">${titik.nama_blok || '-'}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_hari_ini)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_sd)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_hari_ini)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_sd)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_hari_ini)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_sd)}</td>
+                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.campuran_hari_ini)}</td>
+                            <td class="px-2 py-2 border-slate-200 text-right font-mono">${fmt(titik.campuran_sd)}</td>
+                            <td class="px-3 py-2 text-center border-l border-slate-200">
+                                <button type="button" onclick="editMapData(${safeJson})" class="bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Edit">
+                                    <i class="ti ti-edit"></i>
+                                </button>
+                                <button type="button" onclick="deleteMapData(${titik.id})" class="bg-rose-100 text-rose-600 hover:bg-rose-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Hapus">
+                                    <i class="ti ti-trash"></i>
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    }
+
                     if(!titik.geojson) return;
 
                     let geojsonData = JSON.parse(titik.geojson);
@@ -566,6 +668,14 @@ include_once '../layouts/header.php';
             if(res.success) {
                 Swal.fire({ icon: 'success', title: 'Berhasil!', text: res.message, timer: 1500, showConfirmButton: false });
                 this.reset();
+                
+                // Kembalikan form ke mode tambah
+                document.getElementById('input_edit_id').value = '';
+                let btnSubmit = document.getElementById('btn-submit');
+                btnSubmit.innerHTML = '<i class="ti ti-cloud-upload"></i> Simpan Data GIS';
+                btnSubmit.classList.remove('bg-amber-500', 'hover:bg-amber-600', 'shadow-amber-200');
+                btnSubmit.classList.add('btn-cyan', 'shadow-cyan-200');
+
                 clearDrawnItems();
                 loadSavedPoints();
                 applyColorToDrawings(); 
@@ -591,6 +701,7 @@ include_once '../layouts/header.php';
     document.getElementById('form-upload-peta').addEventListener('submit', async function(e) {
         e.preventDefault();
         let btn = document.getElementById('btn-upload-peta');
+        let originalText = btn.innerHTML;
         btn.innerHTML = '<i class="ti ti-loader animate-spin"></i> Mengupload...';
         btn.disabled = true;
 
@@ -603,12 +714,18 @@ include_once '../layouts/header.php';
                 Swal.fire({ icon: 'success', title: 'Berhasil!', text: res.message, timer: 1500, showConfirmButton: false });
                 loadSavedPoints(); // Reload peta
             } else {
-                Swal.fire({ icon: 'error', title: 'Gagal!', text: res.message });
+                let errorHtml = `<b class="text-slate-800">${res.message}</b>`;
+                if (res.detail) {
+                    errorHtml += `<br><br><div style="text-align:left; background:#fee2e2; padding:10px; border-radius:8px; font-size:12px; color:#991b1b; font-family:monospace; border: 1px solid #fca5a5;">
+                                    <b>Detail Error:</b><br>${res.detail}
+                                  </div>`;
+                }
+                Swal.fire({ icon: 'error', title: 'Gagal!', html: errorHtml });
             }
         } catch(err) {
             Swal.fire('Error', 'Gagal mengupload peta.', 'error');
+            btn.innerHTML = originalText;
         } finally {
-            btn.innerHTML = 'Upload & Pasang Peta';
             btn.disabled = false;
         }
     });
@@ -617,6 +734,103 @@ include_once '../layouts/header.php';
         loadBloks();
         loadSavedPoints();
     });
+
+    // --- FUNGSI EDIT DATA ---
+    window.editMapData = function(titik) {
+        document.getElementById('input_edit_id').value = titik.id;
+        document.getElementById('select_blok').value = titik.blok_id;
+        document.querySelector(`select[name="jenis_aset"]`).value = titik.jenis_aset;
+        document.getElementById('input_lat').value = titik.latitude;
+        document.getElementById('input_lng').value = titik.longitude;
+        document.getElementById('input_geojson').value = titik.geojson;
+        
+        let colorFound = false;
+        document.querySelectorAll('input[name="warna"]').forEach(r => {
+            if(r.value === titik.warna) {
+                r.checked = true;
+                colorFound = true;
+            }
+        });
+
+        // Jika warna tidak ada di opsi default, set ke custom
+        if (!colorFound) {
+            let radioCustom = document.getElementById('radio_custom_color');
+            let inputCustom = document.getElementById('input_custom_color');
+            radioCustom.value = titik.warna;
+            radioCustom.checked = true;
+            inputCustom.value = titik.warna;
+        }
+
+        document.querySelector(`input[name="tanggal_realisasi"]`).value = titik.tanggal_realisasi || '';
+        document.querySelector(`input[name="fisik_hari_ini"]`).value = titik.fisik_hari_ini || '';
+        document.querySelector(`input[name="fisik_sd"]`).value = titik.fisik_sd || '';
+        document.querySelector(`input[name="hk_hari_ini"]`).value = titik.hk_hari_ini || '';
+        document.querySelector(`input[name="hk_sd"]`).value = titik.hk_sd || '';
+        document.querySelector(`input[name="bahan_kimia_hari_ini"]`).value = titik.bahan_kimia_hari_ini || '';
+        document.querySelector(`input[name="bahan_kimia_sd"]`).value = titik.bahan_kimia_sd || '';
+        document.querySelector(`input[name="campuran_hari_ini"]`).value = titik.campuran_hari_ini || '';
+        document.querySelector(`input[name="campuran_sd"]`).value = titik.campuran_sd || '';
+        document.querySelector(`textarea[name="keterangan"]`).value = titik.keterangan || '';
+
+        let btn = document.getElementById('btn-submit');
+        btn.innerHTML = '<i class="ti ti-check"></i> Update Data GIS';
+        btn.classList.remove('btn-cyan', 'shadow-cyan-200');
+        btn.classList.add('bg-amber-500', 'hover:bg-amber-600', 'shadow-amber-200');
+
+        Swal.fire({ toast: true, position: 'top-end', icon: 'info', title: 'Mode Edit Aktif', showConfirmButton: false, timer: 1500 });
+        document.getElementById('form-pemetaan').scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Render geojson ke form agar user tahu mana yang diedit
+        if(drawnItems) drawnItems.clearLayers();
+        if(titik.geojson) {
+            let layer = L.geoJSON(JSON.parse(titik.geojson));
+            layer.eachLayer(l => drawnItems.addLayer(l));
+            applyColorToDrawings();
+        }
+    };
+
+    // --- FUNGSI HAPUS DATA ---
+    window.deleteMapData = function(id) {
+        if (typeof confirmAlert === 'function') {
+            confirmAlert(
+                'Hapus Data Realisasi?',
+                'Data pemetaan dan realisasi ini akan dihapus permanen!',
+                'Ya, Hapus!',
+                'Batal',
+                () => executeDelete(id)
+            );
+        } else {
+            Swal.fire({
+                title: 'Hapus Data Realisasi?',
+                text: 'Data pemetaan dan realisasi ini akan dihapus permanen!',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                cancelButtonColor: '#94a3b8',
+                confirmButtonText: 'Ya, Hapus!'
+            }).then((result) => {
+                if (result.isConfirmed) executeDelete(id);
+            });
+        }
+    };
+
+    async function executeDelete(id) {
+        try {
+            let formData = new FormData();
+            formData.append('action', 'delete_map_data');
+            formData.append('id', id);
+            const response = await fetch('be/pemetaan_api.php', { method: 'POST', body: formData });
+            const res = await response.json();
+            if(res.success) {
+                Swal.fire({ icon: 'success', title: 'Terhapus!', text: res.message, timer: 1500, showConfirmButton: false });
+                loadSavedPoints();
+            } else {
+                Swal.fire('Gagal!', res.message, 'error');
+            }
+        } catch(err) {
+            Swal.fire('Error', 'Terjadi kesalahan sistem.', 'error');
+        }
+    }
 
     // --- 9. FUNGSI EXPORT KE PDF & EXCEL DENGAN HTML2CANVAS ---
     async function exportMap(format) {

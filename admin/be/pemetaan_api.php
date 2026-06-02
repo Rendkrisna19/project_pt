@@ -65,6 +65,8 @@ try {
     // --- 3. SIMPAN DATA GEOJSON (DRAWING MULTI POLYGON) ---
     if ($action === 'save_map_data') {
         
+        $id = !empty($_POST['id']) ? (int)$_POST['id'] : null;
+
         // Validasi ketat
         if (empty($_POST['kebun_id'])) throw new Exception("ID Kebun tidak ditemukan.");
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
@@ -115,18 +117,40 @@ try {
         }
 
         // Query Insert (SEKARANG SUDAH ADA KOLOM KETERANGAN & REALISASI & JENIS PEKERJAAN)
-        $sql = "INSERT INTO tr_pemetaan (
-                    kebun_id, unit_id, blok_id, jenis_pekerjaan_id, jenis_aset, geojson, latitude, longitude, warna, foto, keterangan,
-                    tanggal_realisasi, fisik_hari_ini, fisik_sd, hk_hari_ini, hk_sd, bahan_kimia_hari_ini, bahan_kimia_sd, campuran_hari_ini, campuran_sd
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        $stmt = $conn->prepare($sql);
-        $stmt->execute([
-            $kebun_id, $unit_id, $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
-            $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
-        ]);
+        if ($id) {
+            $sql = "UPDATE tr_pemetaan SET 
+                        blok_id = ?, jenis_pekerjaan_id = ?, jenis_aset = ?, geojson = ?, latitude = ?, longitude = ?, warna = ?,
+                        keterangan = ?, tanggal_realisasi = ?, fisik_hari_ini = ?, fisik_sd = ?, hk_hari_ini = ?, hk_sd = ?, 
+                        bahan_kimia_hari_ini = ?, bahan_kimia_sd = ?, campuran_hari_ini = ?, campuran_sd = ?";
+            $params = [
+                $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, 
+                $keterangan, $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
+            ];
+            if ($foto_name) {
+                $sql .= ", foto = ?";
+                $params[] = $foto_name;
+            }
+            $sql .= " WHERE id = ?";
+            $params[] = $id;
+
+            $stmt = $conn->prepare($sql);
+            $stmt->execute($params);
+            $msg = 'Area GIS berhasil diupdate!';
+        } else {
+            $sql = "INSERT INTO tr_pemetaan (
+                        kebun_id, unit_id, blok_id, jenis_pekerjaan_id, jenis_aset, geojson, latitude, longitude, warna, foto, keterangan,
+                        tanggal_realisasi, fisik_hari_ini, fisik_sd, hk_hari_ini, hk_sd, bahan_kimia_hari_ini, bahan_kimia_sd, campuran_hari_ini, campuran_sd
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            $stmt = $conn->prepare($sql);
+            $stmt->execute([
+                $kebun_id, $unit_id, $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
+                $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
+            ]);
+            $msg = 'Area GIS berhasil disimpan ke database!';
+        }
 
         ob_clean();
-        echo json_encode(['success' => true, 'message' => 'Area GIS berhasil disimpan ke database!']);
+        echo json_encode(['success' => true, 'message' => $msg]);
         exit;
     }
 
@@ -167,12 +191,15 @@ try {
         $st->execute($paramsStats);
         $stats = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        // Ambil info Peta Dasar
-        $sqlUnit = "SELECT peta_kerja_foto FROM units WHERE id = ?";
-        $stmtUnit = $conn->prepare($sqlUnit);
-        $stmtUnit->execute([$unit_id]);
-        $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
-        $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
+        // Ambil info Peta Dasar per Jenis Pekerjaan
+        $peta_kerja_foto = null;
+        if ($jp_id > 0) {
+            $sqlUnit = "SELECT peta_kerja_foto FROM tr_pemetaan_peta_dasar WHERE unit_id = ? AND jenis_pekerjaan_id = ?";
+            $stmtUnit = $conn->prepare($sqlUnit);
+            $stmtUnit->execute([$unit_id, $jp_id]);
+            $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
+            $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
+        }
 
         ob_clean();
         echo json_encode(['success' => true, 'data' => $data, 'stats' => $stats, 'peta_kerja_foto' => $peta_kerja_foto]);
@@ -183,6 +210,9 @@ try {
     if ($action === 'upload_peta_dasar') {
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
         $unit_id = (int)$_POST['unit_id'];
+
+        if (empty($_POST['jenis_pekerjaan_id'])) throw new Exception("Jenis Pekerjaan belum dipilih di filter atas.");
+        $jp_id = (int)$_POST['jenis_pekerjaan_id'];
 
         if (empty($_FILES['peta_dasar']['name'])) {
             throw new Exception("File gambar Peta Dasar belum dipilih.");
@@ -197,18 +227,31 @@ try {
             throw new Exception("Format gambar harus JPG, PNG, atau WEBP.");
         }
 
-        $foto_name = "BASEMAP_UNIT_" . $unit_id . "_" . time() . ".$ext";
+        $foto_name = "BASEMAP_UNIT_" . $unit_id . "_JP_" . $jp_id . "_" . time() . ".$ext";
 
         if (!move_uploaded_file($_FILES['peta_dasar']['tmp_name'], $dir . $foto_name)) {
             throw new Exception("Gagal mengupload file ke server.");
         }
 
-        $sql = "UPDATE units SET peta_kerja_foto = ? WHERE id = ?";
+        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = ?";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$foto_name, $unit_id]);
+        $stmt->execute([$unit_id, $jp_id, $foto_name, $foto_name]);
 
         ob_clean();
         echo json_encode(['success' => true, 'message' => 'Peta Dasar berhasil diunggah!', 'foto' => $foto_name]);
+        exit;
+    }
+
+    // --- 6. HAPUS DATA PEMETAAN ---
+    if ($action === 'delete_map_data') {
+        if (empty($_POST['id'])) throw new Exception("ID tidak ditemukan.");
+        $id = (int)$_POST['id'];
+        
+        $stmt = $conn->prepare("DELETE FROM tr_pemetaan WHERE id = ?");
+        $stmt->execute([$id]);
+        
+        ob_clean();
+        echo json_encode(['success' => true, 'message' => 'Data Realisasi berhasil dihapus!']);
         exit;
     }
 
