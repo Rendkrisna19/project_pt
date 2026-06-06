@@ -139,6 +139,9 @@ include_once '../layouts/header.php';
       </a>
 
       <?php if (!$isStaf): ?>
+      <a href="imports/import_lm76.php" class="flex-1 md:flex-none justify-center bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center gap-2 shadow-sm transition no-underline">
+        <i class="ti ti-file-import text-lg"></i><span>Import</span>
+      </a>
       <button id="btn-add" class="w-full sm:w-auto justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
         <i class="ti ti-plus text-lg"></i><span>Input LM-76</span>
       </button>

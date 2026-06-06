@@ -206,7 +206,7 @@ try {
         exit;
     }
 
-    // --- 5. UPLOAD PETA DASAR (IMAGE) ---
+    // --- 5. UPLOAD PETA DASAR (IMAGE / PDF) ---
     if ($action === 'upload_peta_dasar') {
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
         $unit_id = (int)$_POST['unit_id'];
@@ -215,22 +215,88 @@ try {
         $jp_id = (int)$_POST['jenis_pekerjaan_id'];
 
         if (empty($_FILES['peta_dasar']['name'])) {
-            throw new Exception("File gambar Peta Dasar belum dipilih.");
+            throw new Exception("File gambar/PDF Peta Dasar belum dipilih.");
         }
 
         $dir = "../../uploads/pemetaan/base_map/";
         if (!is_dir($dir)) mkdir($dir, 0777, true);
 
         $ext = strtolower(pathinfo($_FILES['peta_dasar']['name'], PATHINFO_EXTENSION));
-        $valid_ext = ['jpg', 'jpeg', 'png', 'webp'];
+        $valid_ext = ['jpg', 'jpeg', 'png', 'webp', 'pdf'];
         if (!in_array($ext, $valid_ext)) {
-            throw new Exception("Format gambar harus JPG, PNG, atau WEBP.");
+            throw new Exception("Format file harus JPG, PNG, WEBP, atau PDF.");
         }
 
-        $foto_name = "BASEMAP_UNIT_" . $unit_id . "_JP_" . $jp_id . "_" . time() . ".$ext";
+        $base_name = "BASEMAP_UNIT_" . $unit_id . "_JP_" . $jp_id . "_" . time();
 
-        if (!move_uploaded_file($_FILES['peta_dasar']['tmp_name'], $dir . $foto_name)) {
-            throw new Exception("Gagal mengupload file ke server.");
+        if ($ext === 'pdf') {
+            // Simpan file PDF asli dulu
+            $pdf_path = $dir . $base_name . ".pdf";
+            if (!move_uploaded_file($_FILES['peta_dasar']['tmp_name'], $pdf_path)) {
+                throw new Exception("Gagal mengupload file PDF ke server.");
+            }
+
+            // Konversi halaman 1 PDF ke PNG menggunakan Imagick
+            if (!class_exists('Imagick')) {
+                // Fallback: jika Imagick tidak tersedia, coba GD + exec ghostscript
+                $png_path = $dir . $base_name . ".png";
+                $gs_cmd = "gswin64c";
+                // Cek apakah ghostscript tersedia
+                $check = @shell_exec("where gswin64c 2>&1");
+                if (empty($check) || strpos($check, 'Could not find') !== false) {
+                    $check2 = @shell_exec("where gs 2>&1");
+                    if (empty($check2) || strpos($check2, 'Could not find') !== false) {
+                        // Tidak ada Ghostscript, biarkan PDF sebagai file (tidak bisa preview di peta)
+                        $foto_name = $base_name . ".pdf";
+                        
+                        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = ?";
+                        $stmt = $conn->prepare($sql);
+                        $stmt->execute([$unit_id, $jp_id, $foto_name, $foto_name]);
+
+                        ob_clean();
+                        echo json_encode(['success' => true, 'message' => 'PDF berhasil diupload! (Preview peta tidak tersedia karena Ghostscript/Imagick belum terinstal)', 'foto' => $foto_name]);
+                        exit;
+                    }
+                    $gs_cmd = "gs";
+                }
+
+                // Konversi PDF ke PNG via Ghostscript
+                $escaped_pdf = escapeshellarg(realpath($pdf_path));
+                $escaped_png = escapeshellarg(realpath($dir) . DIRECTORY_SEPARATOR . $base_name . ".png");
+                $cmd = "$gs_cmd -dNOPAUSE -dBATCH -sDEVICE=png16m -r200 -dFirstPage=1 -dLastPage=1 -sOutputFile=$escaped_png $escaped_pdf 2>&1";
+                $output = shell_exec($cmd);
+                
+                if (file_exists($dir . $base_name . ".png")) {
+                    $foto_name = $base_name . ".png";
+                } else {
+                    // Ghostscript gagal, simpan sebagai PDF saja
+                    $foto_name = $base_name . ".pdf";
+                }
+            } else {
+                // Imagick tersedia — konversi PDF halaman 1 ke PNG
+                try {
+                    $imagick = new \Imagick();
+                    $imagick->setResolution(200, 200);
+                    $imagick->readImage(realpath($pdf_path) . '[0]'); // Halaman pertama saja
+                    $imagick->setImageFormat('png');
+                    
+                    $png_path = $dir . $base_name . ".png";
+                    $imagick->writeImage($png_path);
+                    $imagick->clear();
+                    $imagick->destroy();
+                    
+                    $foto_name = $base_name . ".png";
+                } catch (\Exception $imgErr) {
+                    // Imagick gagal, simpan sebagai PDF saja
+                    $foto_name = $base_name . ".pdf";
+                }
+            }
+        } else {
+            // Upload gambar biasa (JPG/PNG/WEBP)
+            $foto_name = $base_name . ".$ext";
+            if (!move_uploaded_file($_FILES['peta_dasar']['tmp_name'], $dir . $foto_name)) {
+                throw new Exception("Gagal mengupload file ke server.");
+            }
         }
 
         $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = ?";

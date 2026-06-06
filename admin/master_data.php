@@ -33,8 +33,11 @@ include_once '../layouts/header.php';
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
     body { font-family: 'Poppins', sans-serif; background-color: #f8fafc; }
     
-    .scrollbar-hide::-webkit-scrollbar { display: none; }
-    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .scroll-tabs::-webkit-scrollbar { height: 6px; }
+    .scroll-tabs::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+    .scroll-tabs::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    .scroll-tabs::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .scroll-tabs { scrollbar-width: thin; scrollbar-color: #cbd5e1 #f1f5f9; }
 
     .tab-btn {
         padding: 0.5rem 1rem;           
@@ -102,43 +105,51 @@ include_once '../layouts/header.php';
     </div>
 
     <div class="bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-        <div id="tabs" class="flex gap-2 overflow-x-auto scrollbar-hide p-2 snap-x">
-            <button data-entity="kebun" class="tab-btn active snap-start">Nama Kebun</button>
-            <button data-entity="unit" class="tab-btn snap-start">Unit/Afdeling</button>
-            <button data-entity="rayon" class="tab-btn snap-start">Rayon</button>
-            <button data-entity ="blok" class="tab-btn snap-start">Blok</button>
-            <button data-entity="tahun_tanam" class="tab-btn snap-start">Tahun Tanam</button>
-            
-            <button data-entity="bahan_kimia" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Bahan Kimia</button>
-            <button data-entity="pupuk" class="tab-btn snap-start">Pupuk</button>
-            <button data-entity="jenis_kendaraan" class="tab-btn snap-start">Jenis Kendaraan</button> 
-            <button data-entity="jenis_bahan_bakar_pelumas" class="tab-btn snap-start">BBM & Pelumas</button> 
-            <button data-entity="barang_gudang" class="tab-btn snap-start">Barang Gudang</button>
-            <button data-entity="alat_panen" class="tab-btn snap-start">Alat Panen</button>
-            <button data-entity="apl" class="tab-btn snap-start">APL</button>
-            <button data-entity="jenis_pekerjaan_kertas_kerja" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pek. Kertas Kerja</button>
-            <button data-entity="bibit_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Bibit MN</button>
-            <button data-entity="bibit_pn" class="tab-btn snap-start">Bibit PN</button>
+        <div class="flex items-center gap-1">
+            <button id="tabs-scroll-left" class="shrink-0 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition hidden" title="Geser kiri">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <div id="tabs" class="flex gap-2 overflow-x-auto scroll-tabs p-2 snap-x flex-1">
+                <button data-entity="kebun" class="tab-btn active snap-start">Nama Kebun</button>
+                <button data-entity="unit" class="tab-btn snap-start">Unit/Afdeling</button>
+                <button data-entity="rayon" class="tab-btn snap-start">Rayon</button>
+                <button data-entity ="blok" class="tab-btn snap-start">Blok</button>
+                <button data-entity="tahun_tanam" class="tab-btn snap-start">Tahun Tanam</button>
+                
+                <button data-entity="bahan_kimia" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Bahan Kimia</button>
+                <button data-entity="pupuk" class="tab-btn snap-start">Pupuk</button>
+                <button data-entity="jenis_kendaraan" class="tab-btn snap-start">Jenis Kendaraan</button> 
+                <button data-entity="jenis_bahan_bakar_pelumas" class="tab-btn snap-start">BBM & Pelumas</button> 
+                <button data-entity="barang_gudang" class="tab-btn snap-start">Barang Gudang</button>
+                <button data-entity="alat_panen" class="tab-btn snap-start">Alat Panen</button>
+                <button data-entity="apl" class="tab-btn snap-start">APL</button>
+                <button data-entity="jenis_pekerjaan_kertas_kerja" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pek. Kertas Kerja</button>
+                <button data-entity="bibit_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Bibit MN</button>
+                <button data-entity="bibit_pn" class="tab-btn snap-start">Bibit PN</button>
 
-            <button data-entity="jenis_pekerjaan" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pekerjaan</button>
-            
-            <button data-entity="pem_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Pem. TM</button>
-            <button data-entity="pem_tu" class="tab-btn snap-start">Pem. TU</button>
-            <button data-entity="pem_tk" class="tab-btn snap-start">Pem. TK</button>
-            <button data-entity="pem_tbm1" class="tab-btn snap-start">Pem. TBM I</button>
-            <button data-entity="pem_tbm2" class="tab-btn snap-start">Pem. TBM II</button>
-            <button data-entity="pem_tbm3" class="tab-btn snap-start">Pem. TBM III</button>
-            <button data-entity="pem_pn" class="tab-btn snap-start">Pem. PN</button>
-            <button data-entity="pem_mn" class="tab-btn snap-start">Pem. MN</button>
+                <button data-entity="jenis_pekerjaan" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pekerjaan</button>
+                
+                <button data-entity="pem_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Pem. TM</button>
+                <button data-entity="pem_tu" class="tab-btn snap-start">Pem. TU</button>
+                <button data-entity="pem_tk" class="tab-btn snap-start">Pem. TK</button>
+                <button data-entity="pem_tbm1" class="tab-btn snap-start">Pem. TBM I</button>
+                <button data-entity="pem_tbm2" class="tab-btn snap-start">Pem. TBM II</button>
+                <button data-entity="pem_tbm3" class="tab-btn snap-start">Pem. TBM III</button>
+                <button data-entity="pem_pn" class="tab-btn snap-start">Pem. PN</button>
+                <button data-entity="pem_mn" class="tab-btn snap-start">Pem. MN</button>
 
-            <button data-entity="satuan" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Satuan</button>
-            <button data-entity="fisik" class="tab-btn snap-start">Fisik</button>
-            <button data-entity="tenaga" class="tab-btn snap-start">Tenaga</button>
-            <button data-entity="mobil" class="tab-btn snap-start">Mobil</button>
-            <button data-entity="no_polisi" class="tab-btn snap-start">No Polisi</button>
-            <button data-entity="jabatan" class="tab-btn snap-start">Jabatan</button>
-            <button data-entity="asal_gudang" class="tab-btn snap-start">Asal Gudang</button>
-            <button data-entity="keterangan" class="tab-btn snap-start">Keterangan Master</button>
+                <button data-entity="satuan" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Satuan</button>
+                <button data-entity="fisik" class="tab-btn snap-start">Fisik</button>
+                <button data-entity="tenaga" class="tab-btn snap-start">Tenaga</button>
+                <button data-entity="mobil" class="tab-btn snap-start">Mobil</button>
+                <button data-entity="no_polisi" class="tab-btn snap-start">No Polisi</button>
+                <button data-entity="jabatan" class="tab-btn snap-start">Jabatan</button>
+                <button data-entity="asal_gudang" class="tab-btn snap-start">Asal Gudang</button>
+                <button data-entity="keterangan" class="tab-btn snap-start">Keterangan Master</button>
+            </div>
+            <button id="tabs-scroll-right" class="shrink-0 p-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 transition" title="Geser kanan">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </button>
         </div>
     </div>
 
@@ -263,6 +274,26 @@ document.addEventListener('DOMContentLoaded', () => {
   let searchQuery = ''; 
   let searchTimeout;
   const blokFilter = { kebun_id: '', unit_id: '', kode: '', tahun: '' };
+
+  // === Scroll Tabs Arrows ===
+  const tabsContainer = document.getElementById('tabs');
+  const scrollLeftBtn = document.getElementById('tabs-scroll-left');
+  const scrollRightBtn = document.getElementById('tabs-scroll-right');
+
+  function updateScrollArrows() {
+    if (!tabsContainer) return;
+    const { scrollLeft, scrollWidth, clientWidth } = tabsContainer;
+    scrollLeftBtn.classList.toggle('hidden', scrollLeft <= 5);
+    scrollRightBtn.classList.toggle('hidden', scrollLeft + clientWidth >= scrollWidth - 5);
+  }
+
+  if (scrollLeftBtn && scrollRightBtn && tabsContainer) {
+    scrollLeftBtn.addEventListener('click', () => { tabsContainer.scrollBy({ left: -250, behavior: 'smooth' }); });
+    scrollRightBtn.addEventListener('click', () => { tabsContainer.scrollBy({ left: 250, behavior: 'smooth' }); });
+    tabsContainer.addEventListener('scroll', updateScrollArrows);
+    window.addEventListener('resize', updateScrollArrows);
+    setTimeout(updateScrollArrows, 100);
+  }
 
   const OPTIONS_KEBUN  = [<?php foreach ($kebun_list as $k){ echo "{value:{$k['id']},label:'".htmlspecialchars($k['nama_kebun'],ENT_QUOTES)."'},"; } ?>];
   

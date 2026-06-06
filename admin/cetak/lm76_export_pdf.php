@@ -118,26 +118,26 @@ ob_start();
     body { font-family: sans-serif; font-size: 10px; color:#111; }
     
     .header { text-align:center; margin-bottom:15px; }
-    .header h1 { margin:0; font-size:16px; color:#065f46; text-transform: uppercase; }
-    .header h2 { margin:2px 0; font-size:12px; color:#047857; }
+    .header h1 { margin:0; font-size:16px; color:#0e7490; text-transform: uppercase; }
+    .header h2 { margin:2px 0; font-size:12px; color:#0891b2; }
     .header p { margin:0; font-size:9px; color:#555; }
 
     table { width:100%; border-collapse: collapse; table-layout:fixed; }
     th, td { border:1px solid #444; padding:4px 5px; vertical-align:middle; }
     
-    /* Header Tabel Hijau */
-    thead th { background-color:#16a34a; color:#fff; font-weight:bold; text-align:center; }
+    /* Header Tabel Cyan */
+    thead th { background-color:#0891b2; color:#fff; font-weight:bold; text-align:center; }
     
     /* Alignment */
     .text-right { text-align:right; }
     .text-center { text-align:center; }
     
     /* Grouping Styles */
-    .unit-head td { background-color:#d1fae5; color:#065f46; font-weight:bold; border-top:2px solid #065f46; font-size:11px; }
-    .unit-sub td { background-color:#ecfdf5; font-weight:bold; color:#064e3b; border-top:1px solid #999; }
+    .unit-head td { background-color:#e0f2fe; color:#0e7490; font-weight:bold; border-top:2px solid #0891b2; font-size:11px; }
+    .unit-sub td { background-color:#f0f9ff; font-weight:bold; color:#164e63; border-top:1px solid #999; }
     
     /* Footer Grand Total */
-    tfoot td { background-color:#bbf7d0; font-weight:bold; border-top:2px solid #000; }
+    tfoot td { background-color:#cffafe; font-weight:bold; border-top:2px solid #0891b2; }
 </style>
 </head>
 <body>

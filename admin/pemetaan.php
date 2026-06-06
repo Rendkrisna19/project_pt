@@ -20,6 +20,8 @@ include_once '../layouts/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 
 <style>
@@ -55,8 +57,8 @@ include_once '../layouts/header.php';
                 <i class="ti ti-chevron-left text-xl"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Geo-Mapping</h1>
-                <p class="text-xs font-bold text-cyan-600 uppercase tracking-widest">Sistem Informasi Geografis Kebun</p>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Kertas Kerja</h1>
+                <p class="text-xs font-bold text-cyan-600 uppercase tracking-widest">Kertas Kerja</p>
             </div>
         </div>
 
@@ -71,9 +73,7 @@ include_once '../layouts/header.php';
             <button onclick="exportMap('excel')" class="bg-gradient-to-r from-green-500 to-green-600 text-white border border-green-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
                 <i class="ti ti-file-spreadsheet"></i> Export Excel
             </button>
-            <button onclick="detectMyLocation()" class="bg-white text-cyan-600 border border-cyan-200 px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-cyan-50 transition flex items-center gap-2">
-                <i class="ti ti-gps"></i> Temukan Saya (GPS)
-            </button>
+
         </div>
     </div>
 
@@ -91,7 +91,7 @@ include_once '../layouts/header.php';
                     <input type="hidden" name="action" value="upload_peta_dasar">
                     <input type="hidden" name="unit_id" value="<?= $unit_id ?>">
                     <input type="hidden" name="jenis_pekerjaan_id" id="upload_jp_id" value="">
-                    <input type="file" name="peta_dasar" accept=".jpg,.jpeg,.png,.webp" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-fuchsia-50 file:text-fuchsia-700 hover:file:bg-fuchsia-100 cursor-pointer mb-2" required>
+                    <input type="file" name="peta_dasar" accept=".jpg,.jpeg,.png,.webp,.pdf" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-fuchsia-50 file:text-fuchsia-700 hover:file:bg-fuchsia-100 cursor-pointer mb-2" required>
                     <button type="submit" id="btn-upload-peta" class="w-full bg-fuchsia-500 text-white font-bold py-2 rounded-lg hover:bg-fuchsia-600 text-sm shadow-md transition">Upload & Pasang Peta</button>
                 </form>
             </div>
@@ -328,14 +328,38 @@ include_once '../layouts/header.php';
                 zoomControl: true,
                 preferCanvas: true
             });
-            let imgUrl = `../uploads/pemetaan/base_map/${petaKerjaFoto}`;
-            let img = new Image();
-            img.src = imgUrl;
-            img.onload = function() {
-                let w = img.width, h = img.height;
-                let bounds = [[0, 0], [h, w]];
-                L.imageOverlay(imgUrl, bounds).addTo(map);
-                map.fitBounds(bounds);
+            let fileUrl = `../uploads/pemetaan/base_map/${petaKerjaFoto}`;
+            
+            if (petaKerjaFoto.toLowerCase().endsWith('.pdf')) {
+                // MODE PDF: Render halaman 1 PDF ke canvas menggunakan pdf.js
+                pdfjsLib.getDocument(fileUrl).promise.then(function(pdf) {
+                    pdf.getPage(1).then(function(page) {
+                        let scale = 2;
+                        let viewport = page.getViewport({ scale: scale });
+                        let canvas = document.createElement('canvas');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        let ctx = canvas.getContext('2d');
+                        page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function() {
+                            let imgDataUrl = canvas.toDataURL('image/png');
+                            let bounds = [[0, 0], [viewport.height, viewport.width]];
+                            L.imageOverlay(imgDataUrl, bounds).addTo(map);
+                            map.fitBounds(bounds);
+                        });
+                    });
+                }).catch(function(err) {
+                    console.error('Gagal memuat PDF:', err);
+                });
+            } else {
+                // MODE GAMBAR: JPG/PNG/WEBP
+                let img = new Image();
+                img.src = fileUrl;
+                img.onload = function() {
+                    let w = img.width, h = img.height;
+                    let bounds = [[0, 0], [h, w]];
+                    L.imageOverlay(fileUrl, bounds).addTo(map);
+                    map.fitBounds(bounds);
+                }
             }
         } else {
             // MODE: SATELIT GPS DEFAULT
