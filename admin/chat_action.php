@@ -35,7 +35,8 @@ if ($action === 'send') {
         $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'mp3', 'wav', 'm4a', 'ogg', 'mp4', 'webm'];
 
         if (in_array($ext, $allowedExts)) {
-            $fileName = uniqid() . '.' . $ext;
+            $originalName = preg_replace('/[^a-zA-Z0-9.\-_]/', '_', pathinfo($_FILES['file']['name'], PATHINFO_FILENAME));
+            $fileName = uniqid() . '_' . $originalName . '.' . $ext;
             $targetFilePath = $uploadDir . $fileName;
 
             if (move_uploaded_file($_FILES['file']['tmp_name'], $targetFilePath)) {
@@ -198,9 +199,23 @@ if ($action === 'edit') {
 
 if ($action === 'delete') {
     $msgId = isset($_POST['msg_id']) ? (int)$_POST['msg_id'] : 0;
-    $userRole = $_SESSION['role'] ?? '';
+    $userRole = $_SESSION['user_role'] ?? '';
 
     if ($msgId > 0 && strtoupper($userRole) === 'ADMIN') {
+        $stmtCheck = $pdo->prepare("SELECT c.user_id, u.role FROM chats c JOIN users u ON c.user_id = u.id WHERE c.id = ?");
+        $stmtCheck->execute([$msgId]);
+        $targetMsg = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+        if (!$targetMsg) {
+            echo json_encode(['success' => false, 'message' => 'Pesan tidak ditemukan.']);
+            exit;
+        }
+
+        if (strtoupper($targetMsg['role']) === 'ADMIN' && $targetMsg['user_id'] != $userId) {
+            echo json_encode(['success' => false, 'message' => 'Admin tidak dapat menghapus pesan Admin lain.']);
+            exit;
+        }
+
         $stmt = $pdo->prepare("UPDATE chats SET is_deleted = 1, deleted_by = ? WHERE id = ?");
         if ($stmt->execute([$userId, $msgId])) {
             

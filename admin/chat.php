@@ -245,9 +245,29 @@ include_once '../layouts/header.php';
     .message-bubble:hover .msg-dropdown-btn {
         display: flex;
     }
+    .msg-delete-btn {
+        position: absolute;
+        top: 2px;
+        right: 28px;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.8);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        transition: 0.2s;
+    }
+    .msg-delete-btn:hover { background: #fee2e2; }
+    .message-bubble:hover .msg-delete-btn {
+        display: flex;
+    }
     /* Always show on mobile */
     @media (max-width: 768px) {
-        .msg-dropdown-btn { display: flex; opacity: 0.6; background: transparent; box-shadow: none; }
+        .msg-dropdown-btn, .msg-delete-btn { display: flex; opacity: 0.6; background: transparent; box-shadow: none; }
     }
     
     .msg-dropdown-menu {
@@ -446,7 +466,7 @@ include_once '../layouts/header.php';
 </div>
 
 <script>
-    const currentUserRole = '<?= $_SESSION["role"] ?? "" ?>';
+    const currentUserRole = '<?= $_SESSION["user_role"] ?? "" ?>';
     let lastMsgId = 0;
     let firstMsgId = 0;
     let hasMoreMessages = true;
@@ -523,10 +543,17 @@ include_once '../layouts/header.php';
             } else if (msg.file_type === 'video') {
                 mediaHtml = `<video controls src="${msg.file_url}" class="mb-2 max-w-full rounded" style="max-height: 200px;"></video>`;
             } else {
+                let displayName = msg.file_url.split('/').pop();
+                if (displayName.includes('_')) {
+                    displayName = displayName.substring(displayName.indexOf('_') + 1);
+                } else {
+                    displayName = 'Lampiran Dokumen';
+                }
+                
                 mediaHtml = `
-                    <a href="${msg.file_url}" target="_blank" class="chat-doc mb-2">
-                        <i data-lucide="file-text" class="w-5 h-5"></i>
-                        <span class="text-sm font-medium">Lihat File</span>
+                    <a href="${msg.file_url}" target="_blank" class="chat-doc mb-2" title="${displayName}">
+                        <i data-lucide="file-text" class="w-5 h-5 flex-shrink-0"></i>
+                        <span class="text-sm font-medium truncate max-w-[200px] block">${displayName}</span>
                     </a>
                 `;
             }
@@ -569,6 +596,7 @@ include_once '../layouts/header.php';
         
         // WA Style Dropdown Menu
         let dropdownHtml = '';
+        let deleteBtnHtml = '';
         if (!isDeleted) {
             dropdownHtml = `
                 <div class="msg-dropdown-btn" onclick="toggleDropdown(event, ${msg.id})">
@@ -580,10 +608,15 @@ include_once '../layouts/header.php';
             if (isMe) {
                 dropdownHtml += `<div class="msg-dropdown-item" onclick="initEdit(${msg.id}, '${textForReply}')">Edit</div>`;
             }
-            if (currentUserRole.toUpperCase() === 'ADMIN') {
-                dropdownHtml += `<div class="msg-dropdown-item text-red-600" onclick="deleteMessage(${msg.id})">Hapus</div>`;
-            }
             dropdownHtml += `</div>`;
+
+            if (currentUserRole.toUpperCase() === 'ADMIN' && (isMe || msg.role.toUpperCase() !== 'ADMIN')) {
+                deleteBtnHtml = `
+                    <div class="msg-delete-btn" onclick="deleteMessage(${msg.id})" title="Hapus Pesan">
+                        <i data-lucide="trash-2" class="w-4 h-4 text-red-500"></i>
+                    </div>
+                `;
+            }
         }
         
         const html = `
@@ -592,6 +625,7 @@ include_once '../layouts/header.php';
                     ${!isMe ? senderInfo : ''}
                     <div class="message-bubble group">
                         ${dropdownHtml}
+                        ${deleteBtnHtml}
                         ${replyHtml}
                         ${mediaHtml}
                         ${msgTextHtml}
@@ -744,34 +778,25 @@ include_once '../layouts/header.php';
     }
 
     function deleteMessage(id) {
-        Swal.fire({
-            title: 'Hapus Pesan?',
-            text: 'Tindakan ini tidak dapat dibatalkan.',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#ef4444',
-            cancelButtonColor: '#94a3b8',
-            confirmButtonText: 'Ya, Hapus!'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                const fd = new FormData();
-                fd.append('action', 'delete');
-                fd.append('msg_id', id);
-                fetch('chat_action.php', { method: 'POST', body: fd })
-                .then(res => res.json())
-                .then(res => {
-                    if (res.success && res.updated_message) {
-                        const row = document.getElementById('msg-' + id);
-                        if (row) {
-                            row.outerHTML = renderMessage(res.updated_message);
-                            lucide.createIcons();
-                        }
-                        Swal.fire('Terhapus!', 'Pesan berhasil ditarik.', 'success');
-                    } else {
-                        Swal.fire('Gagal', res.message || 'Gagal memproses', 'error');
-                    }
-                });
+        const fd = new FormData();
+        fd.append('action', 'delete');
+        fd.append('msg_id', id);
+        fetch('chat_action.php', { method: 'POST', body: fd })
+        .then(res => res.json())
+        .then(res => {
+            if (res.success && res.updated_message) {
+                const row = document.getElementById('msg-' + id);
+                if (row) {
+                    row.outerHTML = renderMessage(res.updated_message);
+                    lucide.createIcons();
+                }
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Pesan dihapus.', showConfirmButton: false, timer: 2000 });
+            } else {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: res.message || 'Gagal menghapus pesan.', showConfirmButton: false, timer: 2000 });
             }
+        })
+        .catch(() => {
+            Swal.fire({ toast: true, position: 'top-end', icon: 'error', title: 'Terjadi kesalahan jaringan.', showConfirmButton: false, timer: 2000 });
         });
     }
 
