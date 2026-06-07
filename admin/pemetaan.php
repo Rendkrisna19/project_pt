@@ -585,20 +585,7 @@ include_once '../layouts/header.php';
                         }
                     }).bindPopup(popupContent).addTo(map);
 
-                    let layerBounds = layer.getBounds ? layer.getBounds() : null;
-                    if (layerBounds && layerBounds.isValid()) bounds.push(layerBounds);
                 });
-
-                if(bounds.length > 0) {
-                    let mapBounds = bounds[0];
-                    for(let i=1; i<bounds.length; i++) { mapBounds.extend(bounds[i]); }
-                    
-                    // Delay sedikit agar image overlay termuat jika peta berupa gambar
-                    setTimeout(() => {
-                        // Ubah nilai padding ini (contoh: dari 50 ke 150) jika dirasa masih terlalu zoom
-                        if(map) map.fitBounds(mapBounds, { padding: [250, 250] });
-                    }, 700);
-                }
             }
         } catch (err) { console.error(err); }
     }

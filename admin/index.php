@@ -23,9 +23,7 @@ try {
     die("Koneksi Database Gagal: " . $e->getMessage());
 }
 
-// ==========================================================================
-// BACKEND AJAX HANDLER
-// ==========================================================================
+
 if (isset($_POST['ajax']) && $_POST['ajax'] === 'dashboard') {
     ini_set('display_errors', 0);
     error_reporting(E_ALL);
@@ -296,55 +294,61 @@ include_once '../layouts/header.php';
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-    :root { --primary: #0891b2; --primary-hover: #0e7490; --bg-body: #f8fafc; }
+    :root { --primary: #0c4a6e; --primary-light: #0e7490; --accent: #22d3ee; --accent-dim: #06b6d4; --bg-body: #f0f4f8; --navy: #08334c; --navy-light: #0a3d5c; }
     body { background-color: var(--bg-body); font-family: 'Inter', sans-serif; }
-    .filter-bar { background: white; border-radius: 12px; padding: 16px 24px; box-shadow: 0 4px 15px -5px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 24px; position: sticky; top: 10px; z-index: 50; }
+    .filter-bar { background: white; border-radius: 14px; padding: 18px 24px; box-shadow: 0 4px 20px -5px rgba(8,51,76,0.08); border: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 24px; position: sticky; top: 10px; z-index: 50; }
     .filter-item { flex: 1; min-width: 140px; }
-    .filter-item label { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 6px; display: block; }
+    .filter-item label { font-size: 0.7rem; font-weight: 700; color: #0c4a6e; text-transform: uppercase; margin-bottom: 6px; display: block; letter-spacing: 0.05em; }
     .filter-select { width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-size: 0.9rem; color: #334155; outline: none; background-color: #f8fafc; transition: all 0.2s; }
-    .filter-select:focus { border-color: var(--primary); background: white; box-shadow: 0 0 0 3px rgba(3,98,115,0.1); }
-    .filter-btn { background: var(--primary); color: white; border-radius: 8px; padding: 0 24px; height: 42px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s; }
-    .filter-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+    .filter-select:focus { border-color: var(--accent); background: white; box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
     .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 24px; }
-    .mini-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid #f1f5f9; text-align: center; }
-    .mini-lbl { font-size: 0.7rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
-    .mini-val { font-size: 1.5rem; font-weight: 800; color: #1e293b; margin: 4px 0; }
+    .mini-card { background: white; border-radius: 14px; padding: 18px 16px; border: 1px solid #e2e8f0; text-align: center; box-shadow: 0 2px 8px rgba(8,51,76,0.04); transition: all 0.3s; }
+    .mini-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(8,51,76,0.08); border-color: var(--accent); }
+    .mini-lbl { font-size: 0.7rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .mini-val { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin: 4px 0; }
     .mini-sub { font-size: 0.7rem; color: #64748b; }
     .middle-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 24px; }
     @media (max-width: 1024px) { .middle-grid { grid-template-columns: 1fr; } }
-    .chart-panel { background: white; border-radius: 16px; padding: 24px; border: 1px solid #eef2f6; height: 400px; }
-    .stat-card { background: white; border-radius: 16px; padding: 20px; border-left: 5px solid var(--primary); margin-bottom: 16px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .chart-panel { background: white; border-radius: 16px; padding: 24px; border: 1px solid #e2e8f0; height: 400px; box-shadow: 0 2px 12px rgba(8,51,76,0.04); }
+    .stat-card { background: white; border-radius: 16px; padding: 20px; border-left: 5px solid var(--navy); margin-bottom: 16px; box-shadow: 0 2px 8px rgba(8,51,76,0.04); transition: all 0.3s; }
+    .stat-card:hover { box-shadow: 0 6px 18px rgba(8,51,76,0.08); }
     .stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.9rem; }
     .stock-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stock-card { background: white; border-radius: 12px; padding: 20px; border-top: 4px solid #cbd5e1; min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; position: relative; }
-    .stock-card h3 { font-size: 1.6rem; font-weight: 800; color: #1e293b; }
-    .table-wrapper { background: white; border-radius: 16px; border: 1px solid #eef2f6; overflow: hidden; }
-    .nav-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
-    .nav-btn { padding: 14px 24px; font-size: 0.9rem; font-weight: 600; color: #64748b; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; }
-    .nav-btn.active { color: var(--primary); border-bottom-color: var(--primary); background: white; }
+    .stock-card { background: white; border-radius: 14px; padding: 20px; border-top: 4px solid var(--navy); min-height: 120px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 2px 8px rgba(8,51,76,0.04); transition: all 0.3s; }
+    .stock-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(8,51,76,0.08); }
+    .stock-card h3 { font-size: 1.6rem; font-weight: 800; color: var(--navy); }
+    .table-wrapper { background: white; border-radius: 16px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 2px 12px rgba(8,51,76,0.04); }
+    .nav-tabs { display: flex; background: #f8fafc; border-bottom: 2px solid #e2e8f0; }
+    .nav-btn { padding: 14px 24px; font-size: 0.9rem; font-weight: 600; color: #64748b; background: transparent; border: none; border-bottom: 3px solid transparent; cursor: pointer; transition: all 0.2s; }
+    .nav-btn:hover { color: var(--navy); background: #f0f9ff; }
+    .nav-btn.active { color: var(--navy); border-bottom-color: var(--accent); background: white; font-weight: 700; }
     .modern-table { width: 100%; border-collapse: collapse; }
-    .modern-table th { background: #f8fafc; color: #475569; padding: 12px 16px; font-size: 0.75rem; text-transform: uppercase; text-align: left; font-weight: 700; }
+    .modern-table th { background: linear-gradient(135deg, #08334c, #0c4a6e); color: #e0f2fe; padding: 12px 16px; font-size: 0.75rem; text-transform: uppercase; text-align: left; font-weight: 700; letter-spacing: 0.05em; }
     .modern-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; color: #334155; }
-    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,0.8); z-index: 9999; display: none; align-items: center; justify-content: center; }
+    .modern-table tbody tr:hover { background-color: #f0f9ff; }
+    .loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(240,244,248,0.9); z-index: 9999; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
     .loading-overlay.active { display: flex; }
-    .spinner { border: 4px solid #f3f4f6; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+    .spinner { border: 4px solid #e2e8f0; border-top: 4px solid var(--accent); border-radius: 50%; width: 44px; height: 44px; animation: spin 0.8s linear infinite; }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     .tab-pane { display: none; }
     .tab-pane.active { display: block; }
 
     .welcome-banner { 
-        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); 
-        border-radius: 16px; padding: 24px 32px; color: white; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 25px -5px rgba(6, 182, 212, 0.3); position: relative; overflow: hidden; 
+        background: linear-gradient(135deg, #0c4a6e 0%, #08334c 60%, #064e3b 100%); 
+        border-radius: 16px; padding: 28px 32px; color: white; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px -5px rgba(8,51,76,0.35); position: relative; overflow: hidden; border: 1px solid rgba(34,211,238,0.15);
     }
-    .welcome-banner::before { content: ''; position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: rgba(255,255,255,0.1); border-radius: 50%; }
-    .weather-widget { background: rgba(255,255,255,0.2); backdrop-filter: blur(5px); padding: 10px 20px; border-radius: 12px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(255,255,255,0.3); }
+    .welcome-banner::before { content: ''; position: absolute; top: -60px; right: -60px; width: 220px; height: 220px; background: rgba(34,211,238,0.08); border-radius: 50%; }
+    .welcome-banner::after { content: ''; position: absolute; bottom: -40px; left: 30%; width: 180px; height: 180px; background: rgba(34,211,238,0.05); border-radius: 50%; }
+    .weather-widget { background: rgba(34,211,238,0.15); backdrop-filter: blur(8px); padding: 12px 20px; border-radius: 12px; display: flex; align-items: center; gap: 12px; border: 1px solid rgba(34,211,238,0.25); }
     .quick-action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .qa-card { background: white; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; text-decoration: none; position: relative; overflow: hidden; }
-    .qa-card:hover { transform: translateY(-5px); box-shadow: 0 10px 20px -5px rgba(0,0,0,0.1); border-color: var(--primary); }
-    .qa-card:hover .qa-icon { background: var(--primary); color: white; transform: scale(1.1); }
-    .qa-icon { width: 48px; height: 48px; border-radius: 12px; background: #f1f5f9; color: #64748b; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; transition: all 0.3s ease; }
-    .qa-title { font-size: 0.85rem; font-weight: 600; color: #334155; }
+    .qa-card { background: white; border-radius: 14px; padding: 18px 16px; border: 1px solid #e2e8f0; transition: all 0.3s ease; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; cursor: pointer; text-decoration: none; position: relative; overflow: hidden; box-shadow: 0 2px 6px rgba(8,51,76,0.03); }
+    .qa-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px -5px rgba(8,51,76,0.12); border-color: var(--accent); }
+    .qa-card:hover .qa-icon { background: var(--navy); color: var(--accent); transform: scale(1.1); }
+    .qa-icon { width: 48px; height: 48px; border-radius: 12px; background: #f0f9ff; color: var(--navy); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; transition: all 0.3s ease; }
+    .qa-title { font-size: 0.85rem; font-weight: 600; color: #0c4a6e; }
     .qa-desc { font-size: 0.7rem; color: #94a3b8; margin-top: 4px; }
+    .section-label { font-size: 0.7rem; font-weight: 700; color: var(--navy); text-transform: uppercase; letter-spacing: 0.1em; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .section-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(to right, #22d3ee33, transparent); }
 </style>
 
 <div class="loading-overlay" id="loading"><div class="spinner"></div></div>
@@ -356,8 +360,8 @@ include_once '../layouts/header.php';
             <h2 class="text-2xl font-bold mb-1">
                 <span id="sapaan-waktu"><?= $sapaan ?></span>, <?= htmlspecialchars($_SESSION['user_nama'] ?? 'User') ?>!
             </h2>
-            <p class="text-cyan-50 text-sm font-medium">
-                <?= date('l, d F Y') ?> &bull; <span class="uppercase tracking-wider opacity-80"><?= htmlspecialchars($_SESSION['user_role'] ?? 'Staff') ?></span>
+            <p class="text-cyan-200 text-sm font-medium">
+                <?= date('l, d F Y') ?> &bull; <span class="uppercase tracking-wider text-cyan-300/80"><?= htmlspecialchars($_SESSION['user_role'] ?? 'Staff') ?></span>
             </p>
         </div>
         <div class="weather-widget hidden md:flex relative z-10">
@@ -409,8 +413,8 @@ include_once '../layouts/header.php';
         </div>
     </div>
 
-    <div class="mb-2 text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-        <i data-lucide="zap" class="w-3 h-3 text-amber-500"></i> Aksi Cepat
+    <div class="section-label">
+        <i data-lucide="zap" class="w-3 h-3 text-cyan-500"></i> Aksi Cepat
     </div>
     
     <div class="quick-action-grid">
@@ -450,22 +454,28 @@ include_once '../layouts/header.php';
     </div>
 
     <div>
-        <div class="mb-2 text-xs font-bold text-slate-500 uppercase"><i data-lucide="bar-chart-3" class="w-3 h-3"></i> Persentase Realisasi Pemeliharaan</div>
+        <div class="section-label">
+            <i data-lucide="bar-chart-3" class="w-3 h-3 text-cyan-500"></i> Persentase Realisasi Pemeliharaan
+        </div>
         <div id="kpi-container" class="kpi-grid"></div>
 
         <div class="middle-grid">
             <div class="chart-panel">
-                <div class="flex justify-between items-center mb-4"><h3 class="font-bold text-slate-700">Tren Produksi (Ton)</h3></div>
+                <div class="flex justify-between items-center mb-4"><h3 class="font-bold text-[#08334c]">Tren Produksi (Ton)</h3><span class="text-xs text-cyan-600 font-semibold bg-cyan-50 px-3 py-1 rounded-full">RKAP vs Realisasi</span></div>
                 <div style="height: 300px; position: relative;"><canvas id="chart-produksi"></canvas></div>
             </div>
             <div>
-                <div class="stat-card" style="border-color: #3b82f6;">
-                    <div class="font-bold mb-2 text-slate-600">PUPUK KIMIA (KG)</div>
-                    <div class="stat-row"><span>Menabur</span> <strong id="val-tabur-kimia" class="text-blue-600">0</strong></div>
+                <div class="chart-panel" style="height: auto; margin-bottom: 16px; padding: 20px;">
+                    <h3 class="font-bold text-[#08334c] text-sm mb-3">Distribusi Pemeliharaan</h3>
+                    <div style="height: 180px; position: relative;"><canvas id="chart-kpi-donut"></canvas></div>
+                </div>
+                <div class="stat-card" style="border-color: #0c4a6e;">
+                    <div class="font-bold mb-2 text-[#08334c] text-xs uppercase tracking-wider">PUPUK KIMIA (KG)</div>
+                    <div class="stat-row"><span>Menabur</span> <strong id="val-tabur-kimia" class="text-[#0c4a6e]">0</strong></div>
                     <div class="stat-row"><span>Angkutan</span> <strong id="val-angkut-kimia">0</strong></div>
                 </div>
-                <div class="stat-card" style="border-color: #22c55e;">
-                    <div class="font-bold mb-2 text-slate-600">PUPUK ORGANIK (KG)</div>
+                <div class="stat-card" style="border-color: #059669;">
+                    <div class="font-bold mb-2 text-[#08334c] text-xs uppercase tracking-wider">PUPUK ORGANIK (KG)</div>
                     <div class="stat-row"><span>Menabur</span> <strong id="val-tabur-org" class="text-green-600">0</strong></div>
                     <div class="stat-row"><span>Angkutan</span> <strong id="val-angkut-org">0</strong></div>
                 </div>
@@ -473,20 +483,20 @@ include_once '../layouts/header.php';
         </div>
 
         <div class="stock-grid">
-            <div class="stock-card" style="border-top-color: #64748b;">
-                <h4>Stok Gudang</h4><h3 id="stok-gudang">0</h3><i data-lucide="package" class="absolute top-4 right-4 text-slate-300"></i>
+            <div class="stock-card" style="border-top-color: #08334c;">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Stok Gudang</h4><h3 id="stok-gudang">0</h3><i data-lucide="package" class="absolute top-4 right-4 text-slate-200"></i>
             </div>
-            <div class="stock-card" style="border-top-color: #0ea5e9;">
-                <h4>Stok Kimia</h4><h3 id="stok-kimia">0</h3><i data-lucide="flask-conical" class="absolute top-4 right-4 text-sky-200"></i>
+            <div class="stock-card" style="border-top-color: #0891b2;">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Stok Kimia</h4><h3 id="stok-kimia">0</h3><i data-lucide="flask-conical" class="absolute top-4 right-4 text-cyan-200"></i>
             </div>
-            <div class="stock-card" style="border-top-color: #f59e0b;">
-                <h4>Stok Alat</h4><h3 id="stok-alat">0</h3><i data-lucide="wrench" class="absolute top-4 right-4 text-amber-200"></i>
+            <div class="stock-card" style="border-top-color: #0e7490;">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Stok Alat</h4><h3 id="stok-alat">0</h3><i data-lucide="wrench" class="absolute top-4 right-4 text-teal-200"></i>
             </div>
-            <div class="stock-card" style="border-top-color: #ef4444;">
-                <h4>Pakai BBM (L)</h4><h3 id="pakai-bbm">0</h3><i data-lucide="fuel" class="absolute top-4 right-4 text-red-200"></i>
+            <div class="stock-card" style="border-top-color: #064e3b;">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Pakai BBM (L)</h4><h3 id="pakai-bbm">0</h3><i data-lucide="fuel" class="absolute top-4 right-4 text-emerald-200"></i>
             </div>
-            <div class="stock-card" style="border-top-color: #8b5cf6;">
-                <h4>Pakai Kimia (Kg)</h4><h3 id="pakai-kimia">0</h3><i data-lucide="droplets" class="absolute top-4 right-4 text-violet-200"></i>
+            <div class="stock-card" style="border-top-color: #155e75;">
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Pakai Kimia (Kg)</h4><h3 id="pakai-kimia">0</h3><i data-lucide="droplets" class="absolute top-4 right-4 text-sky-200"></i>
             </div>
         </div>
 
@@ -680,12 +690,37 @@ const App = {
             const res = await fetch('', { method:'POST', body: this.getPayload('pemeliharaan_data') }).then(r=>r.json());
             if(res.debug) logDebug({ section: 'KPI', debug: res.debug });
             if(res.success) {
-                document.getElementById('kpi-container').innerHTML = res.kpi.map(k => `
+                const kpiData = res.kpi;
+                document.getElementById('kpi-container').innerHTML = kpiData.map(k => {
+                    let barColor = '#08334c';
+                    if(k.persen >= 100) barColor = '#059669';
+                    else if(k.persen >= 80) barColor = '#0891b2';
+                    else barColor = '#dc2626';
+                    return `
                     <div class="mini-card">
                         <div class="mini-lbl">% ${k.label}</div>
-                        <div class="mini-val ${k.color_class}">${k.persen}%</div>
+                        <div class="mini-val" style="color: ${barColor}">${k.persen}%</div>
                         <div class="mini-sub">Real: ${Number(k.realisasi).toLocaleString('id-ID')}</div>
-                    </div>`).join('');
+                        <div style="margin-top:8px;background:#e2e8f0;border-radius:6px;height:6px;overflow:hidden">
+                            <div style="width:${Math.min(k.persen,100)}%;height:100%;background:${barColor};border-radius:6px;transition:width 0.6s ease"></div>
+                        </div>
+                    </div>`;
+                }).join('');
+
+                // Donut Chart
+                const donutCtx = document.getElementById('chart-kpi-donut');
+                if(donutCtx) {
+                    if(window.kpiDonut) window.kpiDonut.destroy();
+                    const donutColors = ['#08334c','#0c4a6e','#0891b2','#22d3ee','#059669','#0e7490','#155e75'];
+                    window.kpiDonut = new Chart(donutCtx.getContext('2d'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: kpiData.map(k => k.label),
+                            datasets: [{ data: kpiData.map(k => k.realisasi || 0), backgroundColor: donutColors.slice(0, kpiData.length), borderWidth: 2, borderColor: '#fff' }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { font: { size: 10 }, padding: 8, usePointStyle: true, pointStyleWidth: 8 } } } }
+                    });
+                }
             }
         } catch(e) { logDebug({ error_js_kpi: e.message }); console.error(e); }
     },
@@ -702,11 +737,11 @@ const App = {
                     data: {
                         labels: res.chart_data.map(x => x.bulan),
                         datasets: [
-                            { label: 'Realisasi (Ton)', data: res.chart_data.map(x => Number(x.real)/1000), backgroundColor: '#06b6d4', borderRadius: 4, order: 2 },
-                            { label: 'RKAP (Ton)', type: 'line', data: res.chart_data.map(x => Number(x.rkap)/1000), borderColor: '#ec4899', borderWidth: 2, tension: 0.3, pointRadius: 3, order: 1 }
+                            { label: 'Realisasi (Ton)', data: res.chart_data.map(x => Number(x.real)/1000), backgroundColor: 'rgba(8,51,76,0.85)', hoverBackgroundColor: '#0c4a6e', borderRadius: 6, order: 2 },
+                            { label: 'RKAP (Ton)', type: 'line', data: res.chart_data.map(x => Number(x.rkap)/1000), borderColor: '#22d3ee', borderWidth: 2.5, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#22d3ee', pointBorderColor: '#fff', pointBorderWidth: 2, fill: { target: 'origin', above: 'rgba(34,211,238,0.08)' }, order: 1 }
                         ]
                     },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position:'bottom' } }, interaction: { mode: 'index', intersect: false } }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position:'bottom', labels: { usePointStyle: true, pointStyleWidth: 10, font: { size: 11 } } } }, interaction: { mode: 'index', intersect: false }, scales: { y: { grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }, x: { grid: { display: false }, ticks: { font: { size: 10 } } } } }
                 });
 
                 new Paginator(res.table_data, 10, 'tbl-prod-body', 'pag-prod-ctl', (r) => `
