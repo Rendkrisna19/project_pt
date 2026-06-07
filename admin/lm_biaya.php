@@ -218,6 +218,9 @@ include_once '../layouts/header.php';
         </a>
         
         <?php if ($canInput): ?>
+            <a href="imports/import_lm_biaya.php" class="flex-1 md:flex-none justify-center px-4 h-10 bg-[#10b981] text-white rounded-md hover:bg-[#059669] flex items-center gap-2 text-sm font-medium shadow-sm transition">
+                <i class="ti ti-file-import"></i> Import Excel
+            </a>
             <button id="btn-add" class="w-full sm:w-auto justify-center px-5 h-10 bg-[#0097e6] text-white rounded-md hover:bg-[#0086cc] flex items-center gap-2 shadow-sm transition font-medium text-sm mt-2 sm:mt-0 md:ml-2">
                 <i class="ti ti-plus"></i> Tambah
             </button>

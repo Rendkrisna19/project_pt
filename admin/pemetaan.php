@@ -63,6 +63,8 @@ include_once '../layouts/header.php';
         </div>
 
         <div class="flex gap-2 items-center">
+            <input type="month" id="filter_bulan" class="input-custom min-w-[150px] border-cyan-300 font-bold text-slate-700" onchange="loadSavedPoints()" value="<?= date('Y-m') ?>">
+            
             <select id="filter_jenis_pekerjaan" class="input-custom min-w-[200px] border-cyan-300 font-bold text-slate-700" onchange="loadSavedPoints()">
                 <option value="">— Semua Pekerjaan —</option>
             </select>
@@ -111,23 +113,8 @@ include_once '../layouts/header.php';
                     <input type="hidden" name="geojson" id="input_geojson">
 
                     <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Blok (Master Data)</label>
-                        <select name="blok_id" id="select_blok" class="input-custom cursor-pointer" required>
-                            <option value="">— Memuat Blok... —</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Jenis Aset / Lahan</label>
-                        <select name="jenis_aset" class="input-custom cursor-pointer" required>
-                            <option value="">— Pilih Kategori —</option>
-                            <option value="Area Kebun">Area Lahan Kebun</option>
-                            <option value="Jalan Utama">Jalan Utama</option>
-                            <option value="Jalan Produksi">Jalan Produksi</option>
-                            <option value="Parit/Drainase">Parit / Drainase</option>
-                            <option value="Jembatan">Jembatan / Titi</option>
-                            <option value="Bangunan">Bangunan / Kantor</option>
-                        </select>
+                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Nama Blok</label>
+                        <input type="text" name="blok_nama" id="input_blok" class="input-custom" required placeholder="Masukkan Nama Blok">
                     </div>
 
                     <div>
@@ -177,7 +164,7 @@ include_once '../layouts/header.php';
                         </div>
                         <div>
                             <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Tgl Pengerjaan</label>
-                            <input type="date" name="tanggal_realisasi" value="<?= date('Y-m-d') ?>" class="input-custom text-xs">
+                            <input type="date" name="tanggal_realisasi" value="<?= date('Y-m-d') ?>" class="input-custom text-xs" required>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
@@ -231,12 +218,7 @@ include_once '../layouts/header.php';
                 </form>
             </div>
 
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                <h4 class="text-xs font-extrabold text-slate-600 uppercase mb-4 text-center tracking-wider">Distribusi Aset Unit</h4>
-                <div class="relative w-full aspect-square max-h-[220px] mx-auto">
-                    <canvas id="assetChart"></canvas>
-                </div>
-            </div>
+
 
             <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-t-4 border-cyan-500">
                 <h4 class="text-xs font-extrabold text-slate-600 uppercase mb-4 text-center tracking-wider">Panduan Pemetaan</h4>
@@ -325,7 +307,12 @@ include_once '../layouts/header.php';
                 crs: L.CRS.Simple,
                 minZoom: -3,
                 maxZoom: 2,
-                zoomControl: true,
+                zoomControl: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                touchZoom: false,
+                boxZoom: false,
+                keyboard: false,
                 preferCanvas: true
             });
             let fileUrl = `../uploads/pemetaan/base_map/${petaKerjaFoto}`;
@@ -344,7 +331,8 @@ include_once '../layouts/header.php';
                             let imgDataUrl = canvas.toDataURL('image/png');
                             let bounds = [[0, 0], [viewport.height, viewport.width]];
                             L.imageOverlay(imgDataUrl, bounds).addTo(map);
-                            map.fitBounds(bounds);
+                            // Mengatur ukuran zoom awal agar tidak terlalu dekat dengan memberikan padding
+                            map.fitBounds(bounds, { padding: [100, 100] });
                         });
                     });
                 }).catch(function(err) {
@@ -358,12 +346,21 @@ include_once '../layouts/header.php';
                     let w = img.width, h = img.height;
                     let bounds = [[0, 0], [h, w]];
                     L.imageOverlay(fileUrl, bounds).addTo(map);
-                    map.fitBounds(bounds);
+                    // Mengatur ukuran zoom awal agar tidak terlalu dekat dengan memberikan padding
+                    map.fitBounds(bounds, { padding: [100, 100] });
                 }
             }
         } else {
             // MODE: SATELIT GPS DEFAULT
-            map = L.map('map', { preferCanvas: true }).setView([3.5952, 98.6722], 13); 
+            map = L.map('map', { 
+                preferCanvas: true, 
+                zoomControl: false,
+                scrollWheelZoom: false,
+                doubleClickZoom: false,
+                touchZoom: false,
+                boxZoom: false,
+                keyboard: false
+            }).setView([3.5952, 98.6722], 13); 
             L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
                 attribution: 'Tiles &copy; Esri',
                 maxZoom: 19
@@ -452,24 +449,9 @@ include_once '../layouts/header.php';
         }
     }
 
-    // --- 3. AMBIL MASTER DATA BLOK & PEKERJAAN ---
-    async function loadBloks() {
+    // --- 3. AMBIL MASTER DATA PEKERJAAN ---
+    async function loadMasterData() {
         try {
-            const unitId = "<?= $unit_id ?>";
-            const res = await fetch(`be/pemetaan_api.php?action=get_bloks&unit_id=${unitId}`);
-            const json = await res.json();
-            
-            const sel = document.getElementById('select_blok');
-            sel.innerHTML = '<option value="">— Pilih Blok —</option>';
-            
-            if(json.success && json.data.length > 0) {
-                json.data.forEach(b => { 
-                    sel.innerHTML += `<option value="${b.id}">${b.kode}</option>`; 
-                });
-            } else {
-                sel.innerHTML = '<option value="">— Tidak ada blok ditemukan —</option>';
-            }
-
             // Load Jenis Pekerjaan
             const resJp = await fetch(`be/pemetaan_api.php?action=get_jenis_pekerjaan`);
             const jsonJp = await resJp.json();
@@ -509,6 +491,7 @@ include_once '../layouts/header.php';
         const kebun_id = "<?= $kebun_id ?>";
         const unit_id = "<?= $unit_id ?>";
         const jp_id = document.getElementById('filter_jenis_pekerjaan').value;
+        const bulan = document.getElementById('filter_bulan').value;
 
         // Update hidden input untuk submit
         document.getElementById('input_jp_id').value = jp_id;
@@ -522,7 +505,7 @@ include_once '../layouts/header.php';
         }
 
         try {
-            const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}`);
+            const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}&bulan=${bulan}`);
             const res = await response.json();
 
             if(res.success) {
@@ -560,7 +543,7 @@ include_once '../layouts/header.php';
 
                         tr.innerHTML = `
                             <td class="px-3 py-2 border-r border-slate-200 text-center">${tgl}</td>
-                            <td class="px-3 py-2 border-r border-slate-200 text-center font-bold">${titik.nama_blok || '-'}</td>
+                            <td class="px-3 py-2 border-r border-slate-200 text-center font-bold">${titik.blok_nama || '-'}</td>
                             <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_hari_ini)}</td>
                             <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_sd)}</td>
                             <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_hari_ini)}</td>
@@ -587,8 +570,7 @@ include_once '../layouts/header.php';
                     let imgHtml = titik.foto ? `<img src="../uploads/pemetaan/${titik.foto}" class="w-full h-24 object-cover mt-2 rounded-lg">` : '';
                     let popupContent = `
                         <div class="p-1">
-                            <div class="text-[10px] font-black uppercase mb-1" style="color:${titik.warna}">${titik.jenis_aset}</div>
-                            <div class="font-bold text-slate-800 text-sm mb-1">${titik.nama_blok}</div>
+                            <div class="font-bold text-slate-800 text-sm mb-1">${titik.blok_nama}</div>
                             <div class="text-[11px] text-slate-500">${titik.keterangan || '-'}</div>
                             ${imgHtml}
                         </div>
@@ -613,38 +595,12 @@ include_once '../layouts/header.php';
                     
                     // Delay sedikit agar image overlay termuat jika peta berupa gambar
                     setTimeout(() => {
-                        if(map) map.fitBounds(mapBounds, { padding: [50, 50] });
-                    }, 500);
+                        // Ubah nilai padding ini (contoh: dari 50 ke 150) jika dirasa masih terlalu zoom
+                        if(map) map.fitBounds(mapBounds, { padding: [250, 250] });
+                    }, 700);
                 }
-
-                renderChart(res.stats);
             }
         } catch (err) { console.error(err); }
-    }
-
-    // --- 6. RENDER CHART JS ---
-    function renderChart(statsData) {
-        const ctx = document.getElementById('assetChart').getContext('2d');
-        if(myChart) myChart.destroy(); 
-        
-        const colors = ['#0891b2', '#e11d48', '#10b981', '#f59e0b', '#6366f1', '#8b5cf6'];
-        
-        myChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: statsData.map(s => s.label),
-                datasets: [{
-                    data: statsData.map(s => s.value),
-                    backgroundColor: colors.slice(0, statsData.length),
-                    borderWidth: 2, borderColor: '#ffffff'
-                }]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15, font: { size: 10, family: 'Poppins' } } } },
-                cutout: '65%'
-            }
-        });
     }
 
     // --- 7. HANDLE SUBMIT FORM ---
@@ -755,15 +711,14 @@ include_once '../layouts/header.php';
     });
 
     document.addEventListener('DOMContentLoaded', () => {
-        loadBloks();
+        loadMasterData();
         loadSavedPoints();
     });
 
     // --- FUNGSI EDIT DATA ---
     window.editMapData = function(titik) {
         document.getElementById('input_edit_id').value = titik.id;
-        document.getElementById('select_blok').value = titik.blok_id;
-        document.querySelector(`select[name="jenis_aset"]`).value = titik.jenis_aset;
+        document.getElementById('input_blok').value = titik.blok_nama || '';
         document.getElementById('input_lat').value = titik.latitude;
         document.getElementById('input_lng').value = titik.longitude;
         document.getElementById('input_geojson').value = titik.geojson;
@@ -935,10 +890,16 @@ include_once '../layouts/header.php';
             inputJp.name = 'jenis_pekerjaan_id';
             inputJp.value = document.getElementById('filter_jenis_pekerjaan').value;
 
+            const inputBulan = document.createElement('input');
+            inputBulan.type = 'hidden';
+            inputBulan.name = 'bulan';
+            inputBulan.value = document.getElementById('filter_bulan').value;
+
             form.appendChild(inputImg);
             form.appendChild(inputUnit);
             form.appendChild(inputKebun);
             form.appendChild(inputJp);
+            form.appendChild(inputBulan);
             document.body.appendChild(form);
             
             Swal.close();

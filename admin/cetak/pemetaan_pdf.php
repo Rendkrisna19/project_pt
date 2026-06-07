@@ -46,24 +46,27 @@ try {
         }
     }
 
+    $bulan = isset($_POST['bulan']) ? $_POST['bulan'] : date('Y-m');
+    
     // Ambil Data Realisasi Pemetaan Hari Ini
-    $sql = "SELECT p.*, b.kode as nama_blok 
-            FROM tr_pemetaan p
-            LEFT JOIN md_blok b ON p.blok_id = b.id
-            WHERE p.kebun_id = ? AND p.unit_id = ? ";
+    $sql = "SELECT * FROM tr_pemetaan WHERE kebun_id = ? AND unit_id = ? ";
     $params = [$kebun_id, $unit_id];
     if ($jp_id > 0) {
-        $sql .= " AND p.jenis_pekerjaan_id = ? ";
+        $sql .= " AND jenis_pekerjaan_id = ? ";
         $params[] = $jp_id;
     }
-    $sql .= " ORDER BY p.tanggal_realisasi DESC, p.id DESC LIMIT 50";
+    if (!empty($bulan)) {
+        $sql .= " AND DATE_FORMAT(tanggal_realisasi, '%Y-%m') = ? ";
+        $params[] = $bulan;
+    }
+    $sql .= " ORDER BY tanggal_realisasi DESC, id DESC LIMIT 50";
     
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
     $data_realisasi = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     // Bulan Pekerjaan
-    $bulan_tahun = date('F Y');
+    $bulan_tahun = date('F Y', strtotime($bulan . '-01'));
 
 } catch (Exception $e) {
     exit('DB Error: ' . $e->getMessage());
@@ -199,7 +202,7 @@ ob_start();
                             <?php foreach ($data_realisasi as $row): ?>
                             <tr>
                                 <td><?= $row['tanggal_realisasi'] ? date('d-m-Y', strtotime($row['tanggal_realisasi'])) : '-' ?></td>
-                                <td style="font-weight:bold;"><?= htmlspecialchars($row['nama_blok'] ?? '') ?></td>
+                                <td style="font-weight:bold;"><?= htmlspecialchars($row['blok_nama'] ?? '') ?></td>
                                 <td><?= nf($row['fisik_hari_ini']) ?></td>
                                 <td><?= nf($row['fisik_sd']) ?></td>
                                 <td><?= nf($row['hk_hari_ini']) ?></td>

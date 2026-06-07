@@ -70,15 +70,14 @@ try {
         // Validasi ketat
         if (empty($_POST['kebun_id'])) throw new Exception("ID Kebun tidak ditemukan.");
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
-        if (empty($_POST['blok_id'])) throw new Exception("Anda belum memilih Blok!");
-        if (empty($_POST['jenis_aset'])) throw new Exception("Anda belum memilih Jenis Aset!");
+        if (empty($_POST['blok_nama'])) throw new Exception("Nama Blok harus diisi!");
+        if (empty($_POST['tanggal_realisasi'])) throw new Exception("Tanggal Realisasi harus diisi!");
         if (empty($_POST['geojson'])) throw new Exception("Data Peta kosong! Silakan gambar ulang di peta.");
 
         $kebun_id   = (int)$_POST['kebun_id'];
         $unit_id    = (int)$_POST['unit_id'];
-        $blok_id    = (int)$_POST['blok_id'];
+        $blok_nama  = trim($_POST['blok_nama']);
         $jp_id      = !empty($_POST['jenis_pekerjaan_id']) ? (int)$_POST['jenis_pekerjaan_id'] : null;
-        $jenis_aset = trim($_POST['jenis_aset']);
         $geojson    = trim($_POST['geojson']); 
         
         $lat        = $_POST['latitude'];
@@ -119,11 +118,11 @@ try {
         // Query Insert (SEKARANG SUDAH ADA KOLOM KETERANGAN & REALISASI & JENIS PEKERJAAN)
         if ($id) {
             $sql = "UPDATE tr_pemetaan SET 
-                        blok_id = ?, jenis_pekerjaan_id = ?, jenis_aset = ?, geojson = ?, latitude = ?, longitude = ?, warna = ?,
+                        blok_nama = ?, jenis_pekerjaan_id = ?, geojson = ?, latitude = ?, longitude = ?, warna = ?,
                         keterangan = ?, tanggal_realisasi = ?, fisik_hari_ini = ?, fisik_sd = ?, hk_hari_ini = ?, hk_sd = ?, 
                         bahan_kimia_hari_ini = ?, bahan_kimia_sd = ?, campuran_hari_ini = ?, campuran_sd = ?";
             $params = [
-                $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, 
+                $blok_nama, $jp_id, $geojson, $lat, $lng, $warna, 
                 $keterangan, $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
             ];
             if ($foto_name) {
@@ -138,12 +137,12 @@ try {
             $msg = 'Area GIS berhasil diupdate!';
         } else {
             $sql = "INSERT INTO tr_pemetaan (
-                        kebun_id, unit_id, blok_id, jenis_pekerjaan_id, jenis_aset, geojson, latitude, longitude, warna, foto, keterangan,
+                        kebun_id, unit_id, blok_nama, jenis_pekerjaan_id, geojson, latitude, longitude, warna, foto, keterangan,
                         tanggal_realisasi, fisik_hari_ini, fisik_sd, hk_hari_ini, hk_sd, bahan_kimia_hari_ini, bahan_kimia_sd, campuran_hari_ini, campuran_sd
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
             $stmt = $conn->prepare($sql);
             $stmt->execute([
-                $kebun_id, $unit_id, $blok_id, $jp_id, $jenis_aset, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
+                $kebun_id, $unit_id, $blok_nama, $jp_id, $geojson, $lat, $lng, $warna, $foto_name, $keterangan,
                 $tgl, $f_hi, $f_sd, $hk_hi, $hk_sd, $k_hi, $k_sd, $c_hi, $c_sd
             ]);
             $msg = 'Area GIS berhasil disimpan ke database!';
@@ -162,34 +161,24 @@ try {
         $kebun_id = (int)$_GET['kebun_id'];
         $unit_id  = (int)$_GET['unit_id'];
         $jp_id    = isset($_GET['jenis_pekerjaan_id']) ? (int)$_GET['jenis_pekerjaan_id'] : 0;
+        $bulan    = isset($_GET['bulan']) ? $_GET['bulan'] : date('Y-m'); // format YYYY-MM
 
-        $sql = "SELECT p.*, b.kode as nama_blok 
-                FROM tr_pemetaan p
-                LEFT JOIN md_blok b ON p.blok_id = b.id
-                WHERE p.kebun_id = ? AND p.unit_id = ?";
-        
+        $sql = "SELECT * FROM tr_pemetaan WHERE kebun_id = ? AND unit_id = ?";
         $params = [$kebun_id, $unit_id];
         
         if ($jp_id > 0) {
-            $sql .= " AND p.jenis_pekerjaan_id = ?";
+            $sql .= " AND jenis_pekerjaan_id = ?";
             $params[] = $jp_id;
+        }
+
+        if (!empty($bulan)) {
+            $sql .= " AND DATE_FORMAT(tanggal_realisasi, '%Y-%m') = ?";
+            $params[] = $bulan;
         }
 
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        $sqlStats = "SELECT jenis_aset as label, COUNT(*) as value FROM tr_pemetaan WHERE unit_id = ?";
-        $paramsStats = [$unit_id];
-        if ($jp_id > 0) {
-            $sqlStats .= " AND jenis_pekerjaan_id = ?";
-            $paramsStats[] = $jp_id;
-        }
-        $sqlStats .= " GROUP BY jenis_aset";
-        
-        $st = $conn->prepare($sqlStats);
-        $st->execute($paramsStats);
-        $stats = $st->fetchAll(PDO::FETCH_ASSOC);
 
         // Ambil info Peta Dasar per Jenis Pekerjaan
         $peta_kerja_foto = null;
@@ -202,7 +191,7 @@ try {
         }
 
         ob_clean();
-        echo json_encode(['success' => true, 'data' => $data, 'stats' => $stats, 'peta_kerja_foto' => $peta_kerja_foto]);
+        echo json_encode(['success' => true, 'data' => $data, 'peta_kerja_foto' => $peta_kerja_foto]);
         exit;
     }
 
