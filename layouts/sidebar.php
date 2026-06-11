@@ -250,6 +250,10 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                     <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">System</span>
                     <div class="h-px bg-cyan-900/30 flex-1"></div>
                 </div>
+                <a href="pengaturan_aplikasi.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-cyan-300 <?= navClass('pengaturan_aplikasi', $currentPage) ?>">
+                    <i data-lucide="settings" class="w-5 h-5 mr-3 group-hover:text-cyan-400 transition-colors <?= $currentPage=='pengaturan_aplikasi'?'text-white':'' ?>"></i>
+                    <span>Pengaturan Aplikasi</span>
+                </a>
                 <a href="master_data" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-gray-300 <?= navClass('master_data', $currentPage) ?>">
                     <i data-lucide="database" class="w-5 h-5 mr-3 group-hover:text-gray-200 transition-colors <?= $currentPage=='master_data'?'text-white':'' ?>"></i>
                     <span>Master Data</span>

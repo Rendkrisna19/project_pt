@@ -22,6 +22,10 @@ include_once '../layouts/header.php';
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
 
 <style>
@@ -164,40 +168,40 @@ include_once '../layouts/header.php';
                         </div>
                         <div>
                             <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Tgl Pengerjaan</label>
-                            <input type="date" name="tanggal_realisasi" value="<?= date('Y-m-d') ?>" class="input-custom text-xs" required>
+                            <input type="date" name="tanggal_realisasi" id="input_tgl" value="<?= date('Y-m-d') ?>" class="input-custom text-xs" required>
                         </div>
                         <div class="grid grid-cols-2 gap-2">
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Fisik (H. Ini)</label>
-                                <input type="number" step="0.01" name="fisik_hari_ini" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="fisik_hari_ini" id="f_hi" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Fisik (S/D)</label>
-                                <input type="number" step="0.01" name="fisik_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="fisik_sd" id="f_sd" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">HK (H. Ini)</label>
-                                <input type="number" step="0.01" name="hk_hari_ini" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="hk_hari_ini" id="hk_hi" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">HK (S/D)</label>
-                                <input type="number" step="0.01" name="hk_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="hk_sd" id="hk_sd" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Kimia (H. Ini)</label>
-                                <input type="number" step="0.01" name="bahan_kimia_hari_ini" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="bahan_kimia_hari_ini" id="k_hi" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Kimia (S/D)</label>
-                                <input type="number" step="0.01" name="bahan_kimia_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="bahan_kimia_sd" id="k_sd" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Campuran (H. Ini)</label>
-                                <input type="number" step="0.01" name="campuran_hari_ini" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="campuran_hari_ini" id="c_hi" class="input-custom text-xs" placeholder="0.00">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Campuran (S/D)</label>
-                                <input type="number" step="0.01" name="campuran_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="campuran_sd" id="c_sd" class="input-custom text-xs" placeholder="0.00">
                             </div>
                         </div>
                     </div>
@@ -242,6 +246,25 @@ include_once '../layouts/header.php';
                 </ul>
             </div>
 
+        </div>
+
+        <!-- CROP MODAL -->
+        <div id="cropModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-[9999] hidden items-center justify-center p-4">
+            <div class="bg-white p-5 rounded-2xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+                <h3 class="text-xl font-extrabold text-slate-800 mb-2">Potong (Crop) Peta Dasar</h3>
+                <p class="text-xs text-slate-500 mb-4">Buang bagian tepi atau kertas yang tidak diperlukan sebelum diupload.</p>
+                
+                <div class="flex-1 bg-slate-100 overflow-hidden relative rounded-xl border border-slate-200 flex items-center justify-center min-h-[400px]">
+                    <img id="imageToCrop" src="" alt="Peta" class="max-w-full max-h-[60vh] object-contain">
+                </div>
+                
+                <div class="flex justify-end gap-3 mt-5 pt-4 border-t border-slate-100">
+                    <button type="button" id="btnCancelCrop" class="px-5 py-2.5 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 font-bold transition">Batal</button>
+                    <button type="button" id="btnApplyCrop" class="px-5 py-2.5 rounded-xl bg-cyan-600 text-white hover:bg-cyan-700 font-bold shadow-lg shadow-cyan-500/30 transition flex items-center gap-2">
+                        <i class="ti ti-crop"></i> Crop & Gunakan
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="lg:col-span-3 space-y-4">
@@ -685,7 +708,126 @@ include_once '../layouts/header.php';
         }
     });
 
-    // --- 8. HANDLE SUBMIT PETA DASAR ---
+    // --- 8. HANDLE SUBMIT PETA DASAR & CROPPER ---
+    let cropper = null;
+    let croppedBlob = null;
+    const inputPetaDasar = document.querySelector('input[name="peta_dasar"]');
+    const cropModal = document.getElementById('cropModal');
+    const imageToCrop = document.getElementById('imageToCrop');
+
+    window.addEventListener('resize', function() {
+        if(map) { map.invalidateSize(); }
+    });
+
+    // --- 10. AUTO KALKULASI S/D BERDASARKAN INPUT H. INI ---
+    let previousSdData = { fisik_sd: 0, hk_sd: 0, bahan_kimia_sd: 0, campuran_sd: 0 };
+
+    async function fetchPreviousSd() {
+        const kebun_id = "<?= $kebun_id ?>";
+        const unit_id = "<?= $unit_id ?>";
+        const jp_id = document.getElementById('filter_jenis_pekerjaan').value;
+        const blok = document.getElementById('input_blok').value;
+        const tgl = document.getElementById('input_tgl').value;
+        const current_id = document.getElementById('input_edit_id').value;
+
+        if (!jp_id || !blok || !tgl) {
+            previousSdData = { fisik_sd: 0, hk_sd: 0, bahan_kimia_sd: 0, campuran_sd: 0 };
+            return;
+        }
+
+        try {
+            const response = await fetch(`be/pemetaan_api.php?action=get_previous_sd&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}&blok_nama=${encodeURIComponent(blok)}&tanggal_realisasi=${tgl}&current_id=${current_id}`);
+            const res = await response.json();
+            if (res.success && res.data) {
+                previousSdData.fisik_sd = parseFloat(res.data.fisik_sd) || 0;
+                previousSdData.hk_sd = parseFloat(res.data.hk_sd) || 0;
+                previousSdData.bahan_kimia_sd = parseFloat(res.data.bahan_kimia_sd) || 0;
+                previousSdData.campuran_sd = parseFloat(res.data.campuran_sd) || 0;
+            } else {
+                previousSdData = { fisik_sd: 0, hk_sd: 0, bahan_kimia_sd: 0, campuran_sd: 0 };
+            }
+            recalculateSd();
+        } catch(err) {
+            console.error("Gagal fetch S/D:", err);
+        }
+    }
+
+    function recalculateSd() {
+        const f_hi = parseFloat(document.getElementById('f_hi').value) || 0;
+        const hk_hi = parseFloat(document.getElementById('hk_hi').value) || 0;
+        const k_hi = parseFloat(document.getElementById('k_hi').value) || 0;
+        const c_hi = parseFloat(document.getElementById('c_hi').value) || 0;
+
+        if (f_hi !== 0 || previousSdData.fisik_sd !== 0) document.getElementById('f_sd').value = (previousSdData.fisik_sd + f_hi).toFixed(2);
+        if (hk_hi !== 0 || previousSdData.hk_sd !== 0) document.getElementById('hk_sd').value = (previousSdData.hk_sd + hk_hi).toFixed(2);
+        if (k_hi !== 0 || previousSdData.bahan_kimia_sd !== 0) document.getElementById('k_sd').value = (previousSdData.bahan_kimia_sd + k_hi).toFixed(2);
+        if (c_hi !== 0 || previousSdData.campuran_sd !== 0) document.getElementById('c_sd').value = (previousSdData.campuran_sd + c_hi).toFixed(2);
+    }
+
+    document.getElementById('input_blok').addEventListener('blur', fetchPreviousSd);
+    document.getElementById('input_tgl').addEventListener('change', fetchPreviousSd);
+    document.getElementById('f_hi').addEventListener('input', recalculateSd);
+    document.getElementById('hk_hi').addEventListener('input', recalculateSd);
+    document.getElementById('k_hi').addEventListener('input', recalculateSd);
+    document.getElementById('c_hi').addEventListener('input', recalculateSd);
+
+    inputPetaDasar.addEventListener('change', function(e) {
+        let files = e.target.files;
+        if (files && files.length > 0) {
+            let file = files[0];
+            // Jika PDF, CropperJS tidak bisa
+            if(file.type === 'application/pdf') {
+                croppedBlob = null;
+                return;
+            }
+
+            let reader = new FileReader();
+            reader.onload = function(event) {
+                imageToCrop.src = event.target.result;
+                cropModal.classList.remove('hidden');
+                cropModal.classList.add('flex');
+                
+                if (cropper) { cropper.destroy(); }
+                cropper = new Cropper(imageToCrop, {
+                    viewMode: 1,
+                    autoCropArea: 0.9,
+                    background: true,
+                    responsive: true,
+                    restore: false
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById('btnCancelCrop').addEventListener('click', () => {
+        cropModal.classList.add('hidden');
+        cropModal.classList.remove('flex');
+        if (cropper) { cropper.destroy(); cropper = null; }
+        inputPetaDasar.value = ''; 
+        croppedBlob = null;
+    });
+
+    document.getElementById('btnApplyCrop').addEventListener('click', () => {
+        if (!cropper) return;
+        cropper.getCroppedCanvas({
+            imageSmoothingEnabled: true,
+            imageSmoothingQuality: 'high',
+        }).toBlob((blob) => {
+            croppedBlob = blob;
+            cropModal.classList.add('hidden');
+            cropModal.classList.remove('flex');
+            if (cropper) { cropper.destroy(); cropper = null; }
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil dipotong!',
+                text: 'Silakan klik tombol "Upload & Pasang Peta".',
+                timer: 2000,
+                showConfirmButton: false
+            });
+        }, 'image/png', 0.9);
+    });
+
     document.getElementById('form-upload-peta').addEventListener('submit', async function(e) {
         e.preventDefault();
         let btn = document.getElementById('btn-upload-peta');
@@ -694,13 +836,21 @@ include_once '../layouts/header.php';
         btn.disabled = true;
 
         let formData = new FormData(this);
+        
+        // Timpa file asli dengan hasil crop jika ada
+        if (croppedBlob) {
+            formData.set('peta_dasar', croppedBlob, 'map_cropped.png');
+        }
+
         try {
             const response = await fetch('be/pemetaan_api.php', { method: 'POST', body: formData });
             const res = await response.json();
             
             if(res.success) {
                 Swal.fire({ icon: 'success', title: 'Berhasil!', text: res.message, timer: 1500, showConfirmButton: false });
-                loadSavedPoints(); // Reload peta
+                this.reset();
+                croppedBlob = null;
+                loadSavedPoints(); // Refresh map with new base image
             } else {
                 let errorHtml = `<b class="text-slate-800">${res.message}</b>`;
                 if (res.detail) {
@@ -711,9 +861,9 @@ include_once '../layouts/header.php';
                 Swal.fire({ icon: 'error', title: 'Gagal!', html: errorHtml });
             }
         } catch(err) {
-            Swal.fire('Error', 'Gagal mengupload peta.', 'error');
-            btn.innerHTML = originalText;
+            Swal.fire('Error Koneksi!', 'Gagal menghubungi server.', 'error');
         } finally {
+            btn.innerHTML = originalText;
             btn.disabled = false;
         }
     });
@@ -856,21 +1006,64 @@ include_once '../layouts/header.php';
         const controls = document.querySelectorAll('.leaflet-control-container');
         controls.forEach(c => c.style.display = 'none');
 
+        // PENTING: Hilangkan shadow dan border karena akan tertangkap oleh html2canvas (garis burem)
+        const oldBoxShadow = mapDiv.style.boxShadow;
+        const oldBorderRadius = mapDiv.style.borderRadius;
+        const oldBorder = mapDiv.style.border;
+        mapDiv.style.boxShadow = 'none';
+        mapDiv.style.borderRadius = '0';
+        mapDiv.style.border = 'none';
+
         // PENTING: Reset scroll ke atas untuk menghindari bug offset di html2canvas
         window.scrollTo(0, 0);
 
         try {
-            const canvas = await html2canvas(mapDiv, {
+            let canvas = await html2canvas(mapDiv, {
                 useCORS: true,
                 allowTaint: true,
                 scale: 2, // Resolusi tinggi
                 scrollY: -window.scrollY
             });
             
+            // Fungsi untuk auto-crop margin putih bawaan dari div peta
+            function trimCanvas(c) {
+                var ctx = c.getContext('2d', { willReadFrequently: true }),
+                    copy = document.createElement('canvas').getContext('2d'),
+                    pixels = ctx.getImageData(0, 0, c.width, c.height),
+                    l = pixels.data.length,
+                    i, bound = { top: null, left: null, right: null, bottom: null }, x, y;
+                
+                // Deteksi warna background putih
+                function isBg(i) { return pixels.data[i] >= 250 && pixels.data[i+1] >= 250 && pixels.data[i+2] >= 250; }
+
+                for (i = 0; i < l; i += 4) {
+                    if (!isBg(i)) {
+                        x = (i / 4) % c.width; y = ~~((i / 4) / c.width);
+                        if (bound.top === null) bound.top = y;
+                        if (bound.left === null) bound.left = x; else if (x < bound.left) bound.left = x;
+                        if (bound.right === null) bound.right = x; else if (bound.right < x) bound.right = x;
+                        if (bound.bottom === null) bound.bottom = y; else if (bound.bottom < y) bound.bottom = y;
+                    }
+                }
+                if (bound.top === null) return c;
+                var pad = 20; // Beri ruang margin putih secukupnya agar peta tidak nabrak pinggir
+                bound.top = Math.max(0, bound.top - pad); bound.left = Math.max(0, bound.left - pad);
+                bound.bottom = Math.min(c.height, bound.bottom + pad); bound.right = Math.min(c.width, bound.right + pad);
+                var trimHeight = bound.bottom - bound.top, trimWidth = bound.right - bound.left;
+                var trimmed = ctx.getImageData(bound.left, bound.top, trimWidth, trimHeight);
+                copy.canvas.width = trimWidth; copy.canvas.height = trimHeight;
+                copy.putImageData(trimmed, 0, 0);
+                return copy.canvas;
+            }
+
+            canvas = trimCanvas(canvas);
             const base64image = canvas.toDataURL("image/png");
             
-            // Tampilkan kembali kontrol Leaflet
+            // Tampilkan kembali kontrol Leaflet dan kembalikan style peta
             controls.forEach(c => c.style.display = '');
+            mapDiv.style.boxShadow = oldBoxShadow;
+            mapDiv.style.borderRadius = oldBorderRadius;
+            mapDiv.style.border = oldBorder;
 
             // Buat form tersembunyi untuk mengirim base64 ke PHP
             const form = document.createElement('form');

@@ -116,15 +116,15 @@ ob_start();
 
         .map-wrapper {
             width: 100%;
-            padding: 5px;
+            padding: 15px;
             box-sizing: border-box;
             text-align: center;
         }
         .map-img {
             max-width: 100%;
-            max-height: 480px; /* Batasi agar tidak terlalu memakan A4 */
+            max-height: 400px; /* Ukuran dikurangi agar muat satu halaman dengan tanda tangan */
             object-fit: contain;
-            border: 1px solid #ccc;
+            border: 1px solid #333; /* Kembalikan bingkai agar peta terlihat rapi tidak melayang */
         }
 
         .data-table {
@@ -164,14 +164,35 @@ ob_start();
     <table class="content-container">
         <tr>
             <!-- AREA KIRI: PETA -->
-            <td style="width: 50%;">
+            <td style="width: 60%; padding-bottom: 10px;">
                 <div class="map-wrapper">
                     <img src="<?= $map_image ?>" class="map-img" alt="Peta Kerja">
                 </div>
+                <!-- TEMPAT TANDA TANGAN (Di bawah peta langsung sesuai permintaan) -->
+                <table width="100%" style="font-family: Arial, sans-serif; font-size: 10px; margin-top: 15px; text-align: center;">
+                    <tr>
+                        <td width="50%" style="padding-bottom: 40px;">
+                            Dibuat Oleh,<br>
+                            <b>Asst Afdeling</b>
+                        </td>
+                        <td width="50%" style="padding-bottom: 40px;">
+                            Diperiksa Oleh,<br>
+                            <b>Asisten Kepala</b>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td width="50%">
+                            ( ...................................... )
+                        </td>
+                        <td width="50%">
+                            ( ...................................... )
+                        </td>
+                    </tr>
+                </table>
             </td>
 
             <!-- AREA KANAN: TABEL REALISASI -->
-            <td style="width: 50%;">
+            <td style="width: 40%;">
                 <table class="data-table">
                     <thead>
                         <tr>
@@ -227,6 +248,7 @@ ob_start();
         </tr>
     </table>
 
+    <!-- Tanda tangan sudah dipindah ke bawah peta -->
 </body>
 </html>
 <?php

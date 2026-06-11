@@ -312,6 +312,38 @@ try {
         exit;
     }
 
+    // --- 7. AMBIL DATA S/D SEBELUMNYA ---
+    if ($action === 'get_previous_sd') {
+        $kebun_id = (int)($_GET['kebun_id'] ?? 0);
+        $unit_id  = (int)($_GET['unit_id'] ?? 0);
+        $jp_id    = (int)($_GET['jenis_pekerjaan_id'] ?? 0);
+        $blok     = $_GET['blok_nama'] ?? '';
+        $tgl      = $_GET['tanggal_realisasi'] ?? date('Y-m-d');
+        // Pengecualian ID edit saat ini jika ada
+        $current_id = (int)($_GET['current_id'] ?? 0);
+
+        if (!$kebun_id || !$unit_id || !$jp_id || empty($blok)) {
+            echo json_encode(['success' => true, 'data' => null]);
+            exit;
+        }
+
+        // Cari record terakhir untuk blok tersebut SEBELUM atau SAMA DENGAN tanggal yang dipilih 
+        // yang BUKAN merupakan record yang sedang diedit. 
+        // Asumsinya kita bisa ambil fisik_sd terakhir dari database.
+        $sql = "SELECT fisik_sd, hk_sd, bahan_kimia_sd, campuran_sd 
+                FROM tr_pemetaan 
+                WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ? AND blok_nama = ? 
+                  AND tanggal_realisasi <= ? AND id != ?
+                ORDER BY tanggal_realisasi DESC, id DESC LIMIT 1";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$kebun_id, $unit_id, $jp_id, $blok, $tgl, $current_id]);
+        $data = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        ob_clean();
+        echo json_encode(['success' => true, 'data' => $data]);
+        exit;
+    }
+
     // Jika Action tidak dikenali
     throw new Exception("Aksi API tidak ditemukan: " . $action);
 

@@ -15,6 +15,29 @@ date_default_timezone_set('Asia/Jakarta');
 
 $err = null;
 
+// Ambil background video dari database
+$bgVideo = '../assets/images/bg.mp4';
+try {
+    $db_bg = new Database();
+    $pdo_bg = $db_bg->getConnection();
+    
+    // Pastikan tabel md_pengaturan ada
+    $checkTable = $pdo_bg->query("SHOW TABLES LIKE 'md_pengaturan'");
+    if ($checkTable->rowCount() > 0) {
+        $stmt_bg = $pdo_bg->query("SELECT login_bg_video FROM md_pengaturan WHERE id = 1 LIMIT 1");
+        $pengaturan = $stmt_bg->fetch(PDO::FETCH_ASSOC);
+        
+        if ($pengaturan && !empty($pengaturan['login_bg_video'])) {
+            $vidName = $pengaturan['login_bg_video'];
+            if ($vidName !== 'bg.mp4' && file_exists('../uploads/pengaturan/' . $vidName)) {
+                $bgVideo = '../uploads/pengaturan/' . $vidName;
+            }
+        }
+    }
+} catch (Exception $e) {
+    // Abaikan jika error, gunakan default bg.mp4
+}
+
 // Siapkan CSRF token
 if (empty($_SESSION['csrf_token'])) {
   $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -162,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body class="font-sans text-slate-200 antialiased overflow-hidden">
 
   <video autoplay muted loop playsinline class="video-bg">
-    <source src="../assets/images/bg.mp4" type="video/mp4">
+    <source src="<?= $bgVideo ?>?t=<?= time() ?>" type="video/mp4">
     <img src="../assets/images/PTPN IV.png" alt="Background" class="w-full h-full object-cover">
   </video>
 

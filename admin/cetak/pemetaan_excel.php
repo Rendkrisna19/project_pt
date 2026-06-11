@@ -110,12 +110,13 @@ if (!empty($map_image)) {
     $drawing->setCoordinates('A2');
     $drawing->setOffsetX(10);
     $drawing->setOffsetY(10);
-    $drawing->setHeight(400); 
+    $drawing->setHeight(650); // Diperbesar dari 400
     $drawing->setWorksheet($sheet);
 }
-// Merge cells for map area to make it look clean
-$sheet->mergeCells('A2:E25');
-$sheet->getStyle('A2:E25')->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THIN);
+// Merge cells for map area to make it look clean (diperbesar areanya)
+$sheet->mergeCells('A2:E45');
+// Border untuk area peta dihilangkan sesuai permintaan
+$sheet->getStyle('A2:E45')->getBorders()->getOutline()->setBorderStyle(Border::BORDER_NONE);
 
 // Set Table Headers
 $sheet->mergeCells('F2:F3'); $sheet->setCellValue('F2', 'TANGGAL');
@@ -177,7 +178,32 @@ if ($actualDataCount < $minRows) {
 $sheet->getStyle('F4:O' . ($rowNum - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 $sheet->getStyle('F4:G' . ($rowNum - 1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
+// Tanda Tangan (Pindah ke bawah peta: Kolom A-E baris 47)
+$signRow = 47;
+$sheet->mergeCells("A{$signRow}:B{$signRow}");
+$sheet->mergeCells("C{$signRow}:E{$signRow}");
+$sheet->setCellValue("A{$signRow}", "Dibuat Oleh,");
+$sheet->setCellValue("C{$signRow}", "Diperiksa Oleh,");
+
+$signRow++;
+$sheet->mergeCells("A{$signRow}:B{$signRow}");
+$sheet->mergeCells("C{$signRow}:E{$signRow}");
+$sheet->setCellValue("A{$signRow}", "Asst Afdeling");
+$sheet->setCellValue("C{$signRow}", "Asisten Kepala");
+$sheet->getStyle("A{$signRow}:E{$signRow}")->getFont()->setBold(true);
+
+$signRow += 4;
+$sheet->mergeCells("A{$signRow}:B{$signRow}");
+$sheet->mergeCells("C{$signRow}:E{$signRow}");
+$sheet->setCellValue("A{$signRow}", "( .................................... )");
+$sheet->setCellValue("C{$signRow}", "( .................................... )");
+
+$sheet->getStyle("A47:E{$signRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
 // Column Widths
+foreach (range('A', 'E') as $col) {
+    $sheet->getColumnDimension($col)->setWidth(18); // Lebarkan kolom area peta
+}
 $sheet->getColumnDimension('F')->setWidth(12);
 $sheet->getColumnDimension('G')->setWidth(12);
 foreach (range('H', 'O') as $col) {
