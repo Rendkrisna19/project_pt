@@ -313,7 +313,8 @@ include_once '../layouts/header.php';
                 touchZoom: false,
                 boxZoom: false,
                 keyboard: false,
-                preferCanvas: true
+                preferCanvas: true,
+                zoomSnap: 0
             });
             let fileUrl = `../uploads/pemetaan/base_map/${petaKerjaFoto}`;
             
@@ -332,7 +333,7 @@ include_once '../layouts/header.php';
                             let bounds = [[0, 0], [viewport.height, viewport.width]];
                             L.imageOverlay(imgDataUrl, bounds).addTo(map);
                             // Mengatur ukuran zoom awal agar tidak terlalu dekat dengan memberikan padding
-                            map.fitBounds(bounds, { padding: [100, 100] });
+                            map.fitBounds(bounds, { padding: [0, 0] });
                         });
                     });
                 }).catch(function(err) {
@@ -347,7 +348,7 @@ include_once '../layouts/header.php';
                     let bounds = [[0, 0], [h, w]];
                     L.imageOverlay(fileUrl, bounds).addTo(map);
                     // Mengatur ukuran zoom awal agar tidak terlalu dekat dengan memberikan padding
-                    map.fitBounds(bounds, { padding: [100, 100] });
+                    map.fitBounds(bounds, { padding: [0, 0] });
                 }
             }
         } else {
@@ -586,6 +587,26 @@ include_once '../layouts/header.php';
                     }).bindPopup(popupContent).addTo(map);
 
                 });
+
+                // Set otomatis nilai Fisik (S/D) dari nilai terbesar sebelumnya + 1
+                if (res.data.length > 0) {
+                    let latestFisikSd = 0;
+                    res.data.forEach(titik => {
+                        let cur = parseFloat(titik.fisik_sd) || 0;
+                        if (cur > latestFisikSd) latestFisikSd = cur;
+                    });
+                    
+                    // Hanya set otomatis jika form sedang mode tambah baru (bukan edit)
+                    if (document.getElementById('input_edit_id').value === '') {
+                        document.querySelector('input[name="fisik_sd"]').value = (latestFisikSd + 1).toFixed(2);
+                        document.querySelector('input[name="fisik_hari_ini"]').value = ""; // Reset ke kosong
+                    }
+                } else {
+                    if (document.getElementById('input_edit_id').value === '') {
+                        document.querySelector('input[name="fisik_sd"]').value = "1.00";
+                        document.querySelector('input[name="fisik_hari_ini"]').value = "";
+                    }
+                }
             }
         } catch (err) { console.error(err); }
     }

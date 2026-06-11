@@ -224,6 +224,11 @@ include_once '../layouts/header.php';
             <button id="btn-add" class="w-full sm:w-auto justify-center px-5 h-10 bg-[#0097e6] text-white rounded-md hover:bg-[#0086cc] flex items-center gap-2 shadow-sm transition font-medium text-sm mt-2 sm:mt-0 md:ml-2">
                 <i class="ti ti-plus"></i> Tambah
             </button>
+            <?php if ($canAction): ?>
+            <button id="btn-delete-all" class="w-full sm:w-auto justify-center px-4 h-10 bg-[#dc2626] text-white rounded-md hover:bg-[#b91c1c] flex items-center gap-2 shadow-sm transition font-medium text-sm mt-2 sm:mt-0 md:ml-2">
+                <i class="ti ti-trash-x"></i> Hapus Semua
+            </button>
+            <?php endif; ?>
         <?php endif; ?>
     </div>
   </div>
@@ -543,6 +548,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
         });
     }
   });
+
+  if($('#btn-delete-all')) {
+      $('#btn-delete-all').onclick = () => {
+          Swal.fire({
+              title: 'Hapus SEMUA Data?',
+              html: "Aksi ini akan menghapus <b>SELURUH</b> data LM Biaya.<br>Ketik <b>KONFIRMASI</b> untuk melanjutkan:",
+              input: 'text',
+              icon: 'warning',
+              showCancelButton: true,
+              confirmButtonColor: '#d33',
+              cancelButtonColor: '#3085d6',
+              confirmButtonText: 'Ya, Hapus Semua!',
+              cancelButtonText: 'Batal',
+              preConfirm: (inputValue) => {
+                  if (inputValue !== 'KONFIRMASI') {
+                      Swal.showValidationMessage('Anda harus mengetik KONFIRMASI');
+                  }
+                  return inputValue;
+              }
+          }).then((r) => {
+              if(r.isConfirmed) {
+                  fetch('lm_biaya_crud.php',{
+                      method:'POST',
+                      headers:{'Content-Type':'application/x-www-form-urlencoded'},
+                      body:`action=delete_all&csrf_token=<?= $CSRF ?>`
+                  }).then(res=>res.json()).then(j=>{
+                      if(j.success) Swal.fire('Terhapus!','Semua data berhasil dihapus.','success').then(()=>location.reload());
+                      else Swal.fire('Gagal',j.message,'error');
+                  });
+              }
+          });
+      };
+  }
 
   $('#crud-form').onsubmit=e=>{
      e.preventDefault(); const fd=new FormData(e.target);

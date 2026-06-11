@@ -134,6 +134,12 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data berhasil dihapus.']); exit;
   }
 
+  if ($action === 'delete_all') {
+    $stmt = $conn->prepare("DELETE FROM lm_biaya");
+    $stmt->execute();
+    echo json_encode(['success'=>true,'message'=>'Semua data berhasil dihapus.']); exit;
+  }
+
   echo json_encode(['success'=>false,'message'=>'Aksi tidak dikenali.']);
 } catch(PDOException $e){
   echo json_encode(['success'=>false,'message'=>'Database error: '.$e->getMessage()]);

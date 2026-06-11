@@ -107,6 +107,12 @@ try {
     echo json_encode(['success'=>true,'message'=>'Data LM-76 dihapus']); exit;
   }
 
+  /* DELETE ALL */
+  if ($act === 'delete_all') {
+    $conn->prepare("DELETE FROM lm76")->execute();
+    echo json_encode(['success'=>true,'message'=>'Semua data LM-76 berhasil dihapus']); exit;
+  }
+
   echo json_encode(['success'=>false,'message'=>'Aksi tidak dikenali']);
 }
 catch(PDOException $e){

@@ -176,6 +176,8 @@ try {
             $params[] = $bulan;
         }
 
+        $sql .= " ORDER BY tanggal_realisasi ASC, id ASC";
+
         $stmt = $conn->prepare($sql);
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);

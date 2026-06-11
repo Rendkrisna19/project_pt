@@ -145,6 +145,9 @@ include_once '../layouts/header.php';
       <button id="btn-add" class="w-full sm:w-auto justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
         <i class="ti ti-plus text-lg"></i><span>Input LM-76</span>
       </button>
+      <button id="btn-delete-all" class="w-full sm:w-auto justify-center bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
+        <i class="ti ti-trash-x text-lg"></i><span>Hapus Semua</span>
+      </button>
       <?php endif; ?>
     </div>
   </div>
@@ -553,6 +556,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
         if(fTahun.value) $('#tahun').value=fTahun.value;
         calcFreq(); open();
       });
+    }
+
+    const btnDeleteAll = document.getElementById('btn-delete-all');
+    if(btnDeleteAll) {
+        btnDeleteAll.addEventListener('click', () => {
+            Swal.fire({
+                title: 'Hapus SEMUA Data?',
+                html: "Aksi ini akan menghapus <b>SELURUH</b> data LM-76.<br>Ketik <b>KONFIRMASI</b> untuk melanjutkan:",
+                input: 'text',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#3085d6',
+                confirmButtonText: 'Ya, Hapus Semua!',
+                cancelButtonText: 'Batal',
+                preConfirm: (inputValue) => {
+                    if (inputValue !== 'KONFIRMASI') {
+                        Swal.showValidationMessage('Anda harus mengetik KONFIRMASI');
+                    }
+                    return inputValue;
+                }
+            }).then((r) => {
+                if(r.isConfirmed) {
+                    const fd = new FormData();
+                    fd.append('csrf_token','<?= htmlspecialchars($CSRF) ?>');
+                    fd.append('action','delete_all');
+                    fetch('lm76_crud.php',{method:'POST',body:fd}).then(res=>res.json()).then(j=>{
+                        if(j.success) Swal.fire('Terhapus!','Semua data LM-76 berhasil dihapus.','success').then(()=>refresh());
+                        else Swal.fire('Gagal',j.message,'error');
+                    });
+                }
+            });
+        });
     }
 
     document.getElementById('btn-close').addEventListener('click', close);

@@ -59,7 +59,7 @@ try {
         $sql .= " AND DATE_FORMAT(tanggal_realisasi, '%Y-%m') = ? ";
         $params[] = $bulan;
     }
-    $sql .= " ORDER BY tanggal_realisasi DESC, id DESC LIMIT 50";
+    $sql .= " ORDER BY tanggal_realisasi ASC, id ASC LIMIT 50";
     
     $stmt = $conn->prepare($sql);
     $stmt->execute($params);
