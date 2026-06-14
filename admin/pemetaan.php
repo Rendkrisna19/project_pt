@@ -730,7 +730,7 @@ include_once '../layouts/header.php';
         const tgl = document.getElementById('input_tgl').value;
         const current_id = document.getElementById('input_edit_id').value;
 
-        if (!jp_id || !blok || !tgl) {
+        if (!jp_id || !tgl) {
             previousSdData = { fisik_sd: 0, hk_sd: 0, bahan_kimia_sd: 0, campuran_sd: 0 };
             return;
         }
@@ -753,15 +753,34 @@ include_once '../layouts/header.php';
     }
 
     function recalculateSd() {
-        const f_hi = parseFloat(document.getElementById('f_hi').value) || 0;
-        const hk_hi = parseFloat(document.getElementById('hk_hi').value) || 0;
-        const k_hi = parseFloat(document.getElementById('k_hi').value) || 0;
-        const c_hi = parseFloat(document.getElementById('c_hi').value) || 0;
+        const f_hi_raw = document.getElementById('f_hi').value;
+        const hk_hi_raw = document.getElementById('hk_hi').value;
+        const k_hi_raw = document.getElementById('k_hi').value;
+        const c_hi_raw = document.getElementById('c_hi').value;
 
-        if (f_hi !== 0 || previousSdData.fisik_sd !== 0) document.getElementById('f_sd').value = (previousSdData.fisik_sd + f_hi).toFixed(2);
-        if (hk_hi !== 0 || previousSdData.hk_sd !== 0) document.getElementById('hk_sd').value = (previousSdData.hk_sd + hk_hi).toFixed(2);
-        if (k_hi !== 0 || previousSdData.bahan_kimia_sd !== 0) document.getElementById('k_sd').value = (previousSdData.bahan_kimia_sd + k_hi).toFixed(2);
-        if (c_hi !== 0 || previousSdData.campuran_sd !== 0) document.getElementById('c_sd').value = (previousSdData.campuran_sd + c_hi).toFixed(2);
+        if (f_hi_raw !== "") {
+            document.getElementById('f_sd').value = (previousSdData.fisik_sd + parseFloat(f_hi_raw || 0)).toFixed(2);
+        } else {
+            document.getElementById('f_sd').value = "";
+        }
+
+        if (hk_hi_raw !== "") {
+            document.getElementById('hk_sd').value = (previousSdData.hk_sd + parseFloat(hk_hi_raw || 0)).toFixed(2);
+        } else {
+            document.getElementById('hk_sd').value = "";
+        }
+
+        if (k_hi_raw !== "") {
+            document.getElementById('k_sd').value = (previousSdData.bahan_kimia_sd + parseFloat(k_hi_raw || 0)).toFixed(2);
+        } else {
+            document.getElementById('k_sd').value = "";
+        }
+
+        if (c_hi_raw !== "") {
+            document.getElementById('c_sd').value = (previousSdData.campuran_sd + parseFloat(c_hi_raw || 0)).toFixed(2);
+        } else {
+            document.getElementById('c_sd').value = "";
+        }
     }
 
     document.getElementById('input_blok').addEventListener('blur', fetchPreviousSd);

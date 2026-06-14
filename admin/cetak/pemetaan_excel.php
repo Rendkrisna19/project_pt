@@ -78,26 +78,101 @@ $spreadsheet = new Spreadsheet();
 $sheet = $spreadsheet->getActiveSheet();
 $sheet->setTitle('Peta & Realisasi');
 
-// Set Header Row (Row 1)
+// === HEADER ROW 1 (match PDF: 30% / 40% / 30%) ===
+// Total 17 columns (A-Q): Green=A-E(5), Yellow=F-L(7), Blue=M-Q(5)
 $sheet->mergeCells('A1:E1');
 $sheet->setCellValue('A1', "PT. PERKEBUNAN NUSANTARA IV\nREGIONAL III - DISTRIK BARAT\nKEBUN " . strtoupper($nama_kebun));
 $sheet->getStyle('A1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF065F46'); // Green
-$sheet->getStyle('A1')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE))->setBold(true);
+$sheet->getStyle('A1')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE))->setBold(true)->setSize(10);
 
-$sheet->mergeCells('F1:I1');
+$sheet->mergeCells('F1:L1');
 $sheet->setCellValue('F1', "PETA KETERANGAN (" . strtoupper($nama_unit) . ")");
 $sheet->getStyle('F1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFFBBF24'); // Yellow
 $sheet->getStyle('F1')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_BLACK))->setBold(true)->setSize(14);
 
-$sheet->mergeCells('J1:O1');
-$sheet->setCellValue('J1', "BULAN : " . strtoupper($bulan_tahun) . "\nPEKERJAAN : " . strtoupper($nama_pekerjaan));
-$sheet->getStyle('J1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF1E40AF'); // Blue
-$sheet->getStyle('J1')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE))->setBold(true);
+$sheet->mergeCells('M1:Q1');
+$sheet->setCellValue('M1', "BULAN : " . strtoupper($bulan_tahun) . "\nPEKERJAAN : " . strtoupper($nama_pekerjaan));
+$sheet->getStyle('M1')->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FF1E40AF'); // Blue
+$sheet->getStyle('M1')->getFont()->setColor(new \PhpOffice\PhpSpreadsheet\Style\Color(\PhpOffice\PhpSpreadsheet\Style\Color::COLOR_WHITE))->setBold(true)->setSize(10);
 
-$sheet->getStyle('A1:O1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+$sheet->getStyle('A1:Q1')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER)->setVertical(Alignment::VERTICAL_CENTER)->setWrapText(true);
+$sheet->getStyle('A1:Q1')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
 $sheet->getRowDimension(1)->setRowHeight(50);
 
-// Set Map Image
+// === TABLE HEADERS (Right side: columns H-Q, 10 columns) ===
+// TANGGAL & BLOK span 3 rows vertically (rows 2-4)
+$sheet->mergeCells('H2:H4'); $sheet->setCellValue('H2', 'TANGGAL');
+$sheet->mergeCells('I2:I4'); $sheet->setCellValue('I2', 'BLOK');
+
+// Super Header: RENCANA / REALISASI spanning 8 data columns (J-Q)
+$sheet->mergeCells('J2:Q2'); $sheet->setCellValue('J2', 'RENCANA / REALISASI');
+
+// Category Headers (Row 3)
+$sheet->mergeCells('J3:K3'); $sheet->setCellValue('J3', 'Fisik (Ha, pkk, dll)');
+$sheet->mergeCells('L3:M3'); $sheet->setCellValue('L3', 'HK');
+$sheet->mergeCells('N3:O3'); $sheet->setCellValue('N3', 'Bahan Kimia');
+$sheet->mergeCells('P3:Q3'); $sheet->setCellValue('P3', 'Campuran');
+
+// Sub-headers (Row 4)
+$sheet->setCellValue('J4', 'H. INI'); $sheet->setCellValue('K4', 'S/D');
+$sheet->setCellValue('L4', 'H. INI'); $sheet->setCellValue('M4', 'S/D');
+$sheet->setCellValue('N4', 'H. INI'); $sheet->setCellValue('O4', 'S/D');
+$sheet->setCellValue('P4', 'H. INI'); $sheet->setCellValue('Q4', 'S/D');
+
+$headerStyle = [
+    'font' => ['bold' => true, 'size' => 10],
+    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF1F5F9']]
+];
+$sheet->getStyle('H2:Q4')->applyFromArray($headerStyle);
+
+// === INSERT DATA (starts at row 5) ===
+$rowNum = 5;
+if (empty($data_realisasi)) {
+    $sheet->mergeCells("H$rowNum:Q$rowNum");
+    $sheet->setCellValue("H$rowNum", 'Belum ada data realisasi yang disimpan.');
+    $sheet->getStyle("H$rowNum")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle("H$rowNum:Q$rowNum")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $rowNum++;
+} else {
+    foreach ($data_realisasi as $row) {
+        $sheet->setCellValue('H' . $rowNum, $row['tanggal_realisasi'] ? date('d-m-Y', strtotime($row['tanggal_realisasi'])) : '-');
+        $sheet->setCellValue('I' . $rowNum, $row['blok_nama']);
+        $sheet->setCellValue('J' . $rowNum, $row['fisik_hari_ini']);
+        $sheet->setCellValue('K' . $rowNum, $row['fisik_sd']);
+        $sheet->setCellValue('L' . $rowNum, $row['hk_hari_ini']);
+        $sheet->setCellValue('M' . $rowNum, $row['hk_sd']);
+        $sheet->setCellValue('N' . $rowNum, $row['bahan_kimia_hari_ini']);
+        $sheet->setCellValue('O' . $rowNum, $row['bahan_kimia_sd']);
+        $sheet->setCellValue('P' . $rowNum, $row['campuran_hari_ini']);
+        $sheet->setCellValue('Q' . $rowNum, $row['campuran_sd']);
+        
+        // Bold for BLOK column
+        $sheet->getStyle('I' . $rowNum)->getFont()->setBold(true);
+        // Number format for numeric columns
+        $sheet->getStyle("J$rowNum:Q$rowNum")->getNumberFormat()->setFormatCode('#,##0.00');
+        $rowNum++;
+    }
+}
+
+// Add blank rows up to 20 rows total to mimic PDF look
+$minRows = 20;
+$actualDataCount = count($data_realisasi);
+if ($actualDataCount < $minRows) {
+    for ($i = 0; $i < ($minRows - $actualDataCount); $i++) {
+        $rowNum++;
+    }
+}
+
+$lastDataRow = $rowNum - 1; // Last row of the data table
+
+// Apply borders to ALL data cells (including blank rows)
+$sheet->getStyle('H4:Q' . $lastDataRow)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+$sheet->getStyle('H4:I' . $lastDataRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$sheet->getStyle('H4:H' . $lastDataRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+
+// === MAP AREA (dynamically sized to match data table height) ===
 if (!empty($map_image)) {
     $imgData = explode(',', $map_image)[1];
     $tempFile = sys_get_temp_dir() . '/map_' . uniqid() . '.png';
@@ -110,104 +185,46 @@ if (!empty($map_image)) {
     $drawing->setCoordinates('A2');
     $drawing->setOffsetX(10);
     $drawing->setOffsetY(10);
-    $drawing->setHeight(650); // Diperbesar dari 400
+    $drawing->setHeight(350);
     $drawing->setWorksheet($sheet);
 }
-// Merge cells for map area to make it look clean (diperbesar areanya)
-$sheet->mergeCells('A2:E45');
-// Border untuk area peta dihilangkan sesuai permintaan
-$sheet->getStyle('A2:E45')->getBorders()->getOutline()->setBorderStyle(Border::BORDER_NONE);
+// Merge map area to match the data table height (A2:G{lastDataRow})
+$sheet->mergeCells("A2:G{$lastDataRow}");
+$sheet->getStyle("A2:G{$lastDataRow}")->getBorders()->getOutline()->setBorderStyle(Border::BORDER_THIN);
 
-// Set Table Headers
-$sheet->mergeCells('F2:F3'); $sheet->setCellValue('F2', 'TANGGAL');
-$sheet->mergeCells('G2:G3'); $sheet->setCellValue('G2', 'BLOK');
-$sheet->mergeCells('H2:I2'); $sheet->setCellValue('H2', 'Fisik (Ha, Pkk)');
-$sheet->mergeCells('J2:K2'); $sheet->setCellValue('J2', 'HK');
-$sheet->mergeCells('L2:M2'); $sheet->setCellValue('L2', 'Bahan Kimia');
-$sheet->mergeCells('N2:O2'); $sheet->setCellValue('N2', 'Campuran');
-
-$sheet->setCellValue('H3', 'H. INI'); $sheet->setCellValue('I3', 'S/D');
-$sheet->setCellValue('J3', 'H. INI'); $sheet->setCellValue('K3', 'S/D');
-$sheet->setCellValue('L3', 'H. INI'); $sheet->setCellValue('M3', 'S/D');
-$sheet->setCellValue('N3', 'H. INI'); $sheet->setCellValue('O3', 'S/D');
-
-$headerStyle = [
-    'font' => ['bold' => true, 'size' => 10],
-    'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
-    'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
-    'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFF1F5F9']]
-];
-$sheet->getStyle('F2:O3')->applyFromArray($headerStyle);
-
-// Insert Data
-$rowNum = 4;
-if (empty($data_realisasi)) {
-    $sheet->mergeCells("F$rowNum:O$rowNum");
-    $sheet->setCellValue("F$rowNum", 'Belum ada data realisasi yang disimpan.');
-    $sheet->getStyle("F$rowNum")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-    $sheet->getStyle("F$rowNum:O$rowNum")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-    $rowNum++;
-} else {
-    foreach ($data_realisasi as $row) {
-        $sheet->setCellValue('F' . $rowNum, $row['tanggal_realisasi'] ? date('d-m-Y', strtotime($row['tanggal_realisasi'])) : '-');
-        $sheet->setCellValue('G' . $rowNum, $row['blok_nama']);
-        $sheet->setCellValue('H' . $rowNum, $row['fisik_hari_ini']);
-        $sheet->setCellValue('I' . $rowNum, $row['fisik_sd']);
-        $sheet->setCellValue('J' . $rowNum, $row['hk_hari_ini']);
-        $sheet->setCellValue('K' . $rowNum, $row['hk_sd']);
-        $sheet->setCellValue('L' . $rowNum, $row['bahan_kimia_hari_ini']);
-        $sheet->setCellValue('M' . $rowNum, $row['bahan_kimia_sd']);
-        $sheet->setCellValue('N' . $rowNum, $row['campuran_hari_ini']);
-        $sheet->setCellValue('O' . $rowNum, $row['campuran_sd']);
-        
-        $sheet->getStyle("H$rowNum:O$rowNum")->getNumberFormat()->setFormatCode('#,##0.00');
-        $rowNum++;
-    }
-}
-
-// Add blank rows up to 20 rows total if data is small, to mimic PDF look
-$minRows = 20;
-$actualDataCount = count($data_realisasi);
-if ($actualDataCount < $minRows) {
-    for ($i = 0; $i < ($minRows - $actualDataCount); $i++) {
-        $rowNum++;
-    }
-}
-
-// Apply borders to all data cells
-$sheet->getStyle('F4:O' . ($rowNum - 1))->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
-$sheet->getStyle('F4:G' . ($rowNum - 1))->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-
-// Tanda Tangan (Pindah ke bawah peta: Kolom A-E baris 47)
-$signRow = 47;
-$sheet->mergeCells("A{$signRow}:B{$signRow}");
-$sheet->mergeCells("C{$signRow}:E{$signRow}");
+// === SIGNATURE (right below the map area) ===
+$signRow = $lastDataRow + 2;
+$sheet->mergeCells("A{$signRow}:C{$signRow}");
+$sheet->mergeCells("D{$signRow}:G{$signRow}");
 $sheet->setCellValue("A{$signRow}", "Dibuat Oleh,");
-$sheet->setCellValue("C{$signRow}", "Diperiksa Oleh,");
+$sheet->setCellValue("D{$signRow}", "Diperiksa Oleh,");
 
 $signRow++;
-$sheet->mergeCells("A{$signRow}:B{$signRow}");
-$sheet->mergeCells("C{$signRow}:E{$signRow}");
+$sheet->mergeCells("A{$signRow}:C{$signRow}");
+$sheet->mergeCells("D{$signRow}:G{$signRow}");
 $sheet->setCellValue("A{$signRow}", "Asst Afdeling");
-$sheet->setCellValue("C{$signRow}", "Asisten Kepala");
-$sheet->getStyle("A{$signRow}:E{$signRow}")->getFont()->setBold(true);
+$sheet->setCellValue("D{$signRow}", "Asisten Kepala");
+$sheet->getStyle("A{$signRow}:G{$signRow}")->getFont()->setBold(true);
 
 $signRow += 4;
-$sheet->mergeCells("A{$signRow}:B{$signRow}");
-$sheet->mergeCells("C{$signRow}:E{$signRow}");
-$sheet->setCellValue("A{$signRow}", "( .................................... )");
-$sheet->setCellValue("C{$signRow}", "( .................................... )");
+$sheet->mergeCells("A{$signRow}:C{$signRow}");
+$sheet->mergeCells("D{$signRow}:G{$signRow}");
+$sheet->setCellValue("A{$signRow}", "( ...................................... )");
+$sheet->setCellValue("D{$signRow}", "( ...................................... )");
 
-$sheet->getStyle("A47:E{$signRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+$signStart = $lastDataRow + 2;
+$sheet->getStyle("A{$signStart}:G{$signRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-// Column Widths
-foreach (range('A', 'E') as $col) {
-    $sheet->getColumnDimension($col)->setWidth(18); // Lebarkan kolom area peta
+// === COLUMN WIDTHS (match PDF proportions) ===
+// Map area: A-G (7 columns)
+foreach (range('A', 'G') as $col) {
+    $sheet->getColumnDimension($col)->setWidth(13);
 }
-$sheet->getColumnDimension('F')->setWidth(12);
-$sheet->getColumnDimension('G')->setWidth(12);
-foreach (range('H', 'O') as $col) {
-    $sheet->getColumnDimension($col)->setWidth(11);
+// Data table: H-Q (10 columns)
+$sheet->getColumnDimension('H')->setWidth(12); // TANGGAL
+$sheet->getColumnDimension('I')->setWidth(10); // BLOK
+foreach (range('J', 'Q') as $col) {
+    $sheet->getColumnDimension($col)->setWidth(9); // Data columns
 }
 
 // Clean up Temp Image after script ends automatically by PHP or we can leave it in sys_get_temp_dir

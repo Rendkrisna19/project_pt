@@ -86,59 +86,100 @@ ob_start();
     <title>Peta & Realisasi</title>
     <style>
         @page { margin: 10mm; size: A4 landscape; }
+        * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; font-size: 9px; margin: 0; padding: 0; color: #1e293b; }
-        
+
+        /* ===== HEADER ===== */
         .header-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 5px;
+            margin-bottom: 0;
             font-weight: bold;
             font-size: 11px;
             text-align: center;
         }
         .header-table td {
-            border: 1px solid #000;
-            padding: 5px;
+            border: 1.5px solid #000;
+            padding: 6px 5px;
         }
         .bg-green { background-color: #065F46; color: white; }
         .bg-yellow { background-color: #FBBF24; color: black; }
         .bg-blue { background-color: #1E40AF; color: white; }
 
+        /* ===== MAIN LAYOUT (2 columns) ===== */
         .content-container {
             width: 100%;
             border-collapse: collapse;
+            border: 1.5px solid #000;
         }
         .content-container > tbody > tr > td {
             vertical-align: top;
             padding: 0;
-            border: 1px solid #000;
+            border: 1.5px solid #000;
         }
 
+        /* ===== MAP ===== */
         .map-wrapper {
             width: 100%;
-            padding: 15px;
-            box-sizing: border-box;
+            padding: 0;
             text-align: center;
         }
         .map-img {
             max-width: 100%;
-            max-height: 400px; /* Ukuran dikurangi agar muat satu halaman dengan tanda tangan */
+            max-height: 380px;
             object-fit: contain;
-            border: 1px solid #333; /* Kembalikan bingkai agar peta terlihat rapi tidak melayang */
+            display: block;
+            margin: 0 auto;
         }
 
+        /* ===== SIGNATURE TABLE ===== */
+        .sig-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 10px;
+            text-align: center;
+            border-top: 1.5px solid #000;
+        }
+        .sig-table td {
+            border: none;
+            padding: 4px 5px;
+        }
+        .sig-table td.sig-left {
+            width: 50%;
+            padding-top: 15px;
+            padding-bottom: 40px;
+        }
+        .sig-table td.sig-right {
+            width: 50%;
+            padding-top: 15px;
+            padding-bottom: 40px;
+        }
+
+        /* ===== DATA TABLE (right side) ===== */
         .data-table {
             width: 100%;
             border-collapse: collapse;
             text-align: center;
         }
-        .data-table th, .data-table td {
+        .data-table th,
+        .data-table td {
             border: 1px solid #000;
-            padding: 3px;
+            padding: 4px 3px;
             font-size: 8px;
+            vertical-align: middle;
         }
-        .data-table th {
+        .data-table thead th {
             background-color: #f1f5f9;
+            font-weight: bold;
+            border: 1px solid #000;
+        }
+        .data-table tbody td {
+            border: 1px solid #000;
+        }
+        .data-table tbody td.empty-cell {
+            height: 15px;
+            border: 1px solid #000;
         }
     </style>
 </head>
@@ -164,27 +205,27 @@ ob_start();
     <table class="content-container">
         <tr>
             <!-- AREA KIRI: PETA -->
-            <td style="width: 60%; padding-bottom: 10px;">
+            <td style="width: 50%; padding-bottom: 0;">
                 <div class="map-wrapper">
                     <img src="<?= $map_image ?>" class="map-img" alt="Peta Kerja">
                 </div>
-                <!-- TEMPAT TANDA TANGAN (Di bawah peta langsung sesuai permintaan) -->
-                <table width="100%" style="font-family: Arial, sans-serif; font-size: 10px; margin-top: 15px; text-align: center;">
+                <!-- TEMPAT TANDA TANGAN -->
+                <table class="sig-table">
                     <tr>
-                        <td width="50%" style="padding-bottom: 40px;">
+                        <td class="sig-left">
                             Dibuat Oleh,<br>
                             <b>Asst Afdeling</b>
                         </td>
-                        <td width="50%" style="padding-bottom: 40px;">
+                        <td class="sig-right">
                             Diperiksa Oleh,<br>
                             <b>Asisten Kepala</b>
                         </td>
                     </tr>
                     <tr>
-                        <td width="50%">
+                        <td>
                             ( ...................................... )
                         </td>
-                        <td width="50%">
+                        <td>
                             ( ...................................... )
                         </td>
                     </tr>
@@ -192,13 +233,16 @@ ob_start();
             </td>
 
             <!-- AREA KANAN: TABEL REALISASI -->
-            <td style="width: 40%;">
+            <td style="width: 50%;">
                 <table class="data-table">
                     <thead>
                         <tr>
-                            <th rowspan="2" style="width: 12%;">TANGGAL</th>
-                            <th rowspan="2" style="width: 15%;">BLOK</th>
-                            <th colspan="2">Fisik (Ha, Pkk)</th>
+                            <th rowspan="3" style="width: 12%;">TANGGAL</th>
+                            <th rowspan="3" style="width: 15%;">BLOK</th>
+                            <th colspan="8">RENCANA / REALISASI</th>
+                        </tr>
+                        <tr>
+                            <th colspan="2">Fisik (Ha, pkk, dll)</th>
                             <th colspan="2">HK</th>
                             <th colspan="2">Bahan Kimia</th>
                             <th colspan="2">Campuran</th>
@@ -239,7 +283,16 @@ ob_start();
                         <!-- Extra blank rows just to mimic the paper look -->
                         <?php for($i=0; $i < (20 - count($data_realisasi)); $i++): ?>
                         <tr>
-                            <td style="height: 15px;"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
+                            <td class="empty-cell">&nbsp;</td>
                         </tr>
                         <?php endfor; ?>
                     </tbody>
@@ -248,7 +301,7 @@ ob_start();
         </tr>
     </table>
 
-    <!-- Tanda tangan sudah dipindah ke bawah peta -->
+
 </body>
 </html>
 <?php

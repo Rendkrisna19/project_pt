@@ -322,21 +322,20 @@ try {
         // Pengecualian ID edit saat ini jika ada
         $current_id = (int)($_GET['current_id'] ?? 0);
 
-        if (!$kebun_id || !$unit_id || !$jp_id || empty($blok)) {
+        if (!$kebun_id || !$unit_id || !$jp_id) {
             echo json_encode(['success' => true, 'data' => null]);
             exit;
         }
 
-        // Cari record terakhir untuk blok tersebut SEBELUM atau SAMA DENGAN tanggal yang dipilih 
+        // Cari record terakhir untuk jenis pekerjaan tersebut SEBELUM atau SAMA DENGAN tanggal yang dipilih 
         // yang BUKAN merupakan record yang sedang diedit. 
-        // Asumsinya kita bisa ambil fisik_sd terakhir dari database.
         $sql = "SELECT fisik_sd, hk_sd, bahan_kimia_sd, campuran_sd 
                 FROM tr_pemetaan 
-                WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ? AND blok_nama = ? 
+                WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ? 
                   AND tanggal_realisasi <= ? AND id != ?
                 ORDER BY tanggal_realisasi DESC, id DESC LIMIT 1";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$kebun_id, $unit_id, $jp_id, $blok, $tgl, $current_id]);
+        $stmt->execute([$kebun_id, $unit_id, $jp_id, $tgl, $current_id]);
         $data = $stmt->fetch(PDO::FETCH_ASSOC);
 
         ob_clean();
