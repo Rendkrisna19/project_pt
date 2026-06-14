@@ -44,9 +44,12 @@ try {
     }
 
     /* ===== 2. FILTER PARAMETERS ===== */
+    $bulanList = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+    $bulanNow  = $bulanList[date('n') - 1];
+
     $unit_id  = $_GET['unit_id']  ?? '';
     $tahun    = $_GET['tahun']    ?? date('Y');
-    $bulan    = $_GET['bulan']    ?? 'Semua Bulan';
+    $bulan    = $_GET['bulan']    ?? $bulanNow;
     $kebun_id = $_GET['kebun_id'] ?? '';
     $q        = trim($_GET['q'] ?? '');
 

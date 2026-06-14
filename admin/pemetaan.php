@@ -177,7 +177,7 @@ include_once '../layouts/header.php';
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Fisik (S/D)</label>
-                                <input type="number" step="0.01" name="fisik_sd" id="f_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="fisik_sd" id="f_sd" class="input-custom text-xs bg-slate-100 cursor-not-allowed" placeholder="0.00" readonly title="Dihitung Otomatis">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">HK (H. Ini)</label>
@@ -185,7 +185,7 @@ include_once '../layouts/header.php';
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">HK (S/D)</label>
-                                <input type="number" step="0.01" name="hk_sd" id="hk_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="hk_sd" id="hk_sd" class="input-custom text-xs bg-slate-100 cursor-not-allowed" placeholder="0.00" readonly title="Dihitung Otomatis">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Kimia (H. Ini)</label>
@@ -193,7 +193,7 @@ include_once '../layouts/header.php';
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Kimia (S/D)</label>
-                                <input type="number" step="0.01" name="bahan_kimia_sd" id="k_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="bahan_kimia_sd" id="k_sd" class="input-custom text-xs bg-slate-100 cursor-not-allowed" placeholder="0.00" readonly title="Dihitung Otomatis">
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Campuran (H. Ini)</label>
@@ -201,7 +201,7 @@ include_once '../layouts/header.php';
                             </div>
                             <div>
                                 <label class="block text-[9px] font-black text-slate-500 uppercase mb-1">Campuran (S/D)</label>
-                                <input type="number" step="0.01" name="campuran_sd" id="c_sd" class="input-custom text-xs" placeholder="0.00">
+                                <input type="number" step="0.01" name="campuran_sd" id="c_sd" class="input-custom text-xs bg-slate-100 cursor-not-allowed" placeholder="0.00" readonly title="Dihitung Otomatis">
                             </div>
                         </div>
                     </div>

@@ -51,7 +51,7 @@ $unit_id  = $_GET['unit_id']  ?? '';
 $kebun_id = $_GET['kebun_id'] ?? '';
 $q        = trim($_GET['q'] ?? '');
 $tahun    = $_GET['tahun'] ?? $tahunNow;
-$bulan    = $_GET['bulan'] ?? 'Semua Bulan';
+$bulan    = $_GET['bulan'] ?? $bulanNow;
 
 // Parameter Paging
 $per_page = (int)($_GET['per_page'] ?? 100); 
