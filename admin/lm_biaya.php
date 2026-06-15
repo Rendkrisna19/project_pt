@@ -66,8 +66,8 @@ $kebuns = $hasKebun ? $conn->query("SELECT id, nama_kebun FROM md_kebun ORDER BY
 // --- 2. LOGIKA HPP (VOLUME TBS) ---
 $vol_real = 0; $vol_ang = 0;
 if (col_exists($conn, 'lm76', 'id')) {
-    $col_r = find_col($conn, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi']);
-    $col_a = find_col($conn, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap']);
+    $col_r = find_col($conn, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi','realisasi_kg']);
+    $col_a = find_col($conn, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap','anggaran_kg']);
 
     $wh76 = " WHERE 1=1 "; $bd76 = [];
     if ($tahun !== '')        { $wh76 .= " AND tahun=:t"; $bd76[':t'] = $tahun; }

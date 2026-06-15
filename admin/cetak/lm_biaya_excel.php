@@ -56,8 +56,8 @@ try {
     /* ===== 3. LOGIKA VOLUME TBS (LM76) ===== */
     $vol_real = 0; $vol_ang = 0;
     if (col_exists($pdo, 'lm76', 'id')) {
-        $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi']);
-        $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap']);
+        $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi','realisasi_kg']);
+        $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap','anggaran_kg']);
 
         $wh76 = " WHERE 1=1 "; $bd76 = [];
         if ($tahun !== '')        { $wh76 .= " AND tahun=:t"; $bd76[':t'] = $tahun; }
@@ -114,8 +114,8 @@ try {
 
     // --- Subtitle Filters ---
     $info = [];
-    if($kebun_id) $info[] = 'Kebun: '.($first['nama_kebun']??'');
-    if($unit_id)  $info[] = 'Unit: '.($first['nama_unit']??'');
+    $info[] = 'Kebun: ' . ($kebun_id ? ($first['nama_kebun'] ?? 'Semua Kebun') : 'Semua Kebun');
+    $info[] = 'Unit: ' . ($unit_id ? ($first['nama_unit'] ?? 'Semua Unit') : 'Semua Unit');
     $info[] = 'Bulan: '.($bulan?:'Semua');
     $info[] = 'Tahun: '.$tahun;
     $sheet->setCellValue('A2', implode(' | ', $info));

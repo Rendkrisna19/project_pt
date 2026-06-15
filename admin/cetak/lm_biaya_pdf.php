@@ -38,8 +38,8 @@
   // --- 3. LOGIKA VOLUME (LM76) ---
   $vol_real = 0; $vol_ang = 0;
   if (col_exists($pdo, 'lm76', 'id')) {
-      $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi']);
-      $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap']);
+      $col_r = find_col($pdo, 'lm76', ['prod_bi_realisasi','realisasi','prod_real','tbs_realisasi','realisasi_kg']);
+      $col_a = find_col($pdo, 'lm76', ['prod_bi_anggaran','prod_bi_rkap','anggaran','rkap','anggaran_kg']);
 
       $wh76 = " WHERE 1=1 "; $bd76 = [];
       if ($tahun !== '')    { $wh76 .= " AND tahun=:t"; $bd76[':t'] = $tahun; }
@@ -152,8 +152,8 @@
     <div class="header">
       <h1>Laporan Biaya & Harga Pokok</h1>
       <p>
-        <?= $kebun_id!=='' ? 'Kebun: '.htmlspecialchars($rows[0]['nama_kebun']??'').' | ' : '' ?>
-        <?= $unit_id!==''  ? 'Unit: '.htmlspecialchars($rows[0]['nama_unit']??'').' | ' : '' ?>
+        Kebun: <?= $kebun_id ? htmlspecialchars($rows[0]['nama_kebun'] ?? 'Semua Kebun') : 'Semua Kebun' ?> | 
+        Unit: <?= $unit_id ? htmlspecialchars($rows[0]['nama_unit'] ?? 'Semua Unit') : 'Semua Unit' ?> | 
         Bulan: <?= $bulan?:'Semua' ?> | Tahun: <?= $tahun ?>
       </p>
     </div>
