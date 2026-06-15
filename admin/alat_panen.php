@@ -91,6 +91,10 @@ include_once '../layouts/header.php';
             </button>
 
             <?php if ($canInput): ?>
+            <a href="imports/import_alat_panen.php" class="flex flex-1 md:flex-none justify-center items-center gap-2 bg-[#10b981] hover:bg-[#059669] text-white px-4 h-10 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 border-none cursor-pointer">
+                <i class="ti ti-file-import text-lg"></i> 
+                <span>Import</span>
+            </a>
             <button id="btn-add" class="flex w-full sm:w-auto justify-center items-center gap-2 bg-[#059fd3] hover:bg-[#0487b4] text-white px-5 h-10 rounded-lg text-sm font-semibold shadow-sm hover:shadow-md transition-all duration-200 mt-2 sm:mt-0 md:ml-2 border-none cursor-pointer">
                 <i class="ti ti-plus text-lg"></i> 
                 <span>Input Alat</span>

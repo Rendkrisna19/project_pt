@@ -144,11 +144,6 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
                 </div>
             </div>
 
-            <a href="pilih_unit" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-orange-300 <?= navClass('pilih_unit', $currentPage) ?>">
-                <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-3 group-hover:text-orange-400 transition-colors <?= $currentPage=='kertas_kerja'?'text-white':'' ?>"></i>
-                <span>Kertas Kerja</span>
-            </a>
-
             <a href="pemupukan" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-purple-300 <?= navClass('pemupukan', $currentPage) ?>">
                 <i data-lucide="flask-conical" class="w-5 h-5 mr-3 group-hover:text-purple-400 transition-colors <?= $currentPage=='pemupukan'?'text-white':'' ?>"></i>
                 <span>Pemupukan Kimia</span>
@@ -160,13 +155,18 @@ $isSdmOpen    = in_array($currentPage, $SDM_KEYS);
             </a>
 
             <div class="px-4 mt-6 mb-2 flex items-center gap-2">
-                <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">Pemetaan & GIS</span>
+                <span class="text-[10px] font-bold text-cyan-600/70 uppercase tracking-widest">MCS</span>
                 <div class="h-px bg-cyan-900/30 flex-1"></div>
             </div>
 
             <a href="pemetaan_pilih_unit.php" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-emerald-300 <?= navClass('pemetaan', $currentPage) ?>">
                 <i data-lucide="map" class="w-5 h-5 mr-3 group-hover:text-emerald-400 transition-colors <?= $currentPage=='pemetaan'?'text-white':'' ?>"></i>
-                <span>Pemetaan Kebun</span>
+                <span>MCS Pemeliharaan</span>
+            </a>
+
+            <a href="pilih_unit" class="flex items-center px-4 py-3 text-sm rounded-r-lg group hover:text-orange-300 <?= navClass('pilih_unit', $currentPage) ?>">
+                <i data-lucide="file-spreadsheet" class="w-5 h-5 mr-3 group-hover:text-orange-400 transition-colors <?= $currentPage=='kertas_kerja'?'text-white':'' ?>"></i>
+                <span>Weeding Book</span>
             </a>
 
             <div class="px-4 mt-6 mb-2 flex items-center gap-2">

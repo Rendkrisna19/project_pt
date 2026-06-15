@@ -138,6 +138,9 @@
         </button>
         
         <?php if ($canInput): ?>
+        <a href="imports/import_stok_barang_gudang.php" class="flex-1 md:flex-none justify-center bg-[#10b981] text-white px-4 py-2 rounded-lg hover:bg-[#059669] flex items-center gap-2 shadow-sm transition" title="Import Excel">
+          <i class="ti ti-file-import"></i> Import
+        </a>
         <button id="btn-add" class="w-full sm:w-auto justify-center bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-700 flex items-center gap-2 shadow-sm transition mt-2 sm:mt-0 md:ml-2">
           <i class="ti ti-plus"></i> Input Stok
         </button>
