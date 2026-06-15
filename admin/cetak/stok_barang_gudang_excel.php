@@ -117,13 +117,24 @@ try {
             $sheet->setCellValue('E'.$row, $r['bulan']);
             $sheet->setCellValue('F'.$row, $r['tahun']);
             
-            // Angka
-            $sheet->setCellValue('G'.$row, $r['stok_awal']);
-            $sheet->setCellValue('H'.$row, $r['mutasi_masuk']);
-            $sheet->setCellValue('I'.$row, $r['mutasi_keluar']);
-            $sheet->setCellValue('J'.$row, $r['pasokan']);
-            $sheet->setCellValue('K'.$row, $r['dipakai']);
-            $sheet->setCellValue('L'.$row, $sisa);
+            // Angka — jika 0 tampilkan "-" saja
+            $numCols = [
+                'G' => (float)$r['stok_awal'],
+                'H' => (float)$r['mutasi_masuk'],
+                'I' => (float)$r['mutasi_keluar'],
+                'J' => (float)$r['pasokan'],
+                'K' => (float)$r['dipakai'],
+                'L' => $sisa,
+            ];
+            foreach ($numCols as $col => $val) {
+                if ($val == 0 && $col !== 'L') {
+                    $sheet->setCellValue($col.$row, '-');
+                    $sheet->getStyle($col.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                } else {
+                    $sheet->setCellValue($col.$row, $val);
+                    $sheet->getStyle($col.$row)->getNumberFormat()->setFormatCode('#,##0.00');
+                }
+            }
 
             // Warna Angka
             if($r['mutasi_masuk'] > 0) $sheet->getStyle('H'.$row)->getFont()->getColor()->setARGB('FF16A34A'); // Hijau
@@ -150,8 +161,8 @@ try {
     $sheet->getStyle('A5:A'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $sheet->getStyle('D5:F'.$lastRow)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-    // Format Angka (Accounting/Number)
-    $sheet->getStyle('G5:L'.$lastRow)->getNumberFormat()->setFormatCode('#,##0.00');
+    // Format Angka (Accounting/Number) — hanya untuk sel yang berisi angka (bukan "-")
+    // Sudah di-set per-sel di loop atas
 
     // Highlight Kolom Sisa
     $sheet->getStyle('L5:L'.$lastRow)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFCFFAFE'); // Cyan Highlight

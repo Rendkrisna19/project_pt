@@ -135,22 +135,29 @@ if (empty($rows)) {
     $net       = ($masuk - $keluar) + ($pasokan - $dipakai);
     $sisa      = $stok_awal + $net;
 
+    // Helper: 0 => "-" string, selain 0 => angka
+    $fmt = fn($v) => ($v == 0) ? '-' : $v;
+
     $vals = [
       (string)(($r['kebun_kode'] ?? '').' — '.($r['nama_kebun'] ?? '')),
       (string)(($r['bahan_kode'] ?? '').' — '.($r['nama_bahan'] ?? '').' ('.($r['satuan'] ?? '').')'),
       (string)($r['bulan'] ?? ''),
       (int)   ($r['tahun'] ?? 0),
-      $stok_awal,
-      $masuk,
-      $keluar,
-      $pasokan,
-      $dipakai,
-      $net,
+      $fmt($stok_awal),
+      $fmt($masuk),
+      $fmt($keluar),
+      $fmt($pasokan),
+      $fmt($dipakai),
+      $fmt($net),
       $sisa,
     ];
 
     foreach ($vals as $i => $v) {
       $sheet->setCellValue($colLetters[$i].$row, $v);
+      // Jika nilai adalah string "-", center align
+      if ($v === '-') {
+        $sheet->getStyle($colLetters[$i].$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+      }
     }
 
     // border row

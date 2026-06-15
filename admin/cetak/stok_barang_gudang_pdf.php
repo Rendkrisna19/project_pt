@@ -69,6 +69,9 @@ foreach($rows as $r) {
     // Warna teks jika sisa negatif (warning)
     $sisaColor = ($sisa < 0) ? '#dc2626' : '#155e75'; 
 
+    // Helper: 0 => "-", selain 0 => format angka
+    $fmt = fn($v) => ((float)$v == 0) ? '-' : number_format((float)$v, 2);
+
     $htmlRows .= '<tr>
         <td class="center">'.$no++.'</td>
         <td>'.htmlspecialchars($r['nama_kebun']).'</td>
@@ -76,11 +79,11 @@ foreach($rows as $r) {
         <td class="center">'.htmlspecialchars($r['satuan']).'</td>
         <td class="center">'.$r['bulan'].'</td>
         <td class="center">'.$r['tahun'].'</td>
-        <td class="right">'.number_format($r['stok_awal'], 2).'</td>
-        <td class="right text-green">'.number_format($r['mutasi_masuk'], 2).'</td>
-        <td class="right text-red">'.number_format($r['mutasi_keluar'], 2).'</td>
-        <td class="right text-blue">'.number_format($r['pasokan'], 2).'</td>
-        <td class="right text-orange">'.number_format($r['dipakai'], 2).'</td>
+        <td class="right">'.$fmt($r['stok_awal']).'</td>
+        <td class="right text-green">'.$fmt($r['mutasi_masuk']).'</td>
+        <td class="right text-red">'.$fmt($r['mutasi_keluar']).'</td>
+        <td class="right text-blue">'.$fmt($r['pasokan']).'</td>
+        <td class="right text-orange">'.$fmt($r['dipakai']).'</td>
         <td class="right sisa-col" style="color:'.$sisaColor.'">'.number_format($sisa, 2).'</td>
     </tr>';
 }

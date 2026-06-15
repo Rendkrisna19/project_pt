@@ -113,17 +113,19 @@ ob_start();
         $dipakai   = (float)($r['dipakai'] ?? 0);
         $net       = ($masuk - $keluar) + ($pasokan - $dipakai);
         $sisa      = $stok_awal + $net;
+        // Helper: 0 => "-", selain 0 => format angka
+        $fmt = fn($v) => ($v == 0) ? '-' : number_format($v, 2, ',', '.');
       ?>
       <tr>
         <td><?= h(($r['kebun_kode'] ?? '').' — '.($r['nama_kebun'] ?? '')) ?></td>
         <td><?= h(($r['bahan_kode'] ?? '').' — '.($r['nama_bahan'] ?? '').' ('.($r['satuan'] ?? '').')') ?></td>
         <td class="center"><?= h(($r['bulan'] ?? '').' '.($r['tahun'] ?? '')) ?></td>
-        <td class="right"><?= number_format($stok_awal, 2, ',', '.') ?></td>
-        <td class="right"><?= number_format($masuk, 2, ',', '.') ?></td>
-        <td class="right"><?= number_format($keluar, 2, ',', '.') ?></td>
-        <td class="right"><?= number_format($pasokan, 2, ',', '.') ?></td>
-        <td class="right"><?= number_format($dipakai, 2, ',', '.') ?></td>
-        <td class="right"><?= number_format($net, 2, ',', '.') ?></td>
+        <td class="right"><?= $fmt($stok_awal) ?></td>
+        <td class="right"><?= $fmt($masuk) ?></td>
+        <td class="right"><?= $fmt($keluar) ?></td>
+        <td class="right"><?= $fmt($pasokan) ?></td>
+        <td class="right"><?= $fmt($dipakai) ?></td>
+        <td class="right"><?= $fmt($net) ?></td>
         <td class="right"><strong><?= number_format($sisa, 2, ',', '.') ?></strong></td>
       </tr>
       <?php endforeach; endif; ?>
