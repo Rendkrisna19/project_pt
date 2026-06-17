@@ -47,7 +47,7 @@ try {
             LEFT JOIN md_kebun k ON t.kebun_id = k.id
             LEFT JOIN md_jenis_barang_gudang b ON t.jenis_barang_id = b.id
             $where
-            ORDER BY t.tahun DESC, p
+            ORDER BY t.tahun DESC, 
             FIELD(t.bulan,'Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'), 
             k.nama_kebun ASC";
 
