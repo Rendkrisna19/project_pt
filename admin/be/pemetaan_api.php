@@ -182,15 +182,13 @@ try {
         $stmt->execute($params);
         $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // Ambil info Peta Dasar per Jenis Pekerjaan
+        // Ambil info Peta Dasar per Unit (berlaku untuk SEMUA jenis pekerjaan)
         $peta_kerja_foto = null;
-        if ($jp_id > 0) {
-            $sqlUnit = "SELECT peta_kerja_foto FROM tr_pemetaan_peta_dasar WHERE unit_id = ? AND jenis_pekerjaan_id = ?";
-            $stmtUnit = $conn->prepare($sqlUnit);
-            $stmtUnit->execute([$unit_id, $jp_id]);
-            $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
-            $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
-        }
+        $sqlUnit = "SELECT peta_kerja_foto FROM tr_pemetaan_peta_dasar WHERE unit_id = ? LIMIT 1";
+        $stmtUnit = $conn->prepare($sqlUnit);
+        $stmtUnit->execute([$unit_id]);
+        $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
+        $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
 
         ob_clean();
         echo json_encode(['success' => true, 'data' => $data, 'peta_kerja_foto' => $peta_kerja_foto]);
@@ -202,8 +200,8 @@ try {
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
         $unit_id = (int)$_POST['unit_id'];
 
-        if (empty($_POST['jenis_pekerjaan_id'])) throw new Exception("Jenis Pekerjaan belum dipilih di filter atas.");
-        $jp_id = (int)$_POST['jenis_pekerjaan_id'];
+        // jenis_pekerjaan_id tidak wajib — peta dasar berlaku untuk semua JP di unit ini
+        $jp_id = (int)($_POST['jenis_pekerjaan_id'] ?? 0);
 
         if (empty($_FILES['peta_dasar']['name'])) {
             throw new Exception("File gambar/PDF Peta Dasar belum dipilih.");
@@ -218,7 +216,7 @@ try {
             throw new Exception("Format file harus JPG, PNG, WEBP, atau PDF.");
         }
 
-        $base_name = "BASEMAP_UNIT_" . $unit_id . "_JP_" . $jp_id . "_" . time();
+        $base_name = "BASEMAP_UNIT_" . $unit_id . "_" . time();
 
         if ($ext === 'pdf') {
             // Simpan file PDF asli dulu
@@ -240,9 +238,9 @@ try {
                         // Tidak ada Ghostscript, biarkan PDF sebagai file (tidak bisa preview di peta)
                         $foto_name = $base_name . ".pdf";
                         
-                        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = ?";
+                        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
                         $stmt = $conn->prepare($sql);
-                        $stmt->execute([$unit_id, $jp_id, $foto_name, $foto_name]);
+                        $stmt->execute([$unit_id, $foto_name]);
 
                         ob_clean();
                         echo json_encode(['success' => true, 'message' => 'PDF berhasil diupload! (Preview peta tidak tersedia karena Ghostscript/Imagick belum terinstal)', 'foto' => $foto_name]);
@@ -290,9 +288,9 @@ try {
             }
         }
 
-        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = ?";
+        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$unit_id, $jp_id, $foto_name, $foto_name]);
+        $stmt->execute([$unit_id, $foto_name]);
 
         ob_clean();
         echo json_encode(['success' => true, 'message' => 'Peta Dasar berhasil diunggah!', 'foto' => $foto_name]);
@@ -327,11 +325,11 @@ try {
             exit;
         }
 
-        // Cari record terakhir untuk jenis pekerjaan tersebut SEBELUM atau SAMA DENGAN tanggal yang dipilih 
-        // yang BUKAN merupakan record yang sedang diedit. 
+        // Cari record terakhir untuk jenis pekerjaan yang sama (SEMUA blok) SEBELUM atau SAMA DENGAN tanggal yang dipilih 
+        // yang BUKAN merupakan record yang sedang diedit. S/D bersifat kumulatif lintas blok.
         $sql = "SELECT fisik_sd, hk_sd, bahan_kimia_sd, campuran_sd 
                 FROM tr_pemetaan 
-                WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ? 
+                WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ?
                   AND tanggal_realisasi <= ? AND id != ?
                 ORDER BY tanggal_realisasi DESC, id DESC LIMIT 1";
         $stmt = $conn->prepare($sql);

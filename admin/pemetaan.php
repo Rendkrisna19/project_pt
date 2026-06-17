@@ -92,7 +92,7 @@ include_once '../layouts/header.php';
                 <h3 class="font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                     <i class="ti ti-photo-plus text-fuchsia-500 text-xl"></i> Peta Dasar (Base Map)
                 </h3>
-                <p class="text-xs text-slate-500 mb-4">Upload gambar denah/Peta Kerja untuk dijadikan alas peta.</p>
+                <p class="text-xs text-slate-500 mb-4">Upload gambar denah/Peta Kerja untuk dijadikan alas peta. <strong>Cukup 1x upload</strong>, berlaku untuk semua jenis pekerjaan di unit ini.</p>
                 <form id="form-upload-peta">
                     <input type="hidden" name="action" value="upload_peta_dasar">
                     <input type="hidden" name="unit_id" value="<?= $unit_id ?>">
@@ -524,9 +524,8 @@ include_once '../layouts/header.php';
         // Reset peta
         if (drawnItems) drawnItems.clearLayers();
 
-        if(jp_id === "") {
-            document.getElementById('card_upload_peta').classList.add('hidden');
-        }
+        // Peta dasar selalu ditampilkan (berlaku untuk semua JP di unit ini)
+        document.getElementById('card_upload_peta').classList.remove('hidden');
 
         try {
             const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}&bulan=${bulan}`);
@@ -537,14 +536,9 @@ include_once '../layouts/header.php';
                 initMap(res.peta_kerja_foto);
                 applyColorToDrawings();
                 
-                // Tampilkan form upload base map JIKA JP Dipilih (bisa upload berkali-kali)
-                if(jp_id !== "") {
-                    document.getElementById('card_upload_peta').classList.remove('hidden');
-                    let btnText = res.peta_kerja_foto ? 'Ganti Peta Dasar (Timpa)' : 'Upload & Pasang Peta';
-                    document.getElementById('btn-upload-peta').innerText = btnText;
-                } else {
-                    document.getElementById('card_upload_peta').classList.add('hidden');
-                }
+                // Update tombol upload
+                let btnText = res.peta_kerja_foto ? 'Ganti Peta Dasar (Timpa)' : 'Upload & Pasang Peta';
+                document.getElementById('btn-upload-peta').innerText = btnText;
 
                 let tbody = document.getElementById('table-realisasi-body');
                 if(tbody) tbody.innerHTML = '';
