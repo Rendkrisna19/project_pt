@@ -79,6 +79,9 @@ include_once '../layouts/header.php';
             <button onclick="exportMap('excel')" class="bg-gradient-to-r from-green-500 to-green-600 text-white border border-green-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
                 <i class="ti ti-file-spreadsheet"></i> Export Excel
             </button>
+            <button onclick="exportGabungan()" class="bg-gradient-to-r from-purple-500 to-purple-600 text-white border border-purple-600 px-4 py-2 rounded-xl text-sm font-bold shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition flex items-center gap-2">
+                <i class="ti ti-files"></i> Cetak Gabungan
+            </button>
 
         </div>
     </div>
@@ -526,6 +529,14 @@ include_once '../layouts/header.php';
 
         // Peta dasar selalu ditampilkan (berlaku untuk semua JP di unit ini)
         document.getElementById('card_upload_peta').classList.remove('hidden');
+
+        // Jika belum pilih JP, tampilkan peta kosong tanpa data
+        if (jp_id === "") {
+            initMap(null);
+            let tbody = document.getElementById('table-realisasi-body');
+            if(tbody) tbody.innerHTML = `<tr><td colspan="11" class="px-3 py-4 text-center text-slate-500 italic">Pilih jenis pekerjaan untuk melihat data.</td></tr>`;
+            return;
+        }
 
         try {
             const response = await fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}&jenis_pekerjaan_id=${jp_id}&bulan=${bulan}`);
@@ -1125,6 +1136,157 @@ include_once '../layouts/header.php';
             controls.forEach(c => c.style.display = '');
             Swal.fire('Error', 'Gagal memproses gambar peta.', 'error');
         }
+    }
+
+    // === EXPORT GABUNGAN (Semua JP per Unit dalam 1 PDF — peta berbeda per JP) ===
+    async function exportGabungan() {
+        const mapDiv = document.getElementById('map');
+        if (!mapDiv) { Swal.fire('Error', 'Peta tidak ditemukan.', 'error'); return; }
+
+        // Kumpulkan semua opsi JP dari dropdown (skip opsi kosong "Semua Pekerjaan")
+        const selJp = document.getElementById('filter_jenis_pekerjaan');
+        const originalJp = selJp.value;
+        const jpOptions = [];
+        selJp.querySelectorAll('option').forEach(opt => {
+            if (opt.value) jpOptions.push({ id: opt.value, nama: opt.textContent });
+        });
+
+        if (jpOptions.length === 0) {
+            Swal.fire('Peringatan', 'Tidak ada jenis pekerjaan tersedia.', 'warning');
+            return;
+        }
+
+        // Auto-crop helper
+        function trimCanvas(c) {
+            var ctx = c.getContext('2d', { willReadFrequently: true }),
+                copy = document.createElement('canvas').getContext('2d'),
+                pixels = ctx.getImageData(0, 0, c.width, c.height),
+                bound = { top: null, left: null, right: null, bottom: null };
+            for (var i = 0; i < pixels.data.length; i += 4) {
+                if (pixels.data[i+3] !== 0) {
+                    var x = (i / 4) % c.width, y = ~~((i / 4) / c.width);
+                    if (bound.top === null) bound.top = y;
+                    if (bound.left === null || x < bound.left) bound.left = x;
+                    if (bound.right === null || x > bound.right) bound.right = x;
+                    if (bound.bottom === null || y > bound.bottom) bound.bottom = y;
+                }
+            }
+            if (bound.top === null) return c;
+            var pad = 20;
+            bound.top = Math.max(0, bound.top - pad); bound.left = Math.max(0, bound.left - pad);
+            bound.bottom = Math.min(c.height, bound.bottom + pad); bound.right = Math.min(c.width, bound.right + pad);
+            var trimHeight = bound.bottom - bound.top, trimWidth = bound.right - bound.left;
+            var trimmed = ctx.getImageData(bound.left, bound.top, trimWidth, trimHeight);
+            copy.canvas.width = trimWidth; copy.canvas.height = trimHeight;
+            copy.putImageData(trimmed, 0, 0);
+            return copy.canvas;
+        }
+
+        // Tangkap peta untuk setiap JP
+        const mapImages = {}; // { jp_id: base64string }
+
+        for (let i = 0; i < jpOptions.length; i++) {
+            const jp = jpOptions[i];
+
+            Swal.fire({
+                title: 'Memproses Cetak Gabungan...',
+                text: `Menangkap peta ${i + 1}/${jpOptions.length}: ${jp.nama}`,
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            // Switch filter & load data untuk JP ini
+            selJp.value = jp.id;
+            await loadSavedPoints();
+
+            // Tunggu peta selesai render
+            await new Promise(resolve => setTimeout(resolve, 1200));
+
+            // Fit map ke layer yang ada
+            let allBounds = [];
+            if (drawnItems && drawnItems.getBounds && drawnItems.getBounds().isValid()) {
+                allBounds.push(drawnItems.getBounds());
+            }
+            if (map) {
+                map.eachLayer(layer => {
+                    if (layer instanceof L.ImageOverlay) {
+                        let b = layer.getBounds();
+                        if (b.isValid()) allBounds.push(b);
+                    }
+                });
+            }
+            if (allBounds.length > 0) {
+                let fb = allBounds[0];
+                for (let j = 1; j < allBounds.length; j++) fb.extend(allBounds[j]);
+                map.fitBounds(fb, { padding: [10, 10], animate: false });
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+
+            // Sembunyikan kontrol Leaflet
+            const controls = document.querySelectorAll('.leaflet-control-container');
+            controls.forEach(c => c.style.display = 'none');
+            const oldBS = mapDiv.style.boxShadow;
+            const oldBR = mapDiv.style.borderRadius;
+            const oldBD = mapDiv.style.border;
+            mapDiv.style.boxShadow = 'none';
+            mapDiv.style.borderRadius = '0';
+            mapDiv.style.border = 'none';
+            window.scrollTo(0, 0);
+
+            try {
+                let canvas = await html2canvas(mapDiv, {
+                    useCORS: true, allowTaint: true, scale: 2, scrollY: -window.scrollY
+                });
+                canvas = trimCanvas(canvas);
+                mapImages[jp.id] = canvas.toDataURL("image/png");
+            } catch (e) {
+                console.error('Capture error for JP', jp.id, e);
+            }
+
+            // Kembalikan style
+            controls.forEach(c => c.style.display = '');
+            mapDiv.style.boxShadow = oldBS;
+            mapDiv.style.borderRadius = oldBR;
+            mapDiv.style.border = oldBD;
+        }
+
+        // Kembalikan ke JP semula
+        selJp.value = originalJp;
+        await loadSavedPoints();
+
+        // Cek apakah ada gambar yang tertangkap
+        if (Object.keys(mapImages).length === 0) {
+            Swal.fire('Error', 'Gagal menangkap gambar peta.', 'error');
+            return;
+        }
+
+        Swal.close();
+
+        // Buat form dan submit
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'cetak/pemetaan_gabungan_pdf.php';
+        form.target = '_blank';
+
+        // Hidden fields
+        const addField = (name, value) => {
+            const input = document.createElement('input');
+            input.type = 'hidden'; input.name = name; input.value = value;
+            form.appendChild(input);
+        };
+
+        addField('unit_id', "<?= $unit_id ?>");
+        addField('kebun_id', "<?= $kebun_id ?>");
+        addField('bulan', document.getElementById('filter_bulan').value);
+
+        // Kirim gambar peta per JP sebagai array
+        Object.entries(mapImages).forEach(([jpId, img]) => {
+            addField(`map_images[${jpId}]`, img);
+        });
+
+        document.body.appendChild(form);
+        form.submit();
+        document.body.removeChild(form);
     }
 </script>
 

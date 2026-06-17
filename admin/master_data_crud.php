@@ -529,6 +529,21 @@ if ($action === 'store' || $action === 'update') {
         }
     }
 
+    // Cek Unique khusus untuk UNIT: nama_unit harus unik per kebun_id
+    if ($entity === 'unit' && isset($data['nama_unit']) && $data['nama_unit'] !== null && $data['kebun_id'] !== null) {
+        $sqlC = "SELECT id FROM units WHERE nama_unit = :val AND kebun_id = :kid";
+        $sqlC .= ($currentId > 0 ? ' AND id <> :id' : '') . " LIMIT 1";
+        $stC = $conn->prepare($sqlC);
+        $stC->bindValue(':val', $data['nama_unit']);
+        $stC->bindValue(':kid', $data['kebun_id'], PDO::PARAM_INT);
+        if ($currentId > 0) $stC->bindValue(':id', $currentId, PDO::PARAM_INT);
+        $stC->execute();
+        if ($stC->fetch()) {
+            echo json_encode(['success' => false, 'message' => "Nama Unit '{$data['nama_unit']}' sudah digunakan di kebun ini."]);
+            exit;
+        }
+    }
+
     if ($action === 'store') {
         $cols = array_keys($data);
         $vals = array_map(fn($c) => ":$c", $cols);

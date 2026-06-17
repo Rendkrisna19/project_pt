@@ -147,7 +147,31 @@ try {
             ]);
             $msg = 'Area GIS berhasil disimpan ke database!';
         }
-
+    
+        // === CASCADE RECALCULATE S/D untuk semua baris SETELAH baris yang baru disimpan ===
+        // Ambil SEMUA baris untuk kelompok ini, urutkan by tanggal ASC, id ASC
+        $sqlAll = "SELECT id, fisik_hari_ini, hk_hari_ini, bahan_kimia_hari_ini, campuran_hari_ini
+                   FROM tr_pemetaan
+                   WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ?
+                   ORDER BY tanggal_realisasi ASC, id ASC";
+        $stAll = $conn->prepare($sqlAll);
+        $stAll->execute([$kebun_id, $unit_id, $jp_id]);
+        $allRows = $stAll->fetchAll(PDO::FETCH_ASSOC);
+    
+        $prevF = 0; $prevH = 0; $prevB = 0; $prevC = 0;
+        $stUpd = $conn->prepare("UPDATE tr_pemetaan SET fisik_sd=?, hk_sd=?, bahan_kimia_sd=?, campuran_sd=? WHERE id=?");
+        
+        foreach ($allRows as $r) {
+            $newF = $prevF + (float)$r['fisik_hari_ini'];
+            $newH = $prevH + (float)$r['hk_hari_ini'];
+            $newB = $prevB + (float)$r['bahan_kimia_hari_ini'];
+            $newC = $prevC + (float)$r['campuran_hari_ini'];
+        
+            $stUpd->execute([$newF, $newH, $newB, $newC, $r['id']]);
+        
+            $prevF = $newF; $prevH = $newH; $prevB = $newB; $prevC = $newC;
+        }
+    
         ob_clean();
         echo json_encode(['success' => true, 'message' => $msg]);
         exit;
@@ -302,8 +326,38 @@ try {
         if (empty($_POST['id'])) throw new Exception("ID tidak ditemukan.");
         $id = (int)$_POST['id'];
         
+        // Ambil info record sebelum dihapus (untuk cascade recalc)
+        $stInfo = $conn->prepare("SELECT kebun_id, unit_id, jenis_pekerjaan_id FROM tr_pemetaan WHERE id = ?");
+        $stInfo->execute([$id]);
+        $delInfo = $stInfo->fetch(PDO::FETCH_ASSOC);
+        
         $stmt = $conn->prepare("DELETE FROM tr_pemetaan WHERE id = ?");
         $stmt->execute([$id]);
+
+        // Cascade recalculate S/D after delete
+        if ($delInfo) {
+            $sqlAll = "SELECT id, fisik_hari_ini, hk_hari_ini, bahan_kimia_hari_ini, campuran_hari_ini
+                       FROM tr_pemetaan
+                       WHERE kebun_id = ? AND unit_id = ? AND jenis_pekerjaan_id = ?
+                       ORDER BY tanggal_realisasi ASC, id ASC";
+            $stAll = $conn->prepare($sqlAll);
+            $stAll->execute([$delInfo['kebun_id'], $delInfo['unit_id'], $delInfo['jenis_pekerjaan_id']]);
+            $allRows = $stAll->fetchAll(PDO::FETCH_ASSOC);
+
+            $prevF = 0; $prevH = 0; $prevB = 0; $prevC = 0;
+            $stUpd = $conn->prepare("UPDATE tr_pemetaan SET fisik_sd=?, hk_sd=?, bahan_kimia_sd=?, campuran_sd=? WHERE id=?");
+
+            foreach ($allRows as $r) {
+                $newF = $prevF + (float)$r['fisik_hari_ini'];
+                $newH = $prevH + (float)$r['hk_hari_ini'];
+                $newB = $prevB + (float)$r['bahan_kimia_hari_ini'];
+                $newC = $prevC + (float)$r['campuran_hari_ini'];
+
+                $stUpd->execute([$newF, $newH, $newB, $newC, $r['id']]);
+
+                $prevF = $newF; $prevH = $newH; $prevB = $newB; $prevC = $newC;
+            }
+        }
         
         ob_clean();
         echo json_encode(['success' => true, 'message' => 'Data Realisasi berhasil dihapus!']);
