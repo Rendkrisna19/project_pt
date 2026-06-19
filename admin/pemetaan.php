@@ -1184,14 +1184,20 @@ include_once '../layouts/header.php';
 
         // Tangkap peta untuk setiap JP
         const mapImages = {}; // { jp_id: base64string }
+        const totalJp = jpOptions.length;
 
-        for (let i = 0; i < jpOptions.length; i++) {
+        for (let i = 0; i < totalJp; i++) {
             const jp = jpOptions[i];
+            const pct = Math.round(((i) / totalJp) * 100);
 
             Swal.fire({
-                title: 'Memproses Cetak Gabungan...',
-                text: `Menangkap peta ${i + 1}/${jpOptions.length}: ${jp.nama}`,
+                title: `Memproses Cetak Gabungan (${pct}%)`,
+                html: `<div style="margin-bottom:8px">Menangkap peta <b>${i + 1}/${totalJp}</b>: ${jp.nama}</div>
+                       <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden">
+                         <div style="background:linear-gradient(90deg,#06b6d4,#8b5cf6);height:100%;width:${pct}%;transition:width .3s;border-radius:999px"></div>
+                       </div>`,
                 allowOutsideClick: false,
+                showConfirmButton: false,
                 didOpen: () => Swal.showLoading()
             });
 
@@ -1200,7 +1206,7 @@ include_once '../layouts/header.php';
             await loadSavedPoints();
 
             // Tunggu peta selesai render
-            await new Promise(resolve => setTimeout(resolve, 1200));
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Fit map ke layer yang ada
             let allBounds = [];
@@ -1219,7 +1225,7 @@ include_once '../layouts/header.php';
                 let fb = allBounds[0];
                 for (let j = 1; j < allBounds.length; j++) fb.extend(allBounds[j]);
                 map.fitBounds(fb, { padding: [10, 10], animate: false });
-                await new Promise(resolve => setTimeout(resolve, 500));
+                await new Promise(resolve => setTimeout(resolve, 400));
             }
 
             // Sembunyikan kontrol Leaflet
@@ -1235,10 +1241,11 @@ include_once '../layouts/header.php';
 
             try {
                 let canvas = await html2canvas(mapDiv, {
-                    useCORS: true, allowTaint: true, scale: 2, scrollY: -window.scrollY
+                    useCORS: true, allowTaint: true, scale: 1.5, scrollY: -window.scrollY
                 });
                 canvas = trimCanvas(canvas);
-                mapImages[jp.id] = canvas.toDataURL("image/png");
+                // Gunakan JPEG 70% agar file kecil & cepat
+                mapImages[jp.id] = canvas.toDataURL("image/jpeg", 0.7);
             } catch (e) {
                 console.error('Capture error for JP', jp.id, e);
             }
@@ -1260,33 +1267,56 @@ include_once '../layouts/header.php';
             return;
         }
 
-        Swal.close();
-
-        // Buat form dan submit
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = 'cetak/pemetaan_gabungan_pdf.php';
-        form.target = '_blank';
-
-        // Hidden fields
-        const addField = (name, value) => {
-            const input = document.createElement('input');
-            input.type = 'hidden'; input.name = name; input.value = value;
-            form.appendChild(input);
-        };
-
-        addField('unit_id', "<?= $unit_id ?>");
-        addField('kebun_id', "<?= $kebun_id ?>");
-        addField('bulan', document.getElementById('filter_bulan').value);
-
-        // Kirim gambar peta per JP sebagai array
-        Object.entries(mapImages).forEach(([jpId, img]) => {
-            addField(`map_images[${jpId}]`, img);
+        // Tampilkan progress rendering PDF
+        Swal.fire({
+            title: 'Merender PDF...',
+            html: '<div style="margin-bottom:8px">Mohon tunggu, sedang membuat file PDF gabungan.</div><div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden"><div id="pdf-progress" style="background:linear-gradient(90deg,#8b5cf6,#ec4899);height:100%;width:10%;border-radius:999px;animation:pdfProgress 4s ease-in-out infinite"></div></div><style>@keyframes pdfProgress{0%{width:10%}50%{width:70%}100%{width:95%}}</style>',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
         });
 
-        document.body.appendChild(form);
-        form.submit();
-        document.body.removeChild(form);
+        // Kirim via AJAX (bukan form submit) agar bisa tracking progress
+        try {
+            const formData = new FormData();
+            formData.append('unit_id', "<?= $unit_id ?>");
+            formData.append('kebun_id', "<?= $kebun_id ?>");
+            formData.append('bulan', document.getElementById('filter_bulan').value);
+            Object.entries(mapImages).forEach(([jpId, img]) => {
+                formData.append(`map_images[${jpId}]`, img);
+            });
+
+            const response = await fetch('cetak/pemetaan_gabungan_pdf.php', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errText = await response.text();
+                throw new Error(errText || `HTTP ${response.status}`);
+            }
+
+            // Terima sebagai blob dan buka di tab baru
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Berhasil!',
+                text: 'PDF Cetak Gabungan berhasil dibuat.',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+        } catch (error) {
+            console.error('PDF Error:', error);
+            Swal.fire({
+                icon: 'error',
+                title: 'Gagal Membuat PDF',
+                html: `<div style="text-align:left;font-size:12px;background:#fee2e2;padding:10px;border-radius:8px;color:#991b1b;max-height:150px;overflow:auto"><b>Error:</b><br>${error.message}</div>`
+            });
+        }
     }
 </script>
 
