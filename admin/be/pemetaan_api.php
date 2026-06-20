@@ -219,7 +219,50 @@ try {
         exit;
     }
 
-    // --- 5. UPLOAD PETA DASAR (IMAGE / PDF) ---
+    // --- 5. GET REKAP DATA (semua JP per bulan untuk Peta Rekap) ---
+    if ($action === 'get_rekap_data') {
+        if (empty($_GET['kebun_id']) || empty($_GET['unit_id'])) {
+            throw new Exception("Parameter Kebun atau Unit tidak lengkap.");
+        }
+        $kebun_id = (int)$_GET['kebun_id'];
+        $unit_id  = (int)$_GET['unit_id'];
+        $bulan    = isset($_GET['bulan']) ? $_GET['bulan'] : date('Y-m');
+
+        // Ambil semua data pemetaan bulan ini + nama JP
+        $sql = "SELECT p.*, jp.nama AS jp_nama 
+                FROM tr_pemetaan p
+                LEFT JOIN md_jenis_pekerjaan jp ON p.jenis_pekerjaan_id = jp.id
+                WHERE p.kebun_id = ? AND p.unit_id = ?
+                AND DATE_FORMAT(p.tanggal_realisasi, '%Y-%m') = ?
+                ORDER BY jp.nama ASC, p.tanggal_realisasi ASC, p.id ASC";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$kebun_id, $unit_id, $bulan]);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Ambil info Peta Dasar per Unit
+        $peta_kerja_foto = null;
+        $sqlUnit = "SELECT peta_kerja_foto FROM tr_pemetaan_peta_dasar WHERE unit_id = ? LIMIT 1";
+        $stmtUnit = $conn->prepare($sqlUnit);
+        $stmtUnit->execute([$unit_id]);
+        $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
+        $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
+
+        // Ambil info unit & kebun
+        $stmtInfo = $conn->prepare("SELECT u.nama_unit, k.nama_kebun FROM units u LEFT JOIN md_kebun k ON u.kebun_id = k.id WHERE u.id = ?");
+        $stmtInfo->execute([$unit_id]);
+        $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+
+        ob_clean();
+        echo json_encode([
+            'success' => true,
+            'data' => $data,
+            'peta_kerja_foto' => $peta_kerja_foto,
+            'info' => $info ?: ['nama_unit' => 'UNIT', 'nama_kebun' => 'KEBUN']
+        ]);
+        exit;
+    }
+
+    // --- 6. UPLOAD PETA DASAR (IMAGE / PDF) ---
     if ($action === 'upload_peta_dasar') {
         if (empty($_POST['unit_id'])) throw new Exception("ID Unit tidak ditemukan.");
         $unit_id = (int)$_POST['unit_id'];
