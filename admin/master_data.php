@@ -128,6 +128,7 @@ include_once '../layouts/header.php';
                 <button data-entity="bibit_pn" class="tab-btn snap-start">Bibit PN</button>
 
                 <button data-entity="jenis_pekerjaan" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Jenis Pekerjaan</button>
+                <button data-entity="jenis_pekerjaan_bulanan" class="tab-btn snap-start">Jenis Pek. MCS Bulanan</button>
                 
                 <button data-entity="pem_tm" class="tab-btn snap-start border-l-2 border-slate-100 pl-4">Pem. TM</button>
                 <button data-entity="pem_tu" class="tab-btn snap-start">Pem. TU</button>
@@ -405,6 +406,12 @@ document.addEventListener('DOMContentLoaded', () => {
       {name:'nama',       label:'Nama',       type:'text', required:true},
       {name:'keterangan', label:'Keterangan', type:'text'}
     ]},
+
+    jenis_pekerjaan_bulanan: { title:'Jenis Pekerjaan MCS Bulanan', table:['Kebun','Nama','Keterangan','Aksi'], fields:[
+      {name:'kebun_id',   label:'Pilih Kebun', type:'select', options:OPTIONS_KEBUN, required:true},
+      {name:'nama',       label:'Nama',       type:'text', required:true},
+      {name:'keterangan', label:'Keterangan', type:'text'}
+    ]},
     
     pem_tm:  ENTITY_PEM('Pemeliharaan TM'),
     pem_tu:  ENTITY_PEM('Pemeliharaan TU'),
@@ -633,6 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
       case 'kebun': return td(cell(r.kode)) + td(cell(r.nama_kebun)) + td(cell(r.keterangan));
       case 'bahan_kimia': return td(cell(r.kode)) + td(cell(r.nama_bahan)) + td(cell(r.nama_satuan||'')) + td(cell(r.keterangan));
       case 'jenis_pekerjaan': return td(cell(r.nama)) + td(cell(r.keterangan));
+      case 'jenis_pekerjaan_bulanan': return td(cell(r.nama_kebun)) + td(cell(r.nama)) + td(cell(r.keterangan));
       case 'bibit_tm': case 'bibit_pn':
         const badge = String(r.is_active ?? '1') === '1' 
           ? '<span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aktif</span>' 

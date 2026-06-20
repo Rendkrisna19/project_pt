@@ -201,6 +201,16 @@ $MAP = [
         'searchable' => ['t.nama', 't.keterangan'],
         'unique_cols' => ['nama']
     ],
+    'jenis_pekerjaan_bulanan' => [
+        'table' => 'md_jenis_pekerjaan_bulanan',
+        'alias' => 't',
+        'cols' => ['kebun_id', 'nama', 'keterangan'],
+        'required' => ['kebun_id', 'nama'],
+        'select' => 't.*, k.nama_kebun',
+        'joins' => 'LEFT JOIN md_kebun k ON t.kebun_id = k.id',
+        'order' => 'k.nama_kebun ASC, t.nama ASC',
+        'searchable' => ['k.nama_kebun', 't.nama', 't.keterangan']
+    ],
     'pem_tm' =>   ['table'=>'md_pemeliharaan_tm',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
     'pem_tu' =>   ['table'=>'md_pemeliharaan_tu',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
     'pem_tk' =>   ['table'=>'md_pemeliharaan_tk',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
@@ -473,6 +483,9 @@ if ($action === 'store' || $action === 'update') {
     if ($entity === 'unit') {
         $data['kebun_id'] = int_or_null($data['kebun_id'] ?? null);
     }
+    if ($entity === 'jenis_pekerjaan_bulanan') {
+        $data['kebun_id'] = int_or_null($data['kebun_id'] ?? null);
+    }
     if ($entity === 'blok') {
         $data['kebun_id']    = int_or_null($data['kebun_id'] ?? null);
         $data['unit_id']     = int_or_null($data['unit_id'] ?? null);
@@ -540,6 +553,21 @@ if ($action === 'store' || $action === 'update') {
         $stC->execute();
         if ($stC->fetch()) {
             echo json_encode(['success' => false, 'message' => "Nama Unit '{$data['nama_unit']}' sudah digunakan di kebun ini."]);
+            exit;
+        }
+    }
+
+    // Cek Unique khusus untuk JENIS PEKERJAAN BULANAN: nama harus unik per kebun_id
+    if ($entity === 'jenis_pekerjaan_bulanan' && isset($data['nama']) && $data['nama'] !== null && $data['kebun_id'] !== null) {
+        $sqlC = "SELECT id FROM md_jenis_pekerjaan_bulanan WHERE nama = :val AND kebun_id = :kid";
+        $sqlC .= ($currentId > 0 ? ' AND id <> :id' : '') . " LIMIT 1";
+        $stC = $conn->prepare($sqlC);
+        $stC->bindValue(':val', $data['nama']);
+        $stC->bindValue(':kid', $data['kebun_id'], PDO::PARAM_INT);
+        if ($currentId > 0) $stC->bindValue(':id', $currentId, PDO::PARAM_INT);
+        $stC->execute();
+        if ($stC->fetch()) {
+            echo json_encode(['success' => false, 'message' => "Jenis Pekerjaan '{$data['nama']}' sudah ada di kebun ini."]);
             exit;
         }
     }

@@ -305,9 +305,9 @@ try {
                         // Tidak ada Ghostscript, biarkan PDF sebagai file (tidak bisa preview di peta)
                         $foto_name = $base_name . ".pdf";
                         
-                        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
+                        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
                         $stmt = $conn->prepare($sql);
-                        $stmt->execute([$unit_id, $foto_name]);
+                        $stmt->execute([$unit_id, $jp_id, $foto_name]);
 
                         ob_clean();
                         echo json_encode(['success' => true, 'message' => 'PDF berhasil diupload! (Preview peta tidak tersedia karena Ghostscript/Imagick belum terinstal)', 'foto' => $foto_name]);
@@ -355,9 +355,9 @@ try {
             }
         }
 
-        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, 0, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
+        $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, peta_kerja_foto) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE peta_kerja_foto = VALUES(peta_kerja_foto)";
         $stmt = $conn->prepare($sql);
-        $stmt->execute([$unit_id, $foto_name]);
+        $stmt->execute([$unit_id, $jp_id, $foto_name]);
 
         ob_clean();
         echo json_encode(['success' => true, 'message' => 'Peta Dasar berhasil diunggah!', 'foto' => $foto_name]);
@@ -438,6 +438,175 @@ try {
         exit;
     }
 
+    // === MCS BULANAN APIs ===
+
+    // --- GET JENIS PEKERJAAN BULANAN (per kebun) ---
+    if ($action === 'get_jenis_pekerjaan_bulanan') {
+        $kebun_id = (int)($_GET['kebun_id'] ?? 0);
+        if (!$kebun_id) throw new Exception("Parameter kebun_id wajib.");
+        $sql = "SELECT id, nama, keterangan FROM md_jenis_pekerjaan_bulanan WHERE kebun_id = ? ORDER BY nama ASC";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$kebun_id]);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        ob_clean();
+        echo json_encode(['success' => true, 'data' => $data]);
+        exit;
+    }
+
+    // --- GET MCS BULANAN DATA (load semua data + base map, filter tahun) ---
+    if ($action === 'get_mcs_bulanan_data') {
+        if (empty($_GET['kebun_id']) || empty($_GET['unit_id'])) {
+            throw new Exception("Parameter Kebun atau Unit tidak lengkap.");
+        }
+        $kebun_id = (int)$_GET['kebun_id'];
+        $unit_id  = (int)$_GET['unit_id'];
+        $tahun    = (int)($_GET['tahun'] ?? date('Y'));
+
+        $sql = "SELECT m.*, jp.nama AS jp_nama
+                FROM tr_mcs_bulanan m
+                LEFT JOIN md_jenis_pekerjaan_bulanan jp ON m.jenis_pekerjaan_bulanan_id = jp.id
+                WHERE m.kebun_id = ? AND m.unit_id = ? AND m.tahun = ?
+                ORDER BY jp.nama ASC, m.objek_pekerjaan ASC, m.id ASC";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([$kebun_id, $unit_id, $tahun]);
+        $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Base map — khusus MCS Bulanan (jenis_pekerjaan_id = 99999)
+        $peta_kerja_foto = null;
+        $sqlUnit = "SELECT peta_kerja_foto FROM tr_pemetaan_peta_dasar WHERE unit_id = ? AND jenis_pekerjaan_id = 99999 LIMIT 1";
+        $stmtUnit = $conn->prepare($sqlUnit);
+        $stmtUnit->execute([$unit_id]);
+        $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
+        $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
+
+        // Info
+        $stmtInfo = $conn->prepare("SELECT u.nama_unit, k.nama_kebun FROM units u LEFT JOIN md_kebun k ON u.kebun_id = k.id WHERE u.id = ?");
+        $stmtInfo->execute([$unit_id]);
+        $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+
+        ob_clean();
+        echo json_encode([
+            'success' => true,
+            'data' => $data,
+            'peta_kerja_foto' => $peta_kerja_foto,
+            'info' => $info ?: ['nama_unit' => 'UNIT', 'nama_kebun' => 'KEBUN'],
+            'tahun' => $tahun
+        ]);
+        exit;
+    }
+
+    // --- SAVE MCS BULANAN (insert) ---
+    if ($action === 'save_mcs_bulanan') {
+        if (empty($_POST['kebun_id'])) throw new Exception("Kebun tidak ditemukan.");
+        if (empty($_POST['unit_id'])) throw new Exception("Unit tidak ditemukan.");
+        if (empty($_POST['jenis_pekerjaan_bulanan_id'])) throw new Exception("Jenis Pekerjaan wajib dipilih.");
+        if (empty($_POST['geojson'])) throw new Exception("Data peta kosong! Gambar area di peta terlebih dahulu.");
+
+        $kebun_id = (int)$_POST['kebun_id'];
+        $unit_id  = (int)$_POST['unit_id'];
+        $tahun    = (int)($_POST['tahun'] ?? date('Y'));
+        $jp_id    = (int)$_POST['jenis_pekerjaan_bulanan_id'];
+        $objek    = trim($_POST['objek_pekerjaan'] ?? '');
+        $geojson  = trim($_POST['geojson']);
+        $lat      = $_POST['latitude'] ?? null;
+        $lng      = $_POST['longitude'] ?? null;
+        $warna    = $_POST['warna'] ?? '#0891b2';
+        $ket      = trim($_POST['keterangan'] ?? '');
+
+        // 12 bulan
+        $b = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $b[$i] = (float)($_POST['bulan_' . $i] ?? 0);
+        }
+
+        // Validate GeoJSON
+        json_decode($geojson);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception("Format gambar peta (GeoJSON) rusak.");
+        }
+
+        $sql = "INSERT INTO tr_mcs_bulanan (
+                    kebun_id, unit_id, tahun, jenis_pekerjaan_bulanan_id, objek_pekerjaan,
+                    geojson, latitude, longitude, warna,
+                    bulan_1, bulan_2, bulan_3, bulan_4, bulan_5, bulan_6,
+                    bulan_7, bulan_8, bulan_9, bulan_10, bulan_11, bulan_12,
+                    keterangan
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([
+            $kebun_id, $unit_id, $tahun, $jp_id, $objek,
+            $geojson, $lat, $lng, $warna,
+            $b[1], $b[2], $b[3], $b[4], $b[5], $b[6],
+            $b[7], $b[8], $b[9], $b[10], $b[11], $b[12],
+            $ket
+        ]);
+
+        ob_clean();
+        echo json_encode(['success' => true, 'message' => 'Data MCS Bulanan tahun ' . $tahun . ' berhasil disimpan!', 'id' => $conn->lastInsertId()]);
+        exit;
+    }
+
+    // --- UPDATE MCS BULANAN ---
+    if ($action === 'update_mcs_bulanan') {
+        if (empty($_POST['id'])) throw new Exception("ID tidak ditemukan.");
+        $id = (int)$_POST['id'];
+
+        $jp_id = (int)($_POST['jenis_pekerjaan_bulanan_id'] ?? 0);
+        $tahun = (int)($_POST['tahun'] ?? date('Y'));
+        $objek = trim($_POST['objek_pekerjaan'] ?? '');
+        $geojson = trim($_POST['geojson'] ?? '');
+        $lat   = $_POST['latitude'] ?? null;
+        $lng   = $_POST['longitude'] ?? null;
+        $warna = $_POST['warna'] ?? '#0891b2';
+        $ket   = trim($_POST['keterangan'] ?? '');
+
+        $b = [];
+        for ($i = 1; $i <= 12; $i++) {
+            $b[$i] = (float)($_POST['bulan_' . $i] ?? 0);
+        }
+
+        if (!empty($geojson)) {
+            json_decode($geojson);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                throw new Exception("Format gambar peta (GeoJSON) rusak.");
+            }
+        }
+
+        $sql = "UPDATE tr_mcs_bulanan SET
+                    tahun = ?, jenis_pekerjaan_bulanan_id = ?, objek_pekerjaan = ?,
+                    geojson = ?, latitude = ?, longitude = ?, warna = ?,
+                    bulan_1=?, bulan_2=?, bulan_3=?, bulan_4=?, bulan_5=?, bulan_6=?,
+                    bulan_7=?, bulan_8=?, bulan_9=?, bulan_10=?, bulan_11=?, bulan_12=?,
+                    keterangan = ?
+                WHERE id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->execute([
+            $tahun, $jp_id, $objek,
+            $geojson, $lat, $lng, $warna,
+            $b[1], $b[2], $b[3], $b[4], $b[5], $b[6],
+            $b[7], $b[8], $b[9], $b[10], $b[11], $b[12],
+            $ket,
+            $id
+        ]);
+
+        ob_clean();
+        echo json_encode(['success' => true, 'message' => 'Data MCS Bulanan berhasil diupdate!']);
+        exit;
+    }
+
+    // --- DELETE MCS BULANAN ---
+    if ($action === 'delete_mcs_bulanan') {
+        if (empty($_POST['id'])) throw new Exception("ID tidak ditemukan.");
+        $id = (int)$_POST['id'];
+
+        $stmt = $conn->prepare("DELETE FROM tr_mcs_bulanan WHERE id = ?");
+        $stmt->execute([$id]);
+
+        ob_clean();
+        echo json_encode(['success' => true, 'message' => 'Data MCS Bulanan berhasil dihapus!']);
+        exit;
+    }
+
     // Jika Action tidak dikenali
     throw new Exception("Aksi API tidak ditemukan: " . $action);
 
@@ -447,8 +616,7 @@ try {
     
     echo json_encode([
         'success' => false, 
-        'message' => 'Kesalahan Sistem PHP!',
-        'detail'  => $e->getMessage(),
+        'message' => 'Kesalahan Sistem: ' . $e->getMessage(),
         'file'    => basename($e->getFile()),
         'line'    => $e->getLine()
     ]);
