@@ -35,6 +35,16 @@ try {
     $nama_unit  = $info ? $info['nama_unit'] : 'UNIT';
     $nama_kebun = $info ? $info['nama_kebun'] : 'KEBUN';
 
+    // Query for manual legend list if exists
+    $legends = [];
+    try {
+        $stmtLegend = $conn->prepare("SELECT * FROM peta_cetak_legend WHERE unit_id = ? AND kebun_id = ? AND tahun = ?");
+        $stmtLegend->execute([$unit_id, $kebun_id, $tahun]);
+        $legends = $stmtLegend->fetchAll(PDO::FETCH_ASSOC);
+    } catch (Exception $e) {
+        // Table might not exist yet, ignore
+    }
+
 } catch (Exception $e) {
     exit('DB Error: ' . $e->getMessage());
 }
@@ -45,26 +55,35 @@ function nf($v) {
 
 $MONTH_NAMES = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
 $MONTH_COLORS = [
-    1=>'#eab308', 2=>'#22c55e', 3=>'#f97316', 4=>'#06b6d4',
-    5=>'#84cc16', 6=>'#1e40af', 7=>'#374151', 8=>'#92400e',
-    9=>'#ef4444', 10=>'#a855f7', 11=>'#10b981', 12=>'#0891b2'
+    1=>'#FFFF00', 2=>'#00FF99', 3=>'#F4B183', 4=>'#9DC3E6',
+    5=>'#A9D08E', 6=>'#00B0F0', 7=>'#3B3838', 8=>'#ED7D31',
+    9=>'#FF0000', 10=>'#FF00FF', 11=>'#C6E0B4', 12=>'#00FFFF'
 ];
 
-// Group data by JP + Objek
+// Group data by JP (Sum all objects together)
 $groups = [];
+$uniqueObjek = [];
+
 foreach ($mcs_data as $row) {
-    $key = ($row['jp_nama'] ?? 'Tanpa JP') . '|' . ($row['objek_pekerjaan'] ?? '-');
-    if (!isset($groups[$key])) {
-        $groups[$key] = [
-            'jp_nama' => $row['jp_nama'] ?? '-',
-            'objek' => $row['objek_pekerjaan'] ?? '-',
-            'bulan' => array_fill(1, 12, 0)
+    $jp = trim($row['jp_nama'] ?? 'Tanpa JP');
+    if (!isset($groups[$jp])) {
+        $groups[$jp] = [
+            'jp' => $jp,
+            'months' => array_fill(1, 12, 0)
         ];
     }
-    for ($i = 1; $i <= 12; $i++) {
-        $groups[$key]['bulan'][$i] += (float)($row['bulan_'.$i] ?? 0);
+    for ($i=1; $i<=12; $i++) {
+        $val = (float)($row['bulan_'.$i] ?? 0);
+        $groups[$jp]['months'][$i] += $val;
+    }
+    
+    $obj = trim($row['objek_pekerjaan'] ?? '');
+    if ($obj !== '') {
+        $uniqueObjek[$obj] = true;
     }
 }
+
+$strObjek = !empty($uniqueObjek) ? implode(', ', array_keys($uniqueObjek)) : '-';
 
 // Grand totals
 $grandTotal = array_fill(1, 12, 0);
@@ -95,72 +114,62 @@ ob_start();
 
         table { border-collapse: collapse; }
 
-        .hdr-left { background: #1e3a8a; color: #fff; padding: 8px 10px; text-align: center; vertical-align: middle; }
+        .hdr-left { background: #1e3a8a; color: #fff; padding: 8px 10px; text-align: center; vertical-align: middle; border: 1px solid #000; }
         .hdr-left .company { font-size: 11px; font-weight: bold; }
         .hdr-left .region { font-size: 9px; }
         .hdr-left .kebun-name { font-size: 10px; font-weight: bold; margin-top: 2px; }
 
-        .hdr-center { background: #eab308; color: #000; padding: 8px 10px; text-align: center; vertical-align: middle; }
-        .hdr-center .title { font-size: 13px; font-weight: bold; }
+        .hdr-center { background: #FFFF00; color: #000; padding: 8px 10px; text-align: center; vertical-align: middle; border: 1px solid #000; }
+        .hdr-center .title { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
         .hdr-center .luas { font-size: 11px; font-weight: bold; }
 
-        .hdr-right { background: #1e3a8a; color: #fff; padding: 8px 10px; text-align: center; vertical-align: middle; font-size: 14px; font-weight: bold; letter-spacing: 2px; }
+        .hdr-right { background: #1e3a8a; color: #fff; padding: 8px 10px; text-align: center; vertical-align: middle; font-size: 16px; font-weight: bold; letter-spacing: 1px; border: 1px solid #000; }
 
-        .main-layout { width: 100%; border: none; }
-        .main-layout td { border: none; vertical-align: top; }
-        .map-cell { width: 70%; padding: 0; }
-        .meta-cell { width: 30%; padding: 0 0 0 4px; }
+        .main-layout { width: 100%; border: none; margin-top: 5px; }
+        .main-layout > tbody > tr > td { border: none; vertical-align: top; }
+        .map-cell { width: 70%; padding: 5px; border: 1px solid #000; text-align: center; vertical-align: middle; }
+        .meta-cell { width: 30%; padding: 0 0 0 8px; }
 
-        .map-img { width: 100%; height: auto; display: block; }
+        .map-img { width: 100%; max-height: 175mm; height: auto; display: block; margin: 0 auto; }
 
-        .meta-box { border: 1px solid #000; padding: 6px 8px; margin-bottom: 4px; }
-        .meta-info { width: 100%; font-size: 10px; margin-bottom: 4px; }
-        .meta-info td { border: none; padding: 1px 0; vertical-align: top; }
-        .meta-info .lbl { font-weight: bold; width: 95px; }
-
-        .jp-title { font-size: 11px; font-weight: bold; color: #dc2626; text-align: center; padding: 4px 0; border-top: 1px solid #000; border-bottom: 1px solid #000; margin: 4px 0; letter-spacing: 0.5px; }
-
-        .ket-label { font-size: 10px; font-weight: bold; margin: 4px 0 2px 0; }
-
-        .ket-tbl { width: 100%; }
-        .ket-tbl td { border: 1px solid #666; padding: 4px 5px; font-size: 10px; vertical-align: middle; }
-        .ket-tbl .month-name { font-weight: bold; width: 55%; }
-        .ket-tbl .month-val { text-align: right; width: 45%; font-weight: bold; }
-
-        .total-row td { border: 1px solid #000; font-weight: bold; font-size: 10px; background: #f1f5f9; }
-
-        .sig-tbl { width: 100%; margin-top: 8px; }
-        .sig-tbl td { border: none; padding: 2px 0; font-size: 9px; vertical-align: top; }
-        .sig-role { font-weight: bold; }
-        .sig-line { border-bottom: 1px solid #000; height: 28px; }
-        .sig-name { text-align: center; font-weight: bold; font-size: 9px; padding-top: 2px; }
-
-        .motto { text-align: center; font-style: italic; font-size: 9px; margin-top: 6px; font-weight: bold; }
-
-        .group-sep { border-top: 2px solid #0891b2; margin-top: 6px; padding-top: 4px; }
+        /* RIGHT PANEL STYLES */
+        .right-panel-tbl { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+        .right-panel-tbl td { border-bottom: 1px solid #000; padding: 5px; vertical-align: top; }
+        .right-panel-tbl tr:last-child td { border-bottom: none; }
+        
+        .info-tbl { width: 100%; font-size: 10px; font-weight: bold; }
+        .info-tbl td { padding: 2px; border: none; }
+        
+        .ket-label { font-size: 10px; font-weight: bold; text-decoration: underline; margin-bottom: 6px; }
+        .ket-tbl { width: 100%; border-collapse: collapse; }
+        .ket-tbl td { padding: 3px 5px; font-size: 10px; font-weight: bold; border: none; }
+        .month-name { border: 1px solid #000 !important; }
+        .month-val { text-align: right; }
+        
+        .sig-cell { padding: 8px 6px; font-size: 10px; line-height: 1.4; }
+        .sig-space { height: 40px; }
+        .motto-cell { font-size: 10px; font-weight: bold; padding: 6px; }
     </style>
 </head>
 <body>
 
-<!-- === HEADER: 3 COLORED BANNERS === -->
-<table width="100%">
+<table width="100%" style="border-collapse: collapse;">
     <tr>
-        <td class="hdr-left" style="width:33%">
+        <td class="hdr-left" style="width:35%">
             <div class="company">PT. PERKEBUNAN NUSANTARA IV</div>
             <div class="region">REGIONAL III - DISTRIK BARAT</div>
             <div class="kebun-name">KEBUN <?= strtoupper($nama_kebun) ?></div>
         </td>
-        <td class="hdr-center" style="width:34%">
+        <td class="hdr-center" style="width:35%">
             <div class="title">PETA <?= strtoupper($nama_unit) ?></div>
             <div class="luas">LUAS: <?= fmtHa($grandSum) ?> Ha</div>
         </td>
-        <td class="hdr-right" style="width:33%">
+        <td class="hdr-right" style="width:30%">
             PETA KERJA
         </td>
     </tr>
 </table>
 
-<!-- === MAIN CONTENT: MAP (LEFT) + METADATA (RIGHT) === -->
 <table class="main-layout">
     <tr>
         <!-- LEFT: MAP IMAGE -->
@@ -170,110 +179,115 @@ ob_start();
 
         <!-- RIGHT: METADATA PANEL -->
         <td class="meta-cell">
-            <div class="meta-box">
-                <!-- KEBUN INFO TABLE -->
-                <table class="meta-info">
-                    <tr>
-                        <td class="lbl">KEBUN</td>
-                        <td>: <?= strtoupper($nama_kebun) ?></td>
-                    </tr>
-                    <tr>
-                        <td class="lbl">Afdeling</td>
-                        <td>: <?= strtoupper($nama_unit) ?></td>
-                    </tr>
-                    <tr>
-                        <td class="lbl">Skala</td>
-                        <td>: 1 : 20.000</td>
-                    </tr>
-                    <?php
-                    $firstObjek = '-';
-                    foreach ($groups as $g) { $firstObjek = $g['objek']; break; }
-                    ?>
-                    <tr>
-                        <td class="lbl">Objek Pekerjaan</td>
-                        <td>: <?= htmlspecialchars(strtoupper($firstObjek)) ?></td>
-                    </tr>
-                </table>
+            <table class="right-panel-tbl">
+                <tr>
+                    <td style="padding: 4px;">
+                        <table class="info-tbl">
+                            <tr><td style="width: 70px; vertical-align: top;">KEBUN</td><td style="vertical-align: top;">: <?= htmlspecialchars($nama_kebun) ?></td></tr>
+                            <tr><td style="vertical-align: top;">Afdeling</td><td style="vertical-align: top;">: <?= htmlspecialchars($nama_unit) ?></td></tr>
+                            <tr><td style="vertical-align: top;">Objek<br>Pekerjaan</td><td style="vertical-align: top;">: <?= htmlspecialchars(strtoupper($strObjek)) ?></td></tr>
+                        </table>
+                    </td>
+                </tr>
+                
+                <?php
+                // USE MANUAL LEGEND IF AVAILABLE, ELSE FALLBACK TO POLYGON DATA
+                $dataToPrint = [];
+                if (!empty($legends)) {
+                    foreach ($legends as $leg) {
+                        $months = [];
+                        for ($i=1; $i<=12; $i++) $months[$i] = (float)$leg["bulan_$i"];
+                        $dataToPrint[] = [
+                            'judul' => strtoupper($leg['judul'] ?: 'KETERANGAN'),
+                            'bulan' => $months
+                        ];
+                    }
+                } else {
+                    foreach ($groups as $g) {
+                        $dataToPrint[] = [
+                            'judul' => strtoupper($g['jp']),
+                            'bulan' => $g['months']
+                        ];
+                    }
+                }
 
-                <?php foreach ($groups as $gi => $g): 
-                    $groupTotal = array_sum($g['bulan']);
+                if (empty($dataToPrint)) {
+                     $dataToPrint[] = [ 'judul' => 'BELUM ADA DATA', 'bulan' => array_fill(1,12,0) ];
+                }
+                
+                foreach ($dataToPrint as $idx => $g):
+                    $totalHa = array_sum($g['bulan']);
                 ?>
-                <?php if ($gi > 0): ?>
-                <div class="group-sep"></div>
-                <?php endif; ?>
-
-                <!-- JP NAME AS RED TITLE -->
-                <div class="jp-title"><?= htmlspecialchars(strtoupper($g['jp_nama'])) ?></div>
-
-                <!-- KETERANGAN LABEL -->
-                <div class="ket-label">KETERANGAN :</div>
-
-                <!-- COLOR-CODED MONTH ROWS -->
-                <table class="ket-tbl">
-                    <?php 
-                    $hasMonth = false;
-                    for ($i = 1; $i <= 12; $i++): 
-                        $v = $g['bulan'][$i];
-                        if ($v > 0): 
-                            $hasMonth = true;
-                    ?>
-                    <tr>
-                        <td class="month-name" style="background:<?= $MONTH_COLORS[$i] ?>; color:#fff;"><?= $MONTH_NAMES[$i-1] ?></td>
-                        <td class="month-val" style="background:<?= $MONTH_COLORS[$i] ?>; color:#fff;"><?= fmtHa($v) ?> HA</td>
-                    </tr>
-                    <?php 
-                        endif;
-                    endfor; 
-                    if (!$hasMonth):
-                    ?>
-                    <tr>
-                        <td class="month-name" colspan="2" style="text-align:center; color:#666;">Belum ada data</td>
-                    </tr>
-                    <?php endif; ?>
-                    <?php if ($hasMonth): ?>
-                    <tr class="total-row">
-                        <td style="text-align:right; padding-right:6px;">TOTAL</td>
-                        <td style="text-align:right;"><?= fmtHa($groupTotal) ?> HA</td>
-                    </tr>
-                    <?php endif; ?>
-                </table>
+                <tr>
+                    <td style="text-align: center; color: red; font-weight: bold; font-size: 13px; padding: 6px;">
+                        <?= htmlspecialchars($g['judul']) ?>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px;">
+                        <div class="ket-label">KETERANGAN :</div>
+                        <table class="ket-tbl">
+                            <?php 
+                            $hasMonth = false;
+                            for ($i = 1; $i <= 12; $i++): 
+                                $v = $g['bulan'][$i];
+                                if ($v > 0): 
+                                    $hasMonth = true;
+                            ?>
+                            <tr>
+                                <td class="month-name" style="background:<?= $MONTH_COLORS[$i] ?>; color:#000; width: 45%;"><?= $MONTH_NAMES[$i-1] ?></td>
+                                <td class="month-val" style="width: 55%;"><?= fmtHa($v) ?> HA</td>
+                            </tr>
+                            <?php 
+                                endif;
+                            endfor; 
+                            if (!$hasMonth):
+                            ?>
+                            <tr>
+                                <td colspan="2" style="text-align:center; color:#666;">Belum ada data</td>
+                            </tr>
+                            <?php endif; ?>
+                            <?php if ($hasMonth): ?>
+                            <tr>
+                                <td></td>
+                                <td class="month-val" style="border-top: 1px solid #000 !important;"><?= fmtHa($totalHa) ?> HA</td>
+                            </tr>
+                            <?php endif; ?>
+                        </table>
+                    </td>
+                </tr>
                 <?php endforeach; ?>
 
-                <?php if (empty($groups)): ?>
-                <div class="jp-title">BELUM ADA DATA</div>
-                <div class="ket-label">KETERANGAN :</div>
-                <table class="ket-tbl">
-                    <tr><td class="month-name" colspan="2" style="text-align:center; color:#666;">Tidak ada data</td></tr>
-                </table>
-                <?php endif; ?>
-            </div>
-
-            <!-- SIGNATURE SECTION (outside meta-box) -->
-            <table class="sig-tbl">
                 <tr>
-                    <td style="width:33%; text-align:center;">
-                        <div>Dibuat Oleh,</div>
-                        <div class="sig-role">Krani Afd</div>
-                        <div class="sig-line"></div>
-                        <div class="sig-name">( ...................... )</div>
+                    <td class="sig-cell">
+                        Dibuat Oleh :<br>
+                        <strong>Asisten Afdeling</strong>
+                        <div class="sig-space"></div>
+                        (............................................................)
                     </td>
-                    <td style="width:34%; text-align:center;">
-                        <div>Diperiksa Oleh,</div>
-                        <div class="sig-role">Asisten Afd</div>
-                        <div class="sig-line"></div>
-                        <div class="sig-name">( ...................... )</div>
+                </tr>
+                <tr>
+                    <td class="sig-cell">
+                        Diperiksa Oleh :<br>
+                        <strong>Asisten Kepala</strong>
+                        <div class="sig-space"></div>
+                        (............................................................)
                     </td>
-                    <td style="width:33%; text-align:center;">
-                        <div>Disetujui Oleh,</div>
-                        <div class="sig-role">Askep</div>
-                        <div class="sig-line"></div>
-                        <div class="sig-name">( ...................... )</div>
+                </tr>
+                <tr>
+                    <td class="sig-cell">
+                        Disetujui Oleh :<br>
+                        <strong>Manager</strong>
+                        <div class="sig-space"></div>
+                        (............................................................)
+                    </td>
+                </tr>
+                <tr>
+                    <td class="motto-cell">
+                        Jujur, Tulus, Ikhlas
                     </td>
                 </tr>
             </table>
-
-            <!-- MOTTO -->
-            <div class="motto">Jujur, Tulus, Ikhlas</div>
         </td>
     </tr>
 </table>
@@ -288,7 +302,7 @@ $options->set('isRemoteEnabled', true);
 $options->set('isHtml5ParserEnabled', true);
 $dompdf = new Dompdf($options);
 $dompdf->loadHtml($html);
-$dompdf->setPaper('A4', 'portrait');
+$dompdf->setPaper('A4', 'landscape'); // Changed to landscape to fit map better like in image
 $dompdf->render();
 
 $filename = 'mcs_bulanan_' . strtolower(str_replace(' ','_', $nama_kebun)) . '_' . date('YmdHis') . '.pdf';

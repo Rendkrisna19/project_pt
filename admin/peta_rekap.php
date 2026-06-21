@@ -137,26 +137,7 @@ include_once '../layouts/header.php';
                         </select>
                     </div>
 
-                    <!-- WARNA POLIGON/GARIS (Color Picker like MCS Harian) -->
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Warna Poligon/Garis</label>
-                        <div class="flex items-center gap-1 flex-wrap">
-                            <input type="radio" name="warna_picker" value="#0891b2" class="color-radio" style="accent-color:#0891b2; width:20px; height:20px; cursor:pointer;" checked title="Cyan">
-                            <input type="radio" name="warna_picker" value="#e11d48" class="color-radio" style="accent-color:#e11d48; width:20px; height:20px; cursor:pointer;" title="Merah">
-                            <input type="radio" name="warna_picker" value="#10b981" class="color-radio" style="accent-color:#10b981; width:20px; height:20px; cursor:pointer;" title="Hijau">
-                            <input type="radio" name="warna_picker" value="#f59e0b" class="color-radio" style="accent-color:#f59e0b; width:20px; height:20px; cursor:pointer;" title="Kuning">
-                            <input type="radio" name="warna_picker" value="#6366f1" class="color-radio" style="accent-color:#6366f1; width:20px; height:20px; cursor:pointer;" title="Ungu">
-                            <input type="radio" name="warna_picker" value="#ec4899" class="color-radio" style="accent-color:#ec4899; width:20px; height:20px; cursor:pointer;" title="Pink">
-                            <input type="radio" name="warna_picker" value="#3b82f6" class="color-radio" style="accent-color:#3b82f6; width:20px; height:20px; cursor:pointer;" title="Biru">
-                            <input type="radio" name="warna_picker" value="#14b8a6" class="color-radio" style="accent-color:#14b8a6; width:20px; height:20px; cursor:pointer;" title="Teal">
-                            <div class="flex items-center gap-1 border border-slate-200 p-0.5 rounded-lg ml-1">
-                                <input type="radio" name="warna_picker" value="custom" id="radio_custom_color" class="color-radio hidden">
-                                <label for="radio_custom_color" class="cursor-pointer text-[9px] font-bold text-slate-500 ml-1">Custom:</label>
-                                <input type="color" id="input_custom_color" class="w-5 h-5 p-0 border-0 rounded cursor-pointer" value="#000000" title="Pilih Warna Bebas" onchange="document.getElementById('radio_custom_color').checked=true; syncWarnaInput()">
-                            </div>
-                        </div>
-                        <input type="hidden" name="warna" id="input_warna" value="#0891b2">
-                    </div>
+                    <input type="hidden" name="warna" id="input_warna" value="#FFFF00">
 
                     <!-- 12 Month Inputs -->
                     <div class="bg-cyan-50/50 p-3 rounded-xl border border-cyan-100">
@@ -239,20 +220,20 @@ include_once '../layouts/header.php';
     const UNIT_ID  = <?= $unit_id ?>;
     let activeYear = parseInt(document.getElementById('filter_tahun').value);
 
-    // 12 Fixed Month Colors
+    // 12 Fixed Month Colors (Berdasarkan Template)
     const MONTH_COLORS = {
-        1:  { color: '#eab308', name: 'Jan',  label: 'Januari'   },
-        2:  { color: '#22c55e', name: 'Feb',  label: 'Februari'  },
-        3:  { color: '#f97316', name: 'Mar',  label: 'Maret'     },
-        4:  { color: '#06b6d4', name: 'Apr',  label: 'April'     },
-        5:  { color: '#84cc16', name: 'Mei',  label: 'Mei'       },
-        6:  { color: '#1e40af', name: 'Jun',  label: 'Juni'      },
-        7:  { color: '#374151', name: 'Jul',  label: 'Juli'      },
-        8:  { color: '#92400e', name: 'Agu',  label: 'Agustus'   },
-        9:  { color: '#ef4444', name: 'Sep',  label: 'September' },
-        10: { color: '#a855f7', name: 'Okt',  label: 'Oktober'   },
-        11: { color: '#10b981', name: 'Nov',  label: 'November'  },
-        12: { color: '#0891b2', name: 'Des',  label: 'Desember'  }
+        1:  { color: '#FFFF00', name: 'Jan',  label: 'Januari'   },
+        2:  { color: '#00FF99', name: 'Peb',  label: 'Pebruari'  },
+        3:  { color: '#F4B183', name: 'Mar',  label: 'Maret'     },
+        4:  { color: '#9DC3E6', name: 'Apr',  label: 'April'     },
+        5:  { color: '#A9D08E', name: 'Mei',  label: 'Mei'       },
+        6:  { color: '#00B0F0', name: 'Jun',  label: 'Juni'      },
+        7:  { color: '#3B3838', name: 'Jul',  label: 'Juli'      },
+        8:  { color: '#ED7D31', name: 'Agu',  label: 'Agustus'   },
+        9:  { color: '#FF0000', name: 'Sep',  label: 'September' },
+        10: { color: '#FF00FF', name: 'Okt',  label: 'Oktober'   },
+        11: { color: '#C6E0B4', name: 'Nov',  label: 'November'  },
+        12: { color: '#00FFFF', name: 'Des',  label: 'Desember'  }
     };
 
     let map = null;
@@ -291,42 +272,12 @@ include_once '../layouts/header.php';
         activeMonth = parseInt(document.getElementById('bulan_aktif').value);
         let monthColor = MONTH_COLORS[activeMonth].color;
         document.getElementById('input_warna').value = monthColor;
-        // Auto-select the closest color radio
-        setSelectedColor(monthColor);
-    }
-
-    function setSelectedColor(color) {
-        let radios = document.querySelectorAll('input[name="warna_picker"]');
-        let matched = false;
-        radios.forEach(r => {
-            if (r.value.toLowerCase() === color.toLowerCase()) {
-                r.checked = true;
-                matched = true;
-            }
-        });
-        if (!matched) {
-            // Select custom and set the color input
-            document.getElementById('radio_custom_color').checked = true;
-            document.getElementById('input_custom_color').value = color;
+        
+        // Update Geoman drawing color in real-time
+        if (map && map.pm) {
+            map.pm.setPathOptions({ color: monthColor, fillColor: monthColor, weight: 2.5, fillOpacity: 0.4 });
         }
     }
-
-    function syncWarnaInput() {
-        let sel = document.querySelector('input[name="warna_picker"]:checked');
-        if (sel) {
-            let color = sel.value === 'custom' ? document.getElementById('input_custom_color').value : sel.value;
-            document.getElementById('input_warna').value = color;
-            // Update Geoman drawing color in real-time
-            if (map && map.pm) {
-                map.pm.setPathOptions({ color: color, fillColor: color, weight: 2.5, fillOpacity: 0.4 });
-            }
-        }
-    }
-
-    // Sync warna on radio change
-    document.addEventListener('change', function(e) {
-        if (e.target.name === 'warna_picker') syncWarnaInput();
-    });
 
     function setMonthValues(data) {
         for (let i = 1; i <= 12; i++) {
@@ -497,13 +448,17 @@ include_once '../layouts/header.php';
 
             // Form select
             const sel = document.getElementById('input_jp');
+            const currentInputVal = sel.value;
             sel.innerHTML = '<option value="">— Pilih Jenis Pekerjaan —</option>';
             json.data.forEach(jp => { sel.innerHTML += `<option value="${jp.id}">${jp.nama}</option>`; });
+            sel.value = currentInputVal;
 
             // Filter select
             const filt = document.getElementById('filter_jp');
+            const currentFilterVal = filt.value;
             filt.innerHTML = '<option value="">— Semua Pekerjaan —</option>';
             json.data.forEach(jp => { filt.innerHTML += `<option value="${jp.id}">${jp.nama}</option>`; });
+            filt.value = currentFilterVal;
         } catch(e) { console.error('JP load error:', e); }
     }
 
@@ -514,7 +469,7 @@ include_once '../layouts/header.php';
         polygonLayers = [];
 
         const filterJP = document.getElementById('filter_jp').value;
-        const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : allData;
+        const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : [];
 
         filtered.forEach(row => {
             if (!row.geojson) return;
@@ -529,8 +484,15 @@ include_once '../layouts/header.php';
                     if (geojsonData.features.length === 0) return;
                 }
 
-                // Use stored custom color (per polygon, like MCS Harian)
-                let fillColor = row.warna || MONTH_COLORS[activeMonth].color;
+                // Determine color automatically based on the filled month (first month with value > 0)
+                let primaryMonth = activeMonth;
+                for (let i = 1; i <= 12; i++) {
+                    if ((parseFloat(row['bulan_'+i]) || 0) > 0) {
+                        primaryMonth = i;
+                        break;
+                    }
+                }
+                let fillColor = MONTH_COLORS[primaryMonth].color;
 
                 // Opacity based on data intensity
                 let total = 0;
@@ -571,11 +533,16 @@ include_once '../layouts/header.php';
     // === RENDER TABLE ===
     function renderTable() {
         const filterJP = document.getElementById('filter_jp').value;
-        const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : allData;
+        const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : [];
         const tbody = document.getElementById('table-body');
 
+        if (!filterJP) {
+            tbody.innerHTML = '<tr><td colspan="16" class="py-8 text-center text-slate-400 italic">Silakan pilih Jenis Pekerjaan di atas untuk melihat data.</td></tr>';
+            return;
+        }
+
         if (!filtered.length) {
-            tbody.innerHTML = '<tr><td colspan="16" class="py-8 text-center text-slate-400 italic">Belum ada data realisasi bulanan.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="16" class="py-8 text-center text-slate-400 italic">Belum ada data realisasi bulanan untuk pekerjaan ini.</td></tr>';
             return;
         }
 
@@ -629,9 +596,16 @@ include_once '../layouts/header.php';
                 document.getElementById('input_geojson').value = JSON.stringify(geojson);
                 document.getElementById('input_lat').value = row.latitude;
                 document.getElementById('input_lng').value = row.longitude;
-                let editColor = row.warna || MONTH_COLORS[activeMonth].color;
+                let primaryMonth = activeMonth;
+                for (let i = 1; i <= 12; i++) {
+                    if ((parseFloat(row['bulan_'+i]) || 0) > 0) {
+                        primaryMonth = i;
+                        break;
+                    }
+                }
+                let editColor = MONTH_COLORS[primaryMonth].color;
                 document.getElementById('input_warna').value = editColor;
-                setSelectedColor(editColor);
+                document.getElementById('bulan_aktif').value = primaryMonth;
                 // Apply color to drawn layers
                 drawnItems.eachLayer(function(layer) {
                     if (layer.setStyle) layer.setStyle({ color: editColor, fillColor: editColor, weight: 2.5, fillOpacity: 0.4 });
@@ -724,6 +698,12 @@ include_once '../layouts/header.php';
 
     // === EXPORT PDF ===
     async function exportPDF() {
+        const filterJP = document.getElementById('filter_jp').value;
+        if (!filterJP) {
+            Swal.fire('Perhatian', 'Silakan pilih Jenis Pekerjaan terlebih dahulu di menu filter sebelum mencetak PDF agar datanya tidak tergabung.', 'warning');
+            return;
+        }
+
         const mapDiv = document.getElementById('map');
         if (!mapDiv) return;
 
@@ -733,16 +713,37 @@ include_once '../layouts/header.php';
         const controls = document.querySelectorAll('.leaflet-control-container');
         controls.forEach(c => c.style.display = 'none');
 
+        // FORCE MAP ASPECT RATIO FOR PDF TO ELIMINATE WHITESPACE
+        const oldW = mapDiv.style.width;
+        const oldH = mapDiv.style.height;
+        mapDiv.style.width = '1000px';
+        mapDiv.style.height = '800px'; 
+        map.invalidateSize();
+        if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [5,5], animate: false });
+
+        // Short delay to allow Leaflet to re-render bounds
+        await new Promise(r => setTimeout(r, 500));
+
         let mapImage = '';
         try {
-            let canvas = await html2canvas(mapDiv, { useCORS: true, allowTaint: true, scale: 1.5, scrollY: -window.scrollY });
-            mapImage = canvas.toDataURL('image/jpeg', 0.7);
+            let canvas = await html2canvas(mapDiv, { useCORS: true, allowTaint: true, scale: 2, scrollY: -window.scrollY });
+            mapImage = canvas.toDataURL('image/jpeg', 0.8);
         } catch(e) {
             controls.forEach(c => c.style.display = '');
+            mapDiv.style.width = oldW;
+            mapDiv.style.height = oldH;
+            map.invalidateSize();
+            if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
             Swal.fire('Error', 'Gagal menangkap peta.', 'error');
             return;
         }
+        
+        // RESTORE MAP SIZE
         controls.forEach(c => c.style.display = '');
+        mapDiv.style.width = oldW;
+        mapDiv.style.height = oldH;
+        map.invalidateSize();
+        if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
 
         Swal.fire({
             title: 'Merender PDF...',
@@ -755,7 +756,10 @@ include_once '../layouts/header.php';
             fd.append('unit_id', UNIT_ID);
             fd.append('kebun_id', KEBUN_ID);
             fd.append('map_image', mapImage);
-            fd.append('mcs_data', JSON.stringify(allData));
+
+            const filteredData = allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP);
+            fd.append('mcs_data', JSON.stringify(filteredData));
+            
             fd.append('tahun', activeYear);
 
             const res = await fetch('cetak/peta_rekap_pdf.php', { method: 'POST', body: fd });
