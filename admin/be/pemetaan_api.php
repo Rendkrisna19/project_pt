@@ -462,7 +462,7 @@ try {
         $unit_id  = (int)$_GET['unit_id'];
         $tahun    = (int)($_GET['tahun'] ?? date('Y'));
 
-        $sql = "SELECT m.*, jp.nama AS jp_nama
+        $sql = "SELECT m.*, jp.nama AS jp_nama, jp.satuan AS satuan
                 FROM tr_mcs_bulanan m
                 LEFT JOIN md_jenis_pekerjaan_bulanan jp ON m.jenis_pekerjaan_bulanan_id = jp.id
                 WHERE m.kebun_id = ? AND m.unit_id = ? AND m.tahun = ?
@@ -479,6 +479,15 @@ try {
         $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
         $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
 
+        // Fetch all Luas values for this unit
+        $sqlLuas = "SELECT jenis_pekerjaan_id, luas_ha FROM tr_pemetaan_peta_dasar WHERE unit_id = ? AND jenis_pekerjaan_id >= 99999";
+        $stmtLuas = $conn->prepare($sqlLuas);
+        $stmtLuas->execute([$unit_id]);
+        $luas_data = [];
+        while($r = $stmtLuas->fetch(PDO::FETCH_ASSOC)) {
+            $luas_data[$r['jenis_pekerjaan_id']] = $r['luas_ha'];
+        }
+
         // Info
         $stmtInfo = $conn->prepare("SELECT u.nama_unit, k.nama_kebun FROM units u LEFT JOIN md_kebun k ON u.kebun_id = k.id WHERE u.id = ?");
         $stmtInfo->execute([$unit_id]);
@@ -489,9 +498,35 @@ try {
             'success' => true,
             'data' => $data,
             'peta_kerja_foto' => $peta_kerja_foto,
+            'luas_data' => $luas_data,
             'info' => $info ?: ['nama_unit' => 'UNIT', 'nama_kebun' => 'KEBUN'],
             'tahun' => $tahun
         ]);
+        exit;
+    }
+
+    // --- SAVE LUAS STATIK (PETA DASAR) ---
+    if ($action === 'save_luas_peta_dasar') {
+        $unit_id = (int)$_POST['unit_id'];
+        $jp_id = isset($_POST['jp_id']) && $_POST['jp_id'] !== '' ? (int)$_POST['jp_id'] : 0;
+        $mapped_id = $jp_id ? (100000 + $jp_id) : 99999;
+        $luas_ha = isset($_POST['luas_ha']) && $_POST['luas_ha'] !== '' ? (float)$_POST['luas_ha'] : null;
+        if (!$unit_id) throw new Exception("Unit ID tidak valid.");
+        
+        $sqlCheck = "SELECT id FROM tr_pemetaan_peta_dasar WHERE unit_id = ? AND jenis_pekerjaan_id = ?";
+        $stmtCheck = $conn->prepare($sqlCheck);
+        $stmtCheck->execute([$unit_id, $mapped_id]);
+        $exists = $stmtCheck->fetch();
+
+        if ($exists) {
+            $sql = "UPDATE tr_pemetaan_peta_dasar SET luas_ha = ? WHERE unit_id = ? AND jenis_pekerjaan_id = ?";
+            $conn->prepare($sql)->execute([$luas_ha, $unit_id, $mapped_id]);
+        } else {
+            $sql = "INSERT INTO tr_pemetaan_peta_dasar (unit_id, jenis_pekerjaan_id, luas_ha) VALUES (?, ?, ?)";
+            $conn->prepare($sql)->execute([$unit_id, $mapped_id, $luas_ha]);
+        }
+        ob_clean();
+        echo json_encode(['success' => true]);
         exit;
     }
 

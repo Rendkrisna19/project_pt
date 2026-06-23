@@ -57,6 +57,10 @@ include_once '../layouts/header.php';
             </div>
         </div>
         <div class="flex gap-2 items-center flex-wrap">
+            <div class="flex items-center bg-white px-3 py-1.5 rounded-xl border border-cyan-300 shadow-sm">
+                <span class="text-[10px] font-bold text-slate-500 uppercase mr-2">Luas (Ha):</span>
+                <input type="number" step="0.01" id="input_luas" class="w-20 text-sm font-bold text-slate-800 outline-none bg-transparent" onchange="saveLuas()" placeholder="0.00" title="Tekan Enter / klik di luar untuk menyimpan">
+            </div>
             <select id="filter_tahun" class="input-custom min-w-[100px] border-cyan-300 font-bold text-slate-700" onchange="changeYear()">
                 <?php $curYear = (int)date('Y'); for($y = $curYear + 1; $y >= $curYear - 5; $y--): ?>
                 <option value="<?= $y ?>" <?= $y == $curYear ? 'selected' : '' ?>><?= $y ?></option>
@@ -104,13 +108,8 @@ include_once '../layouts/header.php';
                     <input type="hidden" name="longitude" id="input_lng">
                     <input type="hidden" name="tahun" id="input_tahun" value="<?= date('Y') ?>">
 
-                    <!-- Jenis Pekerjaan -->
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Jenis Pekerjaan</label>
-                        <select name="jenis_pekerjaan_bulanan_id" id="input_jp" class="input-custom" required>
-                            <option value="">— Pilih Jenis Pekerjaan —</option>
-                        </select>
-                    </div>
+                    <!-- Jenis Pekerjaan (Hidden, synced with top filter) -->
+                    <input type="hidden" name="jenis_pekerjaan_bulanan_id" id="input_jp" value="">
 
                     <!-- Objek Pekerjaan -->
                     <div>
@@ -118,24 +117,7 @@ include_once '../layouts/header.php';
                         <input type="text" name="objek_pekerjaan" id="input_objek" class="input-custom" placeholder="Contoh: Rotasi I, Pokok, dll">
                     </div>
 
-                    <!-- Bulan Aktif (untuk warna poligon) -->
-                    <div>
-                        <label class="block text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">Bulan Aktif (Warna Poligon)</label>
-                        <select id="bulan_aktif" class="input-custom" onchange="updateActiveColor()">
-                            <option value="1" <?= date('n')==1?'selected':'' ?>>Januari</option>
-                            <option value="2" <?= date('n')==2?'selected':'' ?>>Februari</option>
-                            <option value="3" <?= date('n')==3?'selected':'' ?>>Maret</option>
-                            <option value="4" <?= date('n')==4?'selected':'' ?>>April</option>
-                            <option value="5" <?= date('n')==5?'selected':'' ?>>Mei</option>
-                            <option value="6" <?= date('n')==6?'selected':'' ?>>Juni</option>
-                            <option value="7" <?= date('n')==7?'selected':'' ?>>Juli</option>
-                            <option value="8" <?= date('n')==8?'selected':'' ?>>Agustus</option>
-                            <option value="9" <?= date('n')==9?'selected':'' ?>>September</option>
-                            <option value="10" <?= date('n')==10?'selected':'' ?>>Oktober</option>
-                            <option value="11" <?= date('n')==11?'selected':'' ?>>November</option>
-                            <option value="12" <?= date('n')==12?'selected':'' ?>>Desember</option>
-                        </select>
-                    </div>
+                    <!-- Removed Bulan Aktif dropdown -->
 
                     <input type="hidden" name="warna" id="input_warna" value="#FFFF00">
 
@@ -218,6 +200,8 @@ include_once '../layouts/header.php';
 <script>
     const KEBUN_ID = <?= $kebun_id ?>;
     const UNIT_ID  = <?= $unit_id ?>;
+    let allData = [];
+    let luasData = {};
     let activeYear = parseInt(document.getElementById('filter_tahun').value);
 
     // 12 Fixed Month Colors (Berdasarkan Template)
@@ -238,14 +222,11 @@ include_once '../layouts/header.php';
 
     let map = null;
     let drawnItems = null;
-    let allData = [];
-    let activeMonth = parseInt(document.getElementById('bulan_aktif').value);
     let polygonLayers = [];
     let baseMapBounds = null;
 
     const fmt = (n) => { let v = parseFloat(n)||0; return v === 0 ? '-' : new Intl.NumberFormat('id-ID',{minimumFractionDigits:2,maximumFractionDigits:2}).format(v); };
 
-    // === INIT MONTH INPUTS ===
     function initMonthInputs() {
         const container = document.getElementById('month-inputs');
         const headerRow = document.getElementById('month-header-row');
@@ -268,14 +249,26 @@ include_once '../layouts/header.php';
         document.getElementById('total_ha').textContent = fmt(total);
     }
 
-    function updateActiveColor() {
-        activeMonth = parseInt(document.getElementById('bulan_aktif').value);
-        let monthColor = MONTH_COLORS[activeMonth].color;
+    function updateColorFromInputs() {
+        let primaryMonth = 1;
+        for (let i = 1; i <= 12; i++) {
+            let val = document.getElementById('input_b'+i) ? parseFloat(document.getElementById('input_b'+i).value) : 0;
+            if (val > 0) {
+                primaryMonth = i;
+                break;
+            }
+        }
+        let monthColor = MONTH_COLORS[primaryMonth].color;
         document.getElementById('input_warna').value = monthColor;
         
-        // Update Geoman drawing color in real-time
         if (map && map.pm) {
             map.pm.setPathOptions({ color: monthColor, fillColor: monthColor, weight: 2.5, fillOpacity: 0.4 });
+        }
+
+        if (drawnItems) {
+            drawnItems.eachLayer(function(layer) {
+                if (layer.setStyle) layer.setStyle({ color: monthColor, fillColor: monthColor, weight: 2.5, fillOpacity: 0.4 });
+            });
         }
     }
 
@@ -291,7 +284,6 @@ include_once '../layouts/header.php';
         calcTotal();
     }
 
-    // === MAP ===
     function initMap(petaKerjaFoto) {
         if (map) { map.off(); map.remove(); }
         polygonLayers = [];
@@ -355,7 +347,6 @@ include_once '../layouts/header.php';
             rotateMode: false
         });
 
-        // Set drawing color from selected picker
         let selColor = document.getElementById('input_warna').value || '#0891b2';
         map.pm.setPathOptions({ color: selColor, fillColor: selColor, weight: 2.5, fillOpacity: 0.4 });
 
@@ -402,7 +393,6 @@ include_once '../layouts/header.php';
         updateDrawStatus();
     }
 
-    // === CHANGE YEAR ===
     function changeYear() {
         activeYear = parseInt(document.getElementById('filter_tahun').value);
         document.getElementById('input_tahun').value = activeYear;
@@ -410,7 +400,6 @@ include_once '../layouts/header.php';
         loadData();
     }
 
-    // === LOAD DATA ===
     async function loadData() {
         try {
             const res = await fetch(`be/pemetaan_api.php?action=get_mcs_bulanan_data&kebun_id=${KEBUN_ID}&unit_id=${UNIT_ID}&tahun=${activeYear}`);
@@ -419,6 +408,8 @@ include_once '../layouts/header.php';
 
             const info = json.info || {};
             document.getElementById('lbl-unit').textContent = `${info.nama_kebun||'KEBUN'} - ${info.nama_unit||'UNIT'}`;
+            luasData = json.luas_data || {};
+            updateLuasInput();
 
             const petaFoto = json.peta_kerja_foto;
             const uploadCard = document.getElementById('card_upload_peta');
@@ -439,21 +430,12 @@ include_once '../layouts/header.php';
         }
     }
 
-    // === JP DROPDOWN ===
     async function loadJPDropdown() {
         try {
             const res = await fetch(`be/pemetaan_api.php?action=get_jenis_pekerjaan_bulanan&kebun_id=${KEBUN_ID}`);
             const json = await res.json();
             if (!json.success) return;
 
-            // Form select
-            const sel = document.getElementById('input_jp');
-            const currentInputVal = sel.value;
-            sel.innerHTML = '<option value="">— Pilih Jenis Pekerjaan —</option>';
-            json.data.forEach(jp => { sel.innerHTML += `<option value="${jp.id}">${jp.nama}</option>`; });
-            sel.value = currentInputVal;
-
-            // Filter select
             const filt = document.getElementById('filter_jp');
             const currentFilterVal = filt.value;
             filt.innerHTML = '<option value="">— Semua Pekerjaan —</option>';
@@ -462,9 +444,7 @@ include_once '../layouts/header.php';
         } catch(e) { console.error('JP load error:', e); }
     }
 
-    // === RENDER POLYGONS ===
     function renderPolygons() {
-        // Clear old polygon layers first
         polygonLayers.forEach(l => map.removeLayer(l));
         polygonLayers = [];
 
@@ -475,8 +455,6 @@ include_once '../layouts/header.php';
             if (!row.geojson) return;
             try {
                 let geojsonData = JSON.parse(row.geojson);
-
-                // Filter out non-geometry features (text labels, markers)
                 if (geojsonData.type === 'FeatureCollection') {
                     geojsonData.features = geojsonData.features.filter(f =>
                         f.geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(f.geometry.type)
@@ -484,17 +462,11 @@ include_once '../layouts/header.php';
                     if (geojsonData.features.length === 0) return;
                 }
 
-                // Determine color automatically based on the filled month (first month with value > 0)
-                let primaryMonth = activeMonth;
+                let primaryMonth = 1;
                 for (let i = 1; i <= 12; i++) {
-                    if ((parseFloat(row['bulan_'+i]) || 0) > 0) {
-                        primaryMonth = i;
-                        break;
-                    }
+                    if ((parseFloat(row['bulan_'+i]) || 0) > 0) { primaryMonth = i; break; }
                 }
                 let fillColor = MONTH_COLORS[primaryMonth].color;
-
-                // Opacity based on data intensity
                 let total = 0;
                 for (let i = 1; i <= 12; i++) total += parseFloat(row['bulan_'+i]) || 0;
                 let fillOpacity = total > 0 ? 0.4 : 0.2;
@@ -523,14 +495,9 @@ include_once '../layouts/header.php';
                 polygonLayers.push(layer);
             } catch(e) { console.error('GeoJSON parse error:', e); }
         });
-
-        // Reset to base map view (don't zoom to polygon bounds)
-        if (baseMapBounds) {
-            map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
-        }
+        if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
     }
 
-    // === RENDER TABLE ===
     function renderTable() {
         const filterJP = document.getElementById('filter_jp').value;
         const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : [];
@@ -568,9 +535,19 @@ include_once '../layouts/header.php';
         }).join('');
     }
 
-    function filterByJP() { renderPolygons(); renderTable(); }
+    function filterByJP() { 
+        document.getElementById('input_jp').value = document.getElementById('filter_jp').value;
+        updateLuasInput();
+        renderPolygons(); 
+        renderTable(); 
+    }
 
-    // === EDIT ===
+    function updateLuasInput() {
+        const jpId = document.getElementById('filter_jp').value;
+        const mappedId = jpId ? (100000 + parseInt(jpId)) : 99999;
+        document.getElementById('input_luas').value = luasData[mappedId] || '';
+    }
+
     function editData(id) {
         const row = allData.find(d => d.id == id);
         if (!row) return;
@@ -580,11 +557,9 @@ include_once '../layouts/header.php';
         document.getElementById('input_keterangan').value = row.keterangan || '';
         setMonthValues(row);
 
-        // Load multi-polygon from GeoJSON FeatureCollection
         if (row.geojson) {
             try {
                 let geojson = JSON.parse(row.geojson);
-                // Filter out non-geometry features
                 if (geojson.type === 'FeatureCollection') {
                     geojson.features = geojson.features.filter(f =>
                         f.geometry && ['Polygon','MultiPolygon','LineString','MultiLineString'].includes(f.geometry.type)
@@ -596,28 +571,12 @@ include_once '../layouts/header.php';
                 document.getElementById('input_geojson').value = JSON.stringify(geojson);
                 document.getElementById('input_lat').value = row.latitude;
                 document.getElementById('input_lng').value = row.longitude;
-                let primaryMonth = activeMonth;
-                for (let i = 1; i <= 12; i++) {
-                    if ((parseFloat(row['bulan_'+i]) || 0) > 0) {
-                        primaryMonth = i;
-                        break;
-                    }
-                }
-                let editColor = MONTH_COLORS[primaryMonth].color;
-                document.getElementById('input_warna').value = editColor;
-                document.getElementById('bulan_aktif').value = primaryMonth;
-                // Apply color to drawn layers
-                drawnItems.eachLayer(function(layer) {
-                    if (layer.setStyle) layer.setStyle({ color: editColor, fillColor: editColor, weight: 2.5, fillOpacity: 0.4 });
-                });
+                updateColorFromInputs();
                 updateDrawStatus();
-                let bounds = drawnItems.getBounds();
-                if (bounds.isValid()) map.fitBounds(bounds, { padding: [30,30] });
             } catch(e) { console.error(e); }
         }
 
-        // Change action to update
-        document.querySelector('[name=action]').value = 'update_mcs_bulanan';
+        document.querySelector('#form-mcs [name=action]').value = 'update_mcs_bulanan';
         document.getElementById('btn-cancel-edit').classList.remove('hidden');
         document.getElementById('btn-submit').innerHTML = '<i class="ti ti-device-floppy"></i> Update Data';
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -630,12 +589,11 @@ include_once '../layouts/header.php';
         document.getElementById('input_keterangan').value = '';
         clearMonthValues();
         clearDrawnItems();
-        document.querySelector('[name=action]').value = 'save_mcs_bulanan';
+        document.querySelector('#form-mcs [name=action]').value = 'save_mcs_bulanan';
         document.getElementById('btn-cancel-edit').classList.add('hidden');
         document.getElementById('btn-submit').innerHTML = '<i class="ti ti-cloud-upload"></i> Simpan Data';
     }
 
-    // === DELETE ===
     async function deleteData(id) {
         const result = await Swal.fire({
             title: 'Hapus Data?', text: 'Data yang dihapus tidak bisa dikembalikan.',
@@ -658,7 +616,6 @@ include_once '../layouts/header.php';
         }
     }
 
-    // === UPLOAD BASE MAP ===
     document.getElementById('form-upload-peta').addEventListener('submit', async function(e) {
         e.preventDefault();
         const btn = document.getElementById('btn-upload-peta');
@@ -677,9 +634,15 @@ include_once '../layouts/header.php';
         btn.disabled = false; btn.textContent = 'Upload & Pasang';
     });
 
-    // === FORM SUBMIT ===
     document.getElementById('form-mcs').addEventListener('submit', async function(e) {
         e.preventDefault();
+        document.getElementById('input_jp').value = document.getElementById('filter_jp').value;
+        
+        if (!document.getElementById('input_jp').value) {
+            Swal.fire('Perhatian', 'Silakan pilih Jenis Pekerjaan di menu filter atas terlebih dahulu sebelum menginput data.', 'warning');
+            return;
+        }
+
         const btn = document.getElementById('btn-submit');
         btn.disabled = true; btn.innerHTML = '<i class="ti ti-loader animate-spin"></i> Menyimpan...';
         try {
@@ -696,58 +659,110 @@ include_once '../layouts/header.php';
         btn.disabled = false;
     });
 
-    // === EXPORT PDF ===
     async function exportPDF() {
-        const filterJP = document.getElementById('filter_jp').value;
-        if (!filterJP) {
-            Swal.fire('Perhatian', 'Silakan pilih Jenis Pekerjaan terlebih dahulu di menu filter sebelum mencetak PDF agar datanya tidak tergabung.', 'warning');
-            return;
-        }
-
         const mapDiv = document.getElementById('map');
         if (!mapDiv) return;
 
-        Swal.fire({ title: 'Memproses...', text: 'Menangkap gambar peta.', allowOutsideClick: false, showConfirmButton: false, didOpen: () => Swal.showLoading() });
+        const selJp = document.getElementById('filter_jp');
+        const originalJp = selJp.value;
+        const jpOptions = [];
+        selJp.querySelectorAll('option').forEach(opt => {
+            if (opt.value) jpOptions.push({ id: opt.value, nama: opt.textContent });
+        });
 
-        // Hide controls
-        const controls = document.querySelectorAll('.leaflet-control-container');
-        controls.forEach(c => c.style.display = 'none');
+        if (jpOptions.length === 0) {
+            Swal.fire('Perhatian', 'Tidak ada jenis pekerjaan untuk dicetak.', 'warning');
+            return;
+        }
 
-        // FORCE MAP ASPECT RATIO FOR PDF TO ELIMINATE WHITESPACE
-        const oldW = mapDiv.style.width;
-        const oldH = mapDiv.style.height;
-        mapDiv.style.width = '1000px';
-        mapDiv.style.height = '800px'; 
-        map.invalidateSize();
-        if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [5,5], animate: false });
+        const mapImages = {};
+        const totalJp = jpOptions.length;
 
-        // Short delay to allow Leaflet to re-render bounds
-        await new Promise(r => setTimeout(r, 500));
+        for (let i = 0; i < totalJp; i++) {
+            const jp = jpOptions[i];
+            const pct = Math.round(((i) / totalJp) * 100);
 
-        let mapImage = '';
-        try {
-            let canvas = await html2canvas(mapDiv, { useCORS: true, allowTaint: true, scale: 2, scrollY: -window.scrollY });
-            mapImage = canvas.toDataURL('image/jpeg', 0.8);
-        } catch(e) {
-            controls.forEach(c => c.style.display = '');
+            Swal.fire({
+                title: `Memproses Cetak (${pct}%)`,
+                html: `<div style="margin-bottom:8px">Menangkap peta <b>${i + 1}/${totalJp}</b>: ${jp.nama}</div>
+                       <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden">
+                         <div style="background:linear-gradient(90deg,#06b6d4,#8b5cf6);height:100%;width:${pct}%;transition:width .3s;border-radius:999px"></div>
+                       </div>`,
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            selJp.value = jp.id;
+            filterByJP();
+            
+            await new Promise(resolve => setTimeout(resolve, 800));
+
+            let allBounds = [];
+            if (drawnItems && drawnItems.getBounds && drawnItems.getBounds().isValid()) {
+                allBounds.push(drawnItems.getBounds());
+            }
+            if (baseMapBounds) allBounds.push(baseMapBounds);
+            
+            if (allBounds.length > 0) {
+                let fb = allBounds[0];
+                for(let j=1; j<allBounds.length; j++) fb.extend(allBounds[j]);
+                map.fitBounds(fb, { padding: [10, 10], animate: false });
+                await new Promise(resolve => setTimeout(resolve, 400));
+            }
+
+            const controls = document.querySelectorAll('.leaflet-control-container');
+            controls.forEach(c => c.style.display = 'none');
+            
+            const oldW = mapDiv.style.width;
+            const oldH = mapDiv.style.height;
+            mapDiv.style.width = '1000px';
+            mapDiv.style.height = '800px'; 
+            map.invalidateSize();
+            await new Promise(resolve => setTimeout(resolve, 400));
+
+            try {
+                let canvas = await html2canvas(mapDiv, { useCORS: true, allowTaint: true, scale: 1.1 });
+                function trimCanvas(c) {
+                    var ctx = c.getContext('2d', { willReadFrequently: true }), copy = document.createElement('canvas').getContext('2d'), pixels = ctx.getImageData(0, 0, c.width, c.height), bound = { top: null, left: null, right: null, bottom: null };
+                    for (var k = 0; k < pixels.data.length; k += 4) {
+                        if (pixels.data[k+3] !== 0 && !(pixels.data[k]>=250&&pixels.data[k+1]>=250&&pixels.data[k+2]>=250)) {
+                            var x = (k / 4) % c.width, y = ~~((k / 4) / c.width);
+                            if (bound.top === null) bound.top = y;
+                            if (bound.left === null || x < bound.left) bound.left = x;
+                            if (bound.right === null || x > bound.right) bound.right = x;
+                            if (bound.bottom === null || y > bound.bottom) bound.bottom = y;
+                        }
+                    }
+                    if (bound.top === null) return c;
+                    var pad = 20;
+                    bound.top = Math.max(0, bound.top - pad); bound.left = Math.max(0, bound.left - pad);
+                    bound.bottom = Math.min(c.height, bound.bottom + pad); bound.right = Math.min(c.width, bound.right + pad);
+                    var trimHeight = bound.bottom - bound.top, trimWidth = bound.right - bound.left;
+                    var trimmed = ctx.getImageData(bound.left, bound.top, trimWidth, trimHeight);
+                    copy.canvas.width = trimWidth; copy.canvas.height = trimHeight;
+                    copy.putImageData(trimmed, 0, 0);
+                    return copy.canvas;
+                }
+                canvas = trimCanvas(canvas);
+                mapImages[jp.id] = canvas.toDataURL("image/jpeg", 0.5);
+            } catch(e) { console.error('Screenshot error:', e); }
+
             mapDiv.style.width = oldW;
             mapDiv.style.height = oldH;
             map.invalidateSize();
+            controls.forEach(c => c.style.display = '');
             if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
-            Swal.fire('Error', 'Gagal menangkap peta.', 'error');
+        }
+
+        if (Object.keys(mapImages).length === 0) {
+            Swal.fire('Error', 'Gagal memproses gambar peta.', 'error');
             return;
         }
-        
-        // RESTORE MAP SIZE
-        controls.forEach(c => c.style.display = '');
-        mapDiv.style.width = oldW;
-        mapDiv.style.height = oldH;
-        map.invalidateSize();
-        if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
 
         Swal.fire({
             title: 'Merender PDF...',
-            html: '<div style="margin-bottom:8px">Mohon tunggu...</div><div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden"><div style="background:linear-gradient(90deg,#0891b2,#06b6d4);height:100%;width:10%;border-radius:999px;animation:pdfProg 4s ease-in-out infinite"></div></div><style>@keyframes pdfProg{0%{width:10%}50%{width:70%}100%{width:95%}}</style>',
+            html: '<div style="margin-bottom:8px">Mohon tunggu, menyusun dokumen...</div><div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden"><div style="background:linear-gradient(90deg,#0891b2,#06b6d4);height:100%;width:10%;border-radius:999px;animation:pdfProg 4s ease-in-out infinite"></div></div><style>@keyframes pdfProg{0%{width:10%}50%{width:70%}100%{width:95%}}</style>',
             allowOutsideClick: false, showConfirmButton: false, didOpen: () => Swal.showLoading()
         });
 
@@ -755,27 +770,53 @@ include_once '../layouts/header.php';
             const fd = new FormData();
             fd.append('unit_id', UNIT_ID);
             fd.append('kebun_id', KEBUN_ID);
-            fd.append('map_image', mapImage);
-
-            const filteredData = allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP);
-            fd.append('mcs_data', JSON.stringify(filteredData));
-            
             fd.append('tahun', activeYear);
+            fd.append('mcs_data', JSON.stringify(allData));
+            fd.append('luas_data', JSON.stringify(luasData));
+            Object.entries(mapImages).forEach(([jpId, img]) => fd.append(`map_images[${jpId}]`, img));
 
-            const res = await fetch('cetak/peta_rekap_pdf.php', { method: 'POST', body: fd });
-            if (!res.ok) { const errText = await res.text(); throw new Error(errText || `HTTP ${res.status}`); }
+            const res = await fetch('cetak/peta_rekap_gabungan_pdf.php', { method: 'POST', body: fd });
+            if (!res.ok) throw new Error(await res.text());
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             window.open(url, '_blank');
-            Swal.fire({ icon: 'success', title: 'Berhasil!', text: 'PDF berhasil dibuat.', timer: 2000, showConfirmButton: false });
+            Swal.close();
         } catch(err) {
             Swal.fire({ icon: 'error', title: 'Gagal', html: `<div style="text-align:left;font-size:12px;background:#fee2e2;padding:10px;border-radius:8px;color:#991b1b;max-height:150px;overflow:auto"><b>Error:</b><br>${err.message}</div>` });
         }
     }
 
+    // === SAVE LUAS STATIK ===
+    async function saveLuas() {
+        const luas = document.getElementById('input_luas').value;
+        const jpId = document.getElementById('filter_jp').value;
+        const fd = new FormData();
+        fd.append('action', 'save_luas_peta_dasar');
+        fd.append('unit_id', UNIT_ID);
+        fd.append('jp_id', jpId);
+        fd.append('luas_ha', luas);
+        
+        try {
+            const res = await fetch('be/pemetaan_api.php', { method: 'POST', body: fd });
+            const json = await res.json();
+            if (json.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                Toast.fire({ icon: 'success', title: 'Luas berhasil disimpan' });
+                // Update local memory
+                const mappedId = jpId ? (100000 + parseInt(jpId)) : 99999;
+                luasData[mappedId] = luas;
+            } else {
+                Swal.fire('Gagal', json.message, 'error');
+            }
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Error', 'Gagal menyimpan luas', 'error');
+        }
+    }
+
     // === INIT ===
     initMonthInputs();
-    updateActiveColor();
+    updateColorFromInputs();
     document.addEventListener('DOMContentLoaded', loadData);
 </script>
 

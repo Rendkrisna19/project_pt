@@ -204,12 +204,12 @@ $MAP = [
     'jenis_pekerjaan_bulanan' => [
         'table' => 'md_jenis_pekerjaan_bulanan',
         'alias' => 't',
-        'cols' => ['kebun_id', 'nama', 'keterangan'],
+        'cols' => ['kebun_id', 'nama', 'satuan', 'keterangan'],
         'required' => ['kebun_id', 'nama'],
         'select' => 't.*, k.nama_kebun',
         'joins' => 'LEFT JOIN md_kebun k ON t.kebun_id = k.id',
         'order' => 'k.nama_kebun ASC, t.nama ASC',
-        'searchable' => ['k.nama_kebun', 't.nama', 't.keterangan']
+        'searchable' => ['k.nama_kebun', 't.nama', 't.satuan', 't.keterangan']
     ],
     'pem_tm' =>   ['table'=>'md_pemeliharaan_tm',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],
     'pem_tu' =>   ['table'=>'md_pemeliharaan_tu',   'cols'=>['nama','deskripsi'], 'required'=>['nama'], 'searchable'=>['nama','deskripsi']],

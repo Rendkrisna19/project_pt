@@ -69,6 +69,7 @@ foreach ($mcs_data as $row) {
     if (!isset($groups[$jp])) {
         $groups[$jp] = [
             'jp' => $jp,
+            'satuan' => trim($row['satuan'] ?? 'HA'),
             'months' => array_fill(1, 12, 0)
         ];
     }
@@ -89,7 +90,7 @@ $strObjek = !empty($uniqueObjek) ? implode(', ', array_keys($uniqueObjek)) : '-'
 $grandTotal = array_fill(1, 12, 0);
 foreach ($groups as $g) {
     for ($i = 1; $i <= 12; $i++) {
-        $grandTotal[$i] += $g['bulan'][$i];
+        $grandTotal[$i] += $g['months'][$i];
     }
 }
 $grandSum = array_sum($grandTotal);
@@ -162,7 +163,8 @@ ob_start();
         </td>
         <td class="hdr-center" style="width:35%">
             <div class="title">PETA <?= strtoupper($nama_unit) ?></div>
-            <div class="luas">LUAS: <?= fmtHa($grandSum) ?> Ha</div>
+<?php $luas_ha = isset($_POST['luas_ha']) ? (float)$_POST['luas_ha'] : 0; ?>
+            <div class="luas">LUAS: <?= fmtHa($luas_ha) ?> Ha</div>
         </td>
         <td class="hdr-right" style="width:30%">
             PETA KERJA
@@ -206,6 +208,7 @@ ob_start();
                     foreach ($groups as $g) {
                         $dataToPrint[] = [
                             'judul' => strtoupper($g['jp']),
+                            'satuan' => strtoupper($g['satuan']),
                             'bulan' => $g['months']
                         ];
                     }
@@ -236,7 +239,7 @@ ob_start();
                             ?>
                             <tr>
                                 <td class="month-name" style="background:<?= $MONTH_COLORS[$i] ?>; color:#000; width: 45%;"><?= $MONTH_NAMES[$i-1] ?></td>
-                                <td class="month-val" style="width: 55%;"><?= fmtHa($v) ?> HA</td>
+                                <td class="month-val" style="width: 55%;"><?= nf($v) ?> <?= htmlspecialchars($g['satuan'] ?? 'HA') ?></td>
                             </tr>
                             <?php 
                                 endif;
@@ -250,7 +253,7 @@ ob_start();
                             <?php if ($hasMonth): ?>
                             <tr>
                                 <td></td>
-                                <td class="month-val" style="border-top: 1px solid #000 !important;"><?= fmtHa($totalHa) ?> HA</td>
+                                <td class="month-val" style="border-top: 1px solid #000 !important;"><?= nf($totalHa) ?> <?= htmlspecialchars($g['satuan'] ?? 'HA') ?></td>
                             </tr>
                             <?php endif; ?>
                         </table>
