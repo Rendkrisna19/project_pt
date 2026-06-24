@@ -666,12 +666,18 @@ include_once '../layouts/header.php';
         const selJp = document.getElementById('filter_jp');
         const originalJp = selJp.value;
         const jpOptions = [];
+        
+        // Hanya ambil jenis pekerjaan yang sudah ada datanya (sudah diarsir)
+        const jpsWithData = new Set(allData.map(d => d.jenis_pekerjaan_bulanan_id.toString()));
+
         selJp.querySelectorAll('option').forEach(opt => {
-            if (opt.value) jpOptions.push({ id: opt.value, nama: opt.textContent });
+            if (opt.value && jpsWithData.has(opt.value)) {
+                jpOptions.push({ id: opt.value, nama: opt.textContent });
+            }
         });
 
         if (jpOptions.length === 0) {
-            Swal.fire('Perhatian', 'Tidak ada jenis pekerjaan untuk dicetak.', 'warning');
+            Swal.fire('Perhatian', 'Belum ada data realisasi (arsir) yang bisa dicetak.', 'warning');
             return;
         }
 

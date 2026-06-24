@@ -94,14 +94,14 @@ ob_start();
 
         .hdr-right { background: #1e3a8a; color: #fff; padding: 8px 10px; text-align: center; vertical-align: middle; font-size: 16px; font-weight: bold; letter-spacing: 1px; border: 1px solid #000; }
 
-        .main-layout { width: 100%; border: none; margin-top: 5px; }
-        .main-layout > tbody > tr > td { border: none; vertical-align: top; }
-        .map-cell { width: 70%; padding: 5px; border: 1px solid #000; text-align: center; vertical-align: middle; }
-        .meta-cell { width: 30%; padding: 0 0 0 8px; }
+        .main-layout { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-top: 5px; }
+        .main-layout > tbody > tr > td { vertical-align: top; }
+        .map-cell { width: 70%; padding: 5px; border: 1px solid #000; border-right: none; text-align: center; vertical-align: middle; }
+        .meta-cell { width: 30%; padding: 0; border: 1px solid #000; border-left: 1px solid #000; }
 
         .map-img { width: 100%; max-height: 175mm; height: auto; display: block; margin: 0 auto; }
 
-        .right-panel-tbl { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+        .right-panel-tbl { width: 100%; border-collapse: collapse; border: none; }
         .right-panel-tbl td { border-bottom: 1px solid #000; padding: 5px; vertical-align: top; }
         .right-panel-tbl tr:last-child td { border-bottom: none; }
         
