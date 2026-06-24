@@ -79,7 +79,7 @@ include_once '../layouts/header.php';
         <!-- LEFT PANEL -->
         <div class="lg:col-span-1 space-y-4">
             <!-- Upload Base Map -->
-            <div id="card_upload_peta" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-t-4 border-cyan-500 hidden">
+            <div id="card_upload_peta" class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 border-t-4 border-cyan-500">
                 <h3 class="font-extrabold text-slate-800 mb-2 flex items-center gap-2">
                     <i class="ti ti-photo-plus text-cyan-500 text-xl"></i> Peta Dasar
                 </h3>
@@ -412,11 +412,14 @@ include_once '../layouts/header.php';
             updateLuasInput();
 
             const petaFoto = json.peta_kerja_foto;
-            const uploadCard = document.getElementById('card_upload_peta');
             if (petaFoto) {
-                uploadCard.classList.add('hidden');
+                document.getElementById('btn-upload-peta').innerHTML = '<i class="ti ti-refresh"></i> Ganti Peta Dasar';
+                document.getElementById('btn-upload-peta').classList.replace('bg-cyan-500', 'bg-orange-500');
+                document.getElementById('btn-upload-peta').classList.replace('hover:bg-cyan-600', 'hover:bg-orange-600');
             } else {
-                uploadCard.classList.remove('hidden');
+                document.getElementById('btn-upload-peta').innerHTML = 'Upload & Pasang';
+                document.getElementById('btn-upload-peta').classList.replace('bg-orange-500', 'bg-cyan-500');
+                document.getElementById('btn-upload-peta').classList.replace('hover:bg-orange-600', 'hover:bg-cyan-600');
             }
 
             allData = json.data;
