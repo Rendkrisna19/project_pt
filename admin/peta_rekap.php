@@ -352,24 +352,37 @@ include_once '../layouts/header.php';
 
         map.on('pm:create', function(e) {
             drawnItems.addLayer(e.layer);
-            document.getElementById('input_geojson').value = JSON.stringify(drawnItems.toGeoJSON());
-            let bounds = drawnItems.getBounds();
-            let center = bounds.isValid() ? bounds.getCenter() : (e.layer.getBounds ? e.layer.getBounds().getCenter() : e.layer.getLatLng());
-            document.getElementById('input_lat').value = center.lat;
-            document.getElementById('input_lng').value = center.lng;
-            updateDrawStatus();
+            
+            // Listen for edits on this specific layer
+            e.layer.on('pm:edit', updateGeoJSONInput);
+            e.layer.on('pm:update', updateGeoJSONInput);
+            e.layer.on('pm:dragend', updateGeoJSONInput);
+            e.layer.on('pm:cut', updateGeoJSONInput);
+
+            updateGeoJSONInput();
         });
 
         map.on('pm:remove', function(e) {
             drawnItems.removeLayer(e.layer);
-            if (drawnItems.getLayers().length > 0) {
-                document.getElementById('input_geojson').value = JSON.stringify(drawnItems.toGeoJSON());
-            } else {
-                document.getElementById('input_geojson').value = '';
-                document.getElementById('input_lat').value = '';
-                document.getElementById('input_lng').value = '';
+            updateGeoJSONInput();
+        });
+
+        // Global events in case they edit existing layers
+        map.on('pm:globaleditmodetoggled', function(e) {
+            if (!e.enabled) {
+                updateGeoJSONInput();
+                if (document.getElementById('input_edit_id').value) {
+                    document.getElementById('btn-submit').click();
+                }
             }
-            updateDrawStatus();
+        });
+        map.on('pm:globaldragmodetoggled', function(e) {
+            if (!e.enabled) {
+                updateGeoJSONInput();
+                if (document.getElementById('input_edit_id').value) {
+                    document.getElementById('btn-submit').click();
+                }
+            }
         });
     }
 
@@ -479,6 +492,12 @@ include_once '../layouts/header.php';
                     pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 7, fillColor, color: '#fff', weight: 2, fillOpacity: 0.9 })
                 });
 
+                layer.eachLayer(function(l) {
+                    if (l.options) l.options.pmIgnore = true;
+                    if (l.pm) l.pm.disable();
+                    L.PM.reInitLayer(l);
+                });
+
                 let bulanInfo = '';
                 for (let i = 1; i <= 12; i++) {
                     let v = parseFloat(row['bulan_'+i]) || 0;
@@ -545,6 +564,21 @@ include_once '../layouts/header.php';
         renderTable(); 
     }
 
+    function updateGeoJSONInput() {
+        if (drawnItems && drawnItems.getLayers().length > 0) {
+            document.getElementById('input_geojson').value = JSON.stringify(drawnItems.toGeoJSON());
+            let bounds = drawnItems.getBounds();
+            let center = bounds.isValid() ? bounds.getCenter() : (drawnItems.getLayers()[0].getBounds ? drawnItems.getLayers()[0].getBounds().getCenter() : drawnItems.getLayers()[0].getLatLng());
+            document.getElementById('input_lat').value = center.lat;
+            document.getElementById('input_lng').value = center.lng;
+        } else {
+            document.getElementById('input_geojson').value = '';
+            document.getElementById('input_lat').value = '';
+            document.getElementById('input_lng').value = '';
+        }
+        updateDrawStatus();
+    }
+
     function updateLuasInput() {
         const jpId = document.getElementById('filter_jp').value;
         const mappedId = jpId ? (100000 + parseInt(jpId)) : 99999;
@@ -570,7 +604,13 @@ include_once '../layouts/header.php';
                 }
                 if (drawnItems) drawnItems.clearLayers();
                 let geoLayer = L.geoJSON(geojson);
-                geoLayer.eachLayer(l => drawnItems.addLayer(l));
+                geoLayer.eachLayer(l => {
+                    l.on('pm:edit', updateGeoJSONInput);
+                    l.on('pm:update', updateGeoJSONInput);
+                    l.on('pm:dragend', updateGeoJSONInput);
+                    l.on('pm:cut', updateGeoJSONInput);
+                    drawnItems.addLayer(l);
+                });
                 document.getElementById('input_geojson').value = JSON.stringify(geojson);
                 document.getElementById('input_lat').value = row.latitude;
                 document.getElementById('input_lng').value = row.longitude;
@@ -707,19 +747,6 @@ include_once '../layouts/header.php';
             
             await new Promise(resolve => setTimeout(resolve, 800));
 
-            let allBounds = [];
-            if (drawnItems && drawnItems.getBounds && drawnItems.getBounds().isValid()) {
-                allBounds.push(drawnItems.getBounds());
-            }
-            if (baseMapBounds) allBounds.push(baseMapBounds);
-            
-            if (allBounds.length > 0) {
-                let fb = allBounds[0];
-                for(let j=1; j<allBounds.length; j++) fb.extend(allBounds[j]);
-                map.fitBounds(fb, { padding: [10, 10], animate: false });
-                await new Promise(resolve => setTimeout(resolve, 400));
-            }
-
             const controls = document.querySelectorAll('.leaflet-control-container');
             controls.forEach(c => c.style.display = 'none');
             
@@ -730,31 +757,26 @@ include_once '../layouts/header.php';
             map.invalidateSize();
             await new Promise(resolve => setTimeout(resolve, 400));
 
+            let allBounds = [];
+            if (drawnItems && drawnItems.getBounds && drawnItems.getBounds().isValid()) {
+                allBounds.push(drawnItems.getBounds());
+            }
+            if (baseMapBounds) allBounds.push(baseMapBounds);
+            
+            if (allBounds.length > 0) {
+                let fb = allBounds[0];
+                for(let j=1; j<allBounds.length; j++) fb.extend(allBounds[j]);
+                map.fitBounds(fb, { padding: [0, 0], animate: false });
+                await new Promise(resolve => setTimeout(resolve, 400));
+            }
+
             try {
                 let canvas = await html2canvas(mapDiv, { useCORS: true, allowTaint: true, scale: 1.1 });
                 function trimCanvas(c) {
-                    var ctx = c.getContext('2d', { willReadFrequently: true }), copy = document.createElement('canvas').getContext('2d'), pixels = ctx.getImageData(0, 0, c.width, c.height), bound = { top: null, left: null, right: null, bottom: null };
-                    for (var k = 0; k < pixels.data.length; k += 4) {
-                        if (pixels.data[k+3] !== 0 && !(pixels.data[k]>=250&&pixels.data[k+1]>=250&&pixels.data[k+2]>=250)) {
-                            var x = (k / 4) % c.width, y = ~~((k / 4) / c.width);
-                            if (bound.top === null) bound.top = y;
-                            if (bound.left === null || x < bound.left) bound.left = x;
-                            if (bound.right === null || x > bound.right) bound.right = x;
-                            if (bound.bottom === null || y > bound.bottom) bound.bottom = y;
-                        }
-                    }
-                    if (bound.top === null) return c;
-                    var pad = 20;
-                    bound.top = Math.max(0, bound.top - pad); bound.left = Math.max(0, bound.left - pad);
-                    bound.bottom = Math.min(c.height, bound.bottom + pad); bound.right = Math.min(c.width, bound.right + pad);
-                    var trimHeight = bound.bottom - bound.top, trimWidth = bound.right - bound.left;
-                    var trimmed = ctx.getImageData(bound.left, bound.top, trimWidth, trimHeight);
-                    copy.canvas.width = trimWidth; copy.canvas.height = trimHeight;
-                    copy.putImageData(trimmed, 0, 0);
-                    return copy.canvas;
+                    return c; // Nonaktifkan pemotongan otomatis (trim) agar gambar persis sama dengan aslinya
                 }
                 canvas = trimCanvas(canvas);
-                mapImages[jp.id] = canvas.toDataURL("image/jpeg", 0.5);
+                mapImages[jp.id] = canvas.toDataURL("image/jpeg", 0.7);
             } catch(e) { console.error('Screenshot error:', e); }
 
             mapDiv.style.width = oldW;

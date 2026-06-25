@@ -128,10 +128,10 @@ ob_start();
 
         .main-layout { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-top: 5px; }
         .main-layout > tbody > tr > td { vertical-align: top; }
-        .map-cell { width: 70%; padding: 5px; border: 1px solid #000; border-right: none; text-align: center; vertical-align: middle; }
+        .map-cell { width: 70%; padding: 5px; border: 1px solid #000; border-right: none; text-align: center; vertical-align: top; }
         .meta-cell { width: 30%; padding: 0; border: 1px solid #000; border-left: 1px solid #000; }
 
-        .map-img { width: 100%; max-height: 175mm; height: auto; display: block; margin: 0 auto; }
+        .map-img { max-width: 100%; max-height: 250mm; width: auto; height: auto; display: block; margin: 0 auto; object-fit: contain; }
 
         /* RIGHT PANEL STYLES */
         .right-panel-tbl { width: 100%; border-collapse: collapse; border: none; }
