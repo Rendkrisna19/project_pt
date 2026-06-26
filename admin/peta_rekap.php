@@ -206,7 +206,7 @@ include_once '../layouts/header.php';
 
     // 12 Fixed Month Colors (Berdasarkan Template)
     const MONTH_COLORS = {
-        1:  { color: '#FFFF00', name: 'Jan',  label: 'Januari'   },
+        1:  { color: '#E6B800', name: 'Jan',  label: 'Januari'   },
         2:  { color: '#00FF99', name: 'Peb',  label: 'Pebruari'  },
         3:  { color: '#F4B183', name: 'Mar',  label: 'Maret'     },
         4:  { color: '#9DC3E6', name: 'Apr',  label: 'April'     },
@@ -216,7 +216,7 @@ include_once '../layouts/header.php';
         8:  { color: '#ED7D31', name: 'Agu',  label: 'Agustus'   },
         9:  { color: '#FF0000', name: 'Sep',  label: 'September' },
         10: { color: '#FF00FF', name: 'Okt',  label: 'Oktober'   },
-        11: { color: '#C6E0B4', name: 'Nov',  label: 'November'  },
+        11: { color: '#8B5CF6', name: 'Nov',  label: 'November'  },
         12: { color: '#00FFFF', name: 'Des',  label: 'Desember'  }
     };
 
@@ -732,7 +732,7 @@ include_once '../layouts/header.php';
             const pct = Math.round(((i) / totalJp) * 100);
 
             Swal.fire({
-                title: `Memproses Cetak (${pct}%)`,
+                title: `<span style="font-size: 1.1rem; font-weight: 700; color: #475569;">Memproses Cetak (${pct}%)</span>`,
                 html: `<div style="margin-bottom:8px">Menangkap peta <b>${i + 1}/${totalJp}</b>: ${jp.nama}</div>
                        <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden">
                          <div style="background:linear-gradient(90deg,#06b6d4,#8b5cf6);height:100%;width:${pct}%;transition:width .3s;border-radius:999px"></div>

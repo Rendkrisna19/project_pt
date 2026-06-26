@@ -55,9 +55,9 @@ function nf($v) {
 
 $MONTH_NAMES = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
 $MONTH_COLORS = [
-    1=>'#FFFF00', 2=>'#00FF99', 3=>'#F4B183', 4=>'#9DC3E6',
+    1=>'#E6B800', 2=>'#00FF99', 3=>'#F4B183', 4=>'#9DC3E6',
     5=>'#A9D08E', 6=>'#00B0F0', 7=>'#3B3838', 8=>'#ED7D31',
-    9=>'#FF0000', 10=>'#FF00FF', 11=>'#C6E0B4', 12=>'#00FFFF'
+    9=>'#FF0000', 10=>'#FF00FF', 11=>'#8B5CF6', 12=>'#00FFFF'
 ];
 
 // Group data by JP (Sum all objects together)
@@ -109,7 +109,7 @@ ob_start();
     <meta charset="UTF-8">
     <title>MCS Bulanan</title>
     <style>
-        @page { margin: 5mm 5mm 8mm 5mm; size: A4 portrait; }
+        @page { margin: 5mm 5mm 8mm 5mm; size: A4 landscape; }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { font-family: Arial, sans-serif; font-size: 10px; color: #000; }
 

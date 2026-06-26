@@ -214,8 +214,15 @@ try {
         $unitData = $stmtUnit->fetch(PDO::FETCH_ASSOC);
         $peta_kerja_foto = $unitData ? $unitData['peta_kerja_foto'] : null;
 
+        // Ambil info unit & kebun
+        $info = null;
+        $sqlInfo = "SELECT u.nama_unit, k.nama_kebun FROM units u LEFT JOIN md_kebun k ON u.kebun_id = k.id WHERE u.id = ?";
+        $stmtInfo = $conn->prepare($sqlInfo);
+        $stmtInfo->execute([$unit_id]);
+        $info = $stmtInfo->fetch(PDO::FETCH_ASSOC);
+
         ob_clean();
-        echo json_encode(['success' => true, 'data' => $data, 'peta_kerja_foto' => $peta_kerja_foto]);
+        echo json_encode(['success' => true, 'data' => $data, 'peta_kerja_foto' => $peta_kerja_foto, 'info' => $info]);
         exit;
     }
 

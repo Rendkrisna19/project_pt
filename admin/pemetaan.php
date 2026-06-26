@@ -61,8 +61,8 @@ include_once '../layouts/header.php';
                 <i class="ti ti-chevron-left text-xl"></i>
             </a>
             <div>
-                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Kertas Kerja</h1>
-                <p class="text-xs font-bold text-cyan-600 uppercase tracking-widest">Kertas Kerja</p>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">MCS HARIAN</h1>
+                <p class="text-xs font-bold text-cyan-600 uppercase tracking-widest" id="lbl-unit">Memuat info unit...</p>
             </div>
         </div>
 
@@ -479,6 +479,19 @@ include_once '../layouts/header.php';
     // --- 3. AMBIL MASTER DATA PEKERJAAN ---
     async function loadMasterData() {
         try {
+            const kebun_id = "<?= $kebun_id ?>";
+            const unit_id = "<?= $unit_id ?>";
+
+            // Load info unit dan map dasar
+            fetch(`be/pemetaan_api.php?action=get_map_data&kebun_id=${kebun_id}&unit_id=${unit_id}`)
+            .then(res => res.json())
+            .then(res => {
+                if(res.info) document.getElementById('lbl-unit').textContent = `${res.info.nama_kebun || 'KEBUN'} - ${res.info.nama_unit || 'UNIT'}`;
+                if(res.peta_kerja_foto && document.getElementById('filter_jenis_pekerjaan').value === "") {
+                    initMap(res.peta_kerja_foto);
+                }
+            }).catch(e => console.error("Gagal load info unit:", e));
+
             // Load Jenis Pekerjaan
             const resJp = await fetch(`be/pemetaan_api.php?action=get_jenis_pekerjaan`);
             const jsonJp = await resJp.json();
@@ -1191,7 +1204,7 @@ include_once '../layouts/header.php';
             const pct = Math.round(((i) / totalJp) * 100);
 
             Swal.fire({
-                title: `Memproses Cetak Gabungan (${pct}%)`,
+                title: `<span style="font-size: 1.1rem; font-weight: 700; color: #475569;">Memproses Cetak Gabungan (${pct}%)</span>`,
                 html: `<div style="margin-bottom:8px">Menangkap peta <b>${i + 1}/${totalJp}</b>: ${jp.nama}</div>
                        <div style="background:#e2e8f0;border-radius:999px;height:10px;overflow:hidden">
                          <div style="background:linear-gradient(90deg,#06b6d4,#8b5cf6);height:100%;width:${pct}%;transition:width .3s;border-radius:999px"></div>
