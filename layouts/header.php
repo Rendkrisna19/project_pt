@@ -21,6 +21,24 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
 
+    <!-- PWA Setup -->
+    <link rel="manifest" href="../manifest.json">
+    <meta name="theme-color" content="#0c4a6e">
+    <link rel="apple-touch-icon" href="../assets/images/logo.png">
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('../sw.js')
+                    .then(registration => {
+                        console.log('ServiceWorker registration successful');
+                    })
+                    .catch(err => {
+                        console.log('ServiceWorker registration failed: ', err);
+                    });
+            });
+        }
+    </script>
+
     <style>
         body { font-family: "Poppins", sans-serif; background-color: #f3f4f6; }
         
@@ -44,10 +62,108 @@ $pageTitle   = $pageTitle ?? ucfirst(str_replace('_', ' ', $currentPage));
             20%, 40%, 60%, 80% { transform: rotate(-10deg); }
         }
         .bell-ring { animation: ring 2s ease-in-out infinite; }
+
+        /* === PAGE LOADER === */
+        #page-loader {
+            position: fixed;
+            inset: 0;
+            z-index: 99999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(8, 51, 76, 0.85);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+        #page-loader.loader-hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+        #page-loader .loader-logo {
+            width: 72px;
+            height: 72px;
+            object-fit: contain;
+            animation: loaderSpin 1.8s cubic-bezier(0.68, -0.15, 0.27, 1.15) infinite;
+            filter: drop-shadow(0 0 20px rgba(34, 211, 238, 0.5));
+        }
+        #page-loader .loader-ring {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            border-top-color: #22d3ee;
+            border-right-color: #06b6d4;
+            position: absolute;
+            animation: loaderRingSpin 1.2s linear infinite;
+        }
+        #page-loader .loader-ring-outer {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            border-bottom-color: rgba(34, 211, 238, 0.3);
+            border-left-color: rgba(34, 211, 238, 0.15);
+            position: absolute;
+            animation: loaderRingSpin 2.5s linear infinite reverse;
+        }
+        #page-loader .loader-text {
+            margin-top: 28px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.8);
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
+        #page-loader .loader-dots span {
+            display: inline-block;
+            animation: loaderDots 1.4s infinite ease-in-out;
+            font-size: 18px;
+            color: #22d3ee;
+        }
+        #page-loader .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+        #page-loader .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes loaderSpin {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.08); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+        @keyframes loaderRingSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes loaderDots {
+            0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+            40% { transform: translateY(-6px); opacity: 1; }
+        }
     </style>
 </head>
 
 <body class="text-gray-800 antialiased" x-data="{ sidebarOpen: false, notifOpen: false, chatNotifOpen: false, showModal: false }">
+
+    <!-- PAGE LOADER -->
+    <div id="page-loader">
+        <div style="position:relative;display:flex;align-items:center;justify-content:center;">
+            <div class="loader-ring-outer"></div>
+            <div class="loader-ring"></div>
+            <img src="../assets/images/logo.png" alt="Logo" class="loader-logo">
+        </div>
+        <div class="loader-text">Memuat<span class="loader-dots"><span>.</span><span>.</span><span>.</span></span></div>
+    </div>
+    <script>
+        window.addEventListener('load', function() {
+            var loader = document.getElementById('page-loader');
+            if (loader) {
+                setTimeout(function() {
+                    loader.classList.add('loader-hidden');
+                    setTimeout(function() { loader.remove(); }, 500);
+                }, 400);
+            }
+        });
+    </script>
 
     <?php include_once __DIR__ . '/sidebar.php'; ?>
 

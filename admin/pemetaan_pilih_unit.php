@@ -8,7 +8,7 @@ include_once '../layouts/header.php';
 <div class="p-6 min-h-screen bg-slate-50">
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
         <div>
-            <h1 class="text-2xl font-extrabold text-slate-800">Pemetaan Kebun (GIS)</h1>
+            <h1 class="text-2xl font-extrabold text-slate-800">Peta MCS Harian</h1>
             <p class="text-slate-500 text-sm mt-1">Pilih unit untuk mulai memetakan aset dan blok kebun.</p>
         </div>
         

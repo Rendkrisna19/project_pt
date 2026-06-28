@@ -279,6 +279,16 @@ include_once '../layouts/header.php';
                     <h4 class="text-sm font-black text-slate-700 uppercase tracking-wider">
                         <i class="ti ti-table text-cyan-600 mr-1"></i> Data Realisasi Lahan
                     </h4>
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-500">
+                        <span>Tampilkan</span>
+                        <select id="select-per-page" class="border border-slate-300 rounded px-2 py-1 outline-none text-slate-700" onchange="changeHarianPerPage(this.value)">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="all">Semua</option>
+                        </select>
+                        <span>data</span>
+                    </div>
                 </div>
                 <div class="overflow-x-auto rounded-lg border border-slate-200">
                     <table class="w-full text-left border-collapse text-[11px] whitespace-nowrap">
@@ -306,7 +316,13 @@ include_once '../layouts/header.php';
                         <tbody id="table-realisasi-body" class="divide-y divide-slate-100 text-slate-700">
                             <!-- Data dimuat lewat AJAX -->
                         </tbody>
+                        <tfoot id="table-realisasi-footer">
+                        </tfoot>
                     </table>
+                </div>
+                <div class="flex justify-between items-center mt-4">
+                    <div class="text-xs text-slate-500 font-medium" id="pagination-info">Menampilkan 0 sampai 0 dari 0 data</div>
+                    <div class="flex gap-1" id="pagination-controls"></div>
                 </div>
             </div>
         </div>
@@ -319,6 +335,115 @@ include_once '../layouts/header.php';
     let drawnItems = null;
     let myLocationMarker = null;
     let myChart = null;
+
+    let allHarianData = [];
+    let currentHarianPage = 1;
+    let harianItemsPerPage = 10;
+
+    function changeHarianPerPage(val) {
+        harianItemsPerPage = val === 'all' ? 'all' : parseInt(val);
+        currentHarianPage = 1;
+        renderTableHarian();
+    }
+
+    function changeHarianPage(page) {
+        currentHarianPage = page;
+        renderTableHarian();
+    }
+
+    function renderTableHarian() {
+        const tbody = document.getElementById('table-realisasi-body');
+        const tfoot = document.getElementById('table-realisasi-footer');
+        if (!tbody) return;
+
+        if (allHarianData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="11" class="px-3 py-4 text-center text-slate-500 italic">Belum ada data realisasi.</td></tr>`;
+            tfoot.innerHTML = '';
+            document.getElementById('pagination-info').innerText = 'Menampilkan 0 sampai 0 dari 0 data';
+            document.getElementById('pagination-controls').innerHTML = '';
+            return;
+        }
+
+        let totalItems = allHarianData.length;
+        let totalPages = harianItemsPerPage === 'all' ? 1 : Math.ceil(totalItems / harianItemsPerPage);
+        if (currentHarianPage > totalPages) currentHarianPage = totalPages;
+
+        let startIndex = harianItemsPerPage === 'all' ? 0 : (currentHarianPage - 1) * harianItemsPerPage;
+        let endIndex = harianItemsPerPage === 'all' ? totalItems : Math.min(startIndex + harianItemsPerPage, totalItems);
+        let paginatedData = allHarianData.slice(startIndex, endIndex);
+
+        const fmt = (num) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
+
+        tbody.innerHTML = paginatedData.map(titik => {
+            const tgl = titik.tanggal_realisasi ? titik.tanggal_realisasi.split('-').reverse().join('-') : '-';
+            let safeJson = JSON.stringify(titik).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+            
+            return `<tr class="hover:bg-slate-50 transition">
+                <td class="px-3 py-2 border-r border-slate-200 text-center">${tgl}</td>
+                <td class="px-3 py-2 border-r border-slate-200 text-center font-bold">${titik.blok_nama || '-'}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_hari_ini)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_sd)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_hari_ini)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_sd)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_hari_ini)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_sd)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.campuran_hari_ini)}</td>
+                <td class="px-2 py-2 border-slate-200 text-right font-mono">${fmt(titik.campuran_sd)}</td>
+                <td class="px-3 py-2 text-center border-l border-slate-200">
+                    <button type="button" onclick="editMapData(${safeJson})" class="bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Edit">
+                        <i class="ti ti-edit"></i>
+                    </button>
+                    <button type="button" onclick="deleteMapData(${titik.id})" class="bg-rose-100 text-rose-600 hover:bg-rose-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Hapus">
+                        <i class="ti ti-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Totals
+        let tFisikHI=0, tFisikSD=0, tHkHI=0, tHkSD=0, tBahanHI=0, tBahanSD=0, tCampHI=0, tCampSD=0;
+        allHarianData.forEach(t => {
+            tFisikHI += parseFloat(t.fisik_hari_ini) || 0;
+            tFisikSD += parseFloat(t.fisik_sd) || 0;
+            tHkHI += parseFloat(t.hk_hari_ini) || 0;
+            tHkSD += parseFloat(t.hk_sd) || 0;
+            tBahanHI += parseFloat(t.bahan_kimia_hari_ini) || 0;
+            tBahanSD += parseFloat(t.bahan_kimia_sd) || 0;
+            tCampHI += parseFloat(t.campuran_hari_ini) || 0;
+            tCampSD += parseFloat(t.campuran_sd) || 0;
+        });
+
+        tfoot.innerHTML = `
+            <tr class="bg-slate-100 font-bold border-t-2 border-slate-300 text-slate-700">
+                <td colspan="2" class="px-3 py-2 border-r border-slate-200 text-right uppercase text-[10px]">Total Keseluruhan</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-cyan-700">${fmt(tFisikHI)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-cyan-700">${fmt(tFisikSD)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-teal-700">${fmt(tHkHI)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-teal-700">${fmt(tHkSD)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-amber-700">${fmt(tBahanHI)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-amber-700">${fmt(tBahanSD)}</td>
+                <td class="px-2 py-2 border-r border-slate-200 text-right font-mono text-rose-700">${fmt(tCampHI)}</td>
+                <td class="px-2 py-2 border-slate-200 text-right font-mono text-rose-700">${fmt(tCampSD)}</td>
+                <td class="px-3 py-2 border-l border-slate-200 text-center"></td>
+            </tr>
+        `;
+
+        document.getElementById('pagination-info').innerText = `Menampilkan ${startIndex + 1} sampai ${endIndex} dari ${totalItems} data`;
+        
+        let pageHtml = '';
+        if (totalPages > 1) {
+            pageHtml += `<button onclick="changeHarianPage(${currentHarianPage-1})" class="px-2 py-1 text-xs border rounded hover:bg-slate-100 ${currentHarianPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}" ${currentHarianPage === 1 ? 'disabled' : ''}>Prev</button>`;
+            
+            let startPage = Math.max(1, currentHarianPage - 2);
+            let endPage = Math.min(totalPages, currentHarianPage + 2);
+            for(let p = startPage; p <= endPage; p++) {
+                pageHtml += `<button onclick="changeHarianPage(${p})" class="px-2 py-1 text-xs border rounded ${p === currentHarianPage ? 'bg-cyan-500 text-white font-bold' : 'hover:bg-slate-100'}">${p}</button>`;
+            }
+            
+            pageHtml += `<button onclick="changeHarianPage(${currentHarianPage+1})" class="px-2 py-1 text-xs border rounded hover:bg-slate-100 ${currentHarianPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}" ${currentHarianPage === totalPages ? 'disabled' : ''}>Next</button>`;
+        }
+        document.getElementById('pagination-controls').innerHTML = pageHtml;
+    }
 
     // --- 1. INISIALISASI PETA (DINAMIS) ---
     function initMap(petaKerjaFoto) {
@@ -556,6 +681,7 @@ include_once '../layouts/header.php';
             const res = await response.json();
 
             if(res.success) {
+                allHarianData = res.data;
                 // Inisialisasi peta berdasarkan foto base map
                 initMap(res.peta_kerja_foto);
                 applyColorToDrawings();
@@ -564,48 +690,9 @@ include_once '../layouts/header.php';
                 let btnText = res.peta_kerja_foto ? 'Ganti Peta Dasar (Timpa)' : 'Upload & Pasang Peta';
                 document.getElementById('btn-upload-peta').innerText = btnText;
 
-                let tbody = document.getElementById('table-realisasi-body');
-                if(tbody) tbody.innerHTML = '';
-                
-                let bounds = [];
-
-                if (res.data.length === 0 && tbody) {
-                    tbody.innerHTML = `<tr><td colspan="11" class="px-3 py-4 text-center text-slate-500 italic">Belum ada data realisasi.</td></tr>`;
-                }
+                renderTableHarian();
 
                 res.data.forEach(titik => {
-                    if(tbody) {
-                        let tr = document.createElement('tr');
-                        tr.className = "hover:bg-slate-50 transition";
-                        const fmt = (num) => new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num || 0);
-                        const tgl = titik.tanggal_realisasi ? titik.tanggal_realisasi.split('-').reverse().join('-') : '-';
-                        
-                        // Menghindari issue kutip di JSON.stringify
-                        let safeJson = JSON.stringify(titik).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-
-                        tr.innerHTML = `
-                            <td class="px-3 py-2 border-r border-slate-200 text-center">${tgl}</td>
-                            <td class="px-3 py-2 border-r border-slate-200 text-center font-bold">${titik.blok_nama || '-'}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_hari_ini)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.fisik_sd)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_hari_ini)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.hk_sd)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_hari_ini)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.bahan_kimia_sd)}</td>
-                            <td class="px-2 py-2 border-r border-slate-200 text-right font-mono">${fmt(titik.campuran_hari_ini)}</td>
-                            <td class="px-2 py-2 border-slate-200 text-right font-mono">${fmt(titik.campuran_sd)}</td>
-                            <td class="px-3 py-2 text-center border-l border-slate-200">
-                                <button type="button" onclick="editMapData(${safeJson})" class="bg-amber-100 text-amber-600 hover:bg-amber-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Edit">
-                                    <i class="ti ti-edit"></i>
-                                </button>
-                                <button type="button" onclick="deleteMapData(${titik.id})" class="bg-rose-100 text-rose-600 hover:bg-rose-500 hover:text-white px-2 py-1 rounded shadow-sm text-xs transition" title="Hapus">
-                                    <i class="ti ti-trash"></i>
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(tr);
-                    }
-
                     if(!titik.geojson) return;
 
                     let geojsonData = JSON.parse(titik.geojson);

@@ -1,0 +1,21 @@
+{
+  "name": "Sei Rokan App",
+  "short_name": "Sei Rokan",
+  "description": "Aplikasi Manajemen PTPN IV Sei Rokan",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#0c4a6e",
+  "icons": [
+    {
+      "src": "/assets/images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

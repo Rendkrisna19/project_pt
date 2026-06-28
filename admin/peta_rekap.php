@@ -172,6 +172,16 @@ include_once '../layouts/header.php';
                     <h4 class="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
                         <i class="ti ti-table text-cyan-600"></i> Data Realisasi Bulanan
                     </h4>
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-500">
+                        <span>Tampilkan</span>
+                        <select id="select-per-page" class="border border-slate-300 rounded px-2 py-1 outline-none text-slate-700" onchange="changePerPage(this.value)">
+                            <option value="10">10</option>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="all">Semua</option>
+                        </select>
+                        <span>data</span>
+                    </div>
                 </div>
                 <div class="overflow-x-auto rounded-lg border border-slate-200">
                     <table class="data-table" id="table-data">
@@ -190,7 +200,13 @@ include_once '../layouts/header.php';
                         <tbody id="table-body">
                             <tr><td colspan="16" class="py-8 text-slate-400 italic text-center">Memuat data...</td></tr>
                         </tbody>
+                        <tfoot id="table-footer">
+                        </tfoot>
                     </table>
+                </div>
+                <div class="flex justify-between items-center mt-4">
+                    <div class="text-xs text-slate-500 font-medium" id="pagination-info">Menampilkan 0 sampai 0 dari 0 data</div>
+                    <div class="flex gap-1" id="pagination-controls"></div>
                 </div>
             </div>
         </div>
@@ -520,22 +536,52 @@ include_once '../layouts/header.php';
         if (baseMapBounds) map.fitBounds(baseMapBounds, { padding: [0,0], animate: false });
     }
 
+    let currentPage = 1;
+    let itemsPerPage = 10;
+
+    function changePerPage(val) {
+        itemsPerPage = val === 'all' ? 'all' : parseInt(val);
+        currentPage = 1;
+        renderTable();
+    }
+
+    function changePage(page) {
+        currentPage = page;
+        renderTable();
+    }
+
     function renderTable() {
         const filterJP = document.getElementById('filter_jp').value;
         const filtered = filterJP ? allData.filter(d => d.jenis_pekerjaan_bulanan_id == filterJP) : [];
         const tbody = document.getElementById('table-body');
+        const tfoot = document.getElementById('table-footer');
 
         if (!filterJP) {
             tbody.innerHTML = '<tr><td colspan="16" class="py-8 text-center text-slate-400 italic">Silakan pilih Jenis Pekerjaan di atas untuk melihat data.</td></tr>';
+            tfoot.innerHTML = '';
+            document.getElementById('pagination-info').innerText = 'Menampilkan 0 sampai 0 dari 0 data';
+            document.getElementById('pagination-controls').innerHTML = '';
             return;
         }
 
         if (!filtered.length) {
             tbody.innerHTML = '<tr><td colspan="16" class="py-8 text-center text-slate-400 italic">Belum ada data realisasi bulanan untuk pekerjaan ini.</td></tr>';
+            tfoot.innerHTML = '';
+            document.getElementById('pagination-info').innerText = 'Menampilkan 0 sampai 0 dari 0 data';
+            document.getElementById('pagination-controls').innerHTML = '';
             return;
         }
 
-        tbody.innerHTML = filtered.map(row => {
+        // Pagination
+        let totalItems = filtered.length;
+        let totalPages = itemsPerPage === 'all' ? 1 : Math.ceil(totalItems / itemsPerPage);
+        if (currentPage > totalPages) currentPage = totalPages;
+        
+        let startIndex = itemsPerPage === 'all' ? 0 : (currentPage - 1) * itemsPerPage;
+        let endIndex = itemsPerPage === 'all' ? totalItems : Math.min(startIndex + itemsPerPage, totalItems);
+        let paginatedData = filtered.slice(startIndex, endIndex);
+
+        tbody.innerHTML = paginatedData.map(row => {
             let total = 0;
             let cells = '';
             for (let i = 1; i <= 12; i++) {
@@ -555,6 +601,42 @@ include_once '../layouts/header.php';
                 </td>
             </tr>`;
         }).join('');
+
+        // Totals
+        let colTotals = Array(12).fill(0);
+        let grandTotal = 0;
+        filtered.forEach(row => {
+            for (let i = 1; i <= 12; i++) {
+                let v = parseFloat(row['bulan_'+i]) || 0;
+                colTotals[i-1] += v;
+                grandTotal += v;
+            }
+        });
+        
+        let tfootHtml = `<tr class="bg-slate-100 font-bold border-t-2 border-slate-300">
+            <td colspan="2" class="text-right py-2 px-3 uppercase text-[10px] text-slate-600">Total Keseluruhan</td>`;
+        for (let i=0; i<12; i++) {
+            tfootHtml += `<td class="text-[10px] text-slate-700">${fmt(colTotals[i])}</td>`;
+        }
+        tfootHtml += `<td class="text-[10px] text-cyan-700">${fmt(grandTotal)}</td><td></td></tr>`;
+        tfoot.innerHTML = tfootHtml;
+
+        // Pagination UI
+        document.getElementById('pagination-info').innerText = `Menampilkan ${startIndex + 1} sampai ${endIndex} dari ${totalItems} data`;
+        
+        let pageHtml = '';
+        if (totalPages > 1) {
+            pageHtml += `<button onclick="changePage(${currentPage-1})" class="px-2 py-1 text-xs border rounded hover:bg-slate-100 ${currentPage === 1 ? 'opacity-50 cursor-not-allowed' : ''}" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>`;
+            
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, currentPage + 2);
+            for(let p = startPage; p <= endPage; p++) {
+                pageHtml += `<button onclick="changePage(${p})" class="px-2 py-1 text-xs border rounded ${p === currentPage ? 'bg-cyan-500 text-white font-bold' : 'hover:bg-slate-100'}">${p}</button>`;
+            }
+            
+            pageHtml += `<button onclick="changePage(${currentPage+1})" class="px-2 py-1 text-xs border rounded hover:bg-slate-100 ${currentPage === totalPages ? 'opacity-50 cursor-not-allowed' : ''}" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+        }
+        document.getElementById('pagination-controls').innerHTML = pageHtml;
     }
 
     function filterByJP() { 
